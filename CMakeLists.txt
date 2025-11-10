@@ -1,16 +1,16 @@
 cmake_minimum_required(VERSION 3.26.0)
 
-project(Skeleton
+project(Void
         VERSION 0.0.0
         LANGUAGES CXX C
-        DESCRIPTION "Vulkan Skeleton")
+        DESCRIPTION "Void Practice Game Engine")
 
 set(AIR_SOURCE src/main.cpp)
 
-add_executable(Skeleton ${AIR_SOURCE})
+add_executable(Void ${AIR_SOURCE})
 
 if (WIN32)
-    target_compile_definitions(Skeleton PRIVATE
+    target_compile_definitions(Void PRIVATE
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX)
@@ -28,33 +28,33 @@ if(MSVC)
 else()
 endif()
 
-target_include_directories(Skeleton SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR} 
-                                                   ${CMAKE_CURRENT_SOURCE_DIR}
-                                                   ${ENGINE_INCLUDE}
-                                                   ${SDL3_INCLUDES})
+target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR} 
+                                               ${CMAKE_CURRENT_SOURCE_DIR}
+                                               ${ENGINE_INCLUDE}
+                                               ${SDL3_INCLUDES})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
 if (WIN32)
-    target_link_libraries(Skeleton PRIVATE
+    target_link_libraries(Void PRIVATE
                           ${SDL_LIB})
 else()
-    target_link_libraries(Skeleton PRIVATE
-                              dl
-                              pthread)
+    target_link_libraries(Void PRIVATE
+                          dl
+                          pthread)
 endif()
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${AIR_SOURCE})
 
-target_link_libraries(Skeleton PRIVATE ${VULKAN_LIB})
+target_link_libraries(Void PRIVATE ${VULKAN_LIB})
 
-target_compile_options(Skeleton PRIVATE
+target_compile_options(Void PRIVATE
                        $<$<CXX_COMPILER_ID:MSVC>:/W4>
                        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic>
 )
 
 if(MSVC)
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Skeleton)
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Void)
 endif()
 
 #if (WIN32)
