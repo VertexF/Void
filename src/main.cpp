@@ -11,6 +11,11 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_win32.h>
 
+#include <cglm/struct/vec2.h>
+#include <cglm/struct/vec3.h>
+#include <cglm/struct/affine.h>
+#include <cglm/struct/cam.h>
+
 #define SKELETON_DEBUG
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))

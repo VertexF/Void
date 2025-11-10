@@ -1,0 +1,3 @@
+[submodule "vender/cglm"]
+	path = vender/cglm
+	url = https://github.com/recp/cglm.git

@@ -19,6 +19,7 @@ endif()
 if(MSVC)
     set(SDL3_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/vender/vulkan/Include")
     set(VULKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL3/include")
+    set(CGLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/cglm/include")
 
     set(VULKAN_LIB "${CMAKE_CURRENT_SOURCE_DIR}/vender/vulkan/Lib/vulkan-1.lib")
     set(SDL_LIB "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL3/lib/x64/SDL3.lib")
@@ -31,7 +32,8 @@ endif()
 target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR} 
                                                ${CMAKE_CURRENT_SOURCE_DIR}
                                                ${ENGINE_INCLUDE}
-                                               ${SDL3_INCLUDES})
+                                               ${SDL3_INCLUDES}
+                                               ${CGLM_INCLUDE_DIR})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
