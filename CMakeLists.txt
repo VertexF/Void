@@ -5,7 +5,10 @@ project(Void
         LANGUAGES CXX C
         DESCRIPTION "Void Practice Game Engine")
 
-set(AIR_SOURCE src/main.cpp)
+set(AIR_SOURCE src/main.cpp
+               src/Shaders/mainShader.frag
+               src/Shaders/mainShader.vert
+               src/Shaders/compile.cmd)
 
 add_executable(Void ${AIR_SOURCE})
 

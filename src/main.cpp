@@ -3,6 +3,7 @@
 #include <vector>
 #include <math.h>
 #include <array>
+#include <chrono>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -12,6 +13,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_win32.h>
 
+#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/struct/vec2.h>
 #include <cglm/struct/vec3.h>
 #include <cglm/struct/affine.h>
@@ -54,6 +56,10 @@ namespace
     VkQueue mainQueue;
     VkQueue transferQueue;
 
+    std::vector<VkBuffer> uniformBuffers;
+    std::vector<VkDeviceMemory> uniformBuffersMemory;
+    std::vector<void*> uniformBuffersMapped;
+
     struct Vertex 
     {
         vec2s position;
@@ -85,6 +91,13 @@ namespace
 
             return attributeDescriptions;
         }
+    };
+
+    struct ModelData
+    {
+        alignas(16) mat4s model;
+        alignas(16) mat4s view;
+        alignas(16) mat4s proj;
     };
 
     const std::vector<Vertex> vertices = 
@@ -216,6 +229,22 @@ static void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size
     vkQueueWaitIdle(transferQueue);
 
     vkFreeCommandBuffers(device, transferCommandPool, 1, &commandBuffer);
+}
+
+static void createUniformBuffers()
+{
+    VkDeviceSize bufferSize = sizeof(ModelData);
+
+    uniformBuffers.resize(imageCount);
+    uniformBuffersMemory.resize(imageCount);
+    uniformBuffersMapped.resize(imageCount);
+
+    for (uint32_t i = 0; i < imageCount; ++i)
+    {
+        createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
+
+        vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+    }
 }
 
 //Read file and allocate memory from. User is responsible for freeing the memory.
@@ -648,6 +677,7 @@ int main()
     createSwapchain();
     createImageViews();
 
+    //Subpass dependencies, subpass attachment references and render pass attachments set up.
     VkAttachmentDescription colourAttachment{};
     colourAttachment.format = swapchainFormat;
     colourAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -675,6 +705,28 @@ int main()
     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+    //Descriptor set layout creation
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    
+    //Pipeline layout creation
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    VkDescriptorSetLayout descriptorSetLayout;
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
+    {
+        printf("Failed to create descriptor set layout");
+        assert(false);
+    }
+
+    //Shader modules creation
     size_t sizeOfVertexCode = 0;
     size_t sizeOfFragmentCode = 0;
     char* binVertCode = fileReadBinary("Shaders/mainShader.vert.spv", &sizeOfVertexCode);
@@ -722,6 +774,7 @@ int main()
     fragShaderModuleInfo.module = fragmentShaderModule;
     fragShaderModuleInfo.pName = "main";
 
+    //Graphics pipeline creation
     VkPipelineShaderStageCreateInfo  shaderStages[] = { vertShaderModuleInfo, fragShaderModuleInfo };
 
     std::vector<VkDynamicState> dynamicStates = 
@@ -762,7 +815,7 @@ int main()
     rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
     rasteriser.lineWidth = 1.f;
     rasteriser.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasteriser.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasteriser.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasteriser.depthBiasEnable = VK_FALSE;
     rasteriser.depthBiasConstantFactor = 0.f;
     rasteriser.depthBiasClamp = 0.f;
@@ -816,8 +869,8 @@ int main()
     VkPipelineLayout pipelineLayout;
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 0;
-    pipelineLayoutCreateInfo.pSetLayouts = nullptr;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
 
@@ -853,8 +906,10 @@ int main()
     vkDestroyShaderModule(device, vertexShaderModule, nullptr);
     vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
 
+    //Framebuffer creation
     createFramebuffers();
 
+    //Command pool creation
     VkCommandPoolCreateInfo poolCreateInfo{};
     poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -877,6 +932,99 @@ int main()
         printf("Failed to create a command pool.");
     }
 
+    //Index and vertex buffer creation.
+    //Transfering of buffers works because the usage e.g VK_BUFFER_USAGE_TRANSFER_SRC_BIT and synced up. 
+    //Meaning that when we create a vertex staging buffer with TRANSFER_SRC_BIT and our vertex buffer with TRANSFER_DST_BIT the copy from one to another is valid.
+    //You shouldn't make the buffer sharingMode VK_SHARING_MODE_EXCLUSIVE because we aren't sharing data between then we are copying it from on to another.
+    VkDeviceSize vertexbufferSize = sizeof(vertices[0]) * vertices.size();
+    VkDeviceSize indexBufferSize = sizeof(indices[0]) * indices.size();
+    VkDeviceSize totalBufferSize = vertexbufferSize + indexBufferSize;
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+
+    createBuffer(totalBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device, stagingBufferMemory, 0, vertexbufferSize, 0, &data);
+    memcpy(data, vertices.data(), size_t(vertexbufferSize));
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    void* indexData;
+    vkMapMemory(device, stagingBufferMemory, vertexbufferSize, indexBufferSize, 0, &indexData);
+    memcpy(indexData, indices.data(), size_t(indexBufferSize));
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    VkBuffer modelBuffer;
+    VkDeviceMemory modelBufferMemory;
+
+    createBuffer(totalBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, modelBuffer, modelBufferMemory);
+
+    copyBuffer(stagingBuffer, modelBuffer, totalBufferSize);
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+    //Uniform buffer creation
+    createUniformBuffers();
+
+    //Descriptor pool creation
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = imageCount;
+
+    VkDescriptorPoolCreateInfo poolDescriptorCreateInfo{};
+    poolDescriptorCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolDescriptorCreateInfo.poolSizeCount = 1;
+    poolDescriptorCreateInfo.pPoolSizes = &poolSize;
+    poolDescriptorCreateInfo.maxSets = imageCount;
+
+    VkDescriptorPool descriptorPool;
+    if (vkCreateDescriptorPool(device, &poolDescriptorCreateInfo, nullptr, &descriptorPool) != VK_SUCCESS)
+    {
+        printf("Failed to create descriptor pool");
+        assert(false);
+    }
+
+    //Descriptor sets creation
+    std::vector<VkDescriptorSetLayout> layouts(imageCount, descriptorSetLayout);
+    VkDescriptorSetAllocateInfo descriptorAllocateInfo{};
+    descriptorAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorAllocateInfo.descriptorPool = descriptorPool;
+    descriptorAllocateInfo.descriptorSetCount = imageCount;
+    descriptorAllocateInfo.pSetLayouts = layouts.data();
+
+    std::vector<VkDescriptorSet> descriptorSets(imageCount);
+    if (vkAllocateDescriptorSets(device, &descriptorAllocateInfo, descriptorSets.data()) != VK_SUCCESS) 
+    {
+        printf("Failed to allocate descriptors sets");
+        assert(false);
+    }
+
+    for (uint32_t i = 0; i < imageCount; ++i) 
+    {
+        VkDescriptorBufferInfo desBufferInfo{};
+        desBufferInfo.buffer = uniformBuffers[i];
+        desBufferInfo.offset = 0;
+        desBufferInfo.range = sizeof(ModelData);
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = descriptorSets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &desBufferInfo;
+        descriptorWrite.pImageInfo = nullptr;
+        descriptorWrite.pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+    }
+
+    //Command buffer creation
     const uint32_t maxFramesInFlight = imageCount;
     std::vector<VkCommandBuffer> commandBuffers(maxFramesInFlight);
     VkCommandBufferAllocateInfo allocateInfo{};
@@ -891,55 +1039,7 @@ int main()
         printf("Failed to create a command buffer.");
     }
 
-    //Transfering of buffers works because the usage e.g VK_BUFFER_USAGE_TRANSFER_SRC_BIT and synced up. 
-    //Meaning that when we create a vertex staging buffer with TRANSFER_SRC_BIT and our vertex buffer with TRANSFER_DST_BIT the copy from one to another is valid.
-    //You shouldn't make the buffer sharingMode VK_SHARING_MODE_EXCLUSIVE because we aren't sharing data between then we are copying it from on to another.
-
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), size_t(bufferSize));
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-
-    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
-
-    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
-
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
-
-    VkDeviceSize indexBufferSize = sizeof(indices[0]) * indices.size();
-
-    createBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-    void* indexData;
-    vkMapMemory(device, stagingBufferMemory, 0, indexBufferSize, 0, &indexData);
-    memcpy(indexData, indices.data(), size_t(bufferSize));
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    createBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
-
-    copyBuffer(stagingBuffer, indexBuffer, indexBufferSize);
-
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
-
+    //Synchronise object creation
     std::vector<VkSemaphore> imageAvailableSemaphore(maxFramesInFlight);
     std::vector<VkSemaphore> renderFinishSemaphore(maxFramesInFlight);
     std::vector<VkFence> framesInFlight(maxFramesInFlight);
@@ -976,6 +1076,7 @@ int main()
     SDL_Event event;
     bool framebufferResize = false;
 
+    auto startTime = std::chrono::high_resolution_clock::now();
     uint32_t currentFrame = 0;
     while (running)
     {
@@ -983,7 +1084,7 @@ int main()
         {
             switch (event.type)
             {
-            case SDL_EVENT_QUIT: 
+            case SDL_EVENT_QUIT:
             {
                 running = false;
                 break;
@@ -1013,11 +1114,21 @@ int main()
             recreateSwapchain();
             continue;
         }
-        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) 
+        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         {
             printf("Failed to acquire swapchain image at image index %d", imageIndex);
             assert(false);
         }
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        ModelData modelData{};
+        modelData.model = glms_rotate(glms_mat4_identity(), time * glm_rad(90.f), { 0.f, 0.f, 1.f });
+        modelData.view = glms_lookat({ 2.f, 2.f, 2.f }, { 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f });
+        modelData.proj = glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 0.1f, 100.f);
+        modelData.proj.m11 *= -1;
+
+        memcpy(uniformBuffersMapped[currentFrame], &modelData, sizeof(modelData));
 
         vkResetFences(device, 1, &framesInFlight[currentFrame]);
 
@@ -1063,10 +1174,12 @@ int main()
         scissor.extent = swapchainExtent;
         vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
-        VkBuffer vertexBuffers[] = { vertexBuffer };
+        VkBuffer vertexBuffers[] = { modelBuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffers[currentFrame], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(commandBuffers[currentFrame], modelBuffer, vertexbufferSize, VK_INDEX_TYPE_UINT16);
+
+        vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
         vkCmdDrawIndexed(commandBuffers[currentFrame], uint32_t(indices.size()), 1, 0, 0, 0);
 
@@ -1141,10 +1254,18 @@ int main()
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyRenderPass(device, renderPass, nullptr);
 
-    vkDestroyBuffer(device, indexBuffer, nullptr);
-    vkFreeMemory(device, indexBufferMemory, nullptr);
-    vkDestroyBuffer(device, vertexBuffer, nullptr);
-    vkFreeMemory(device, vertexBufferMemory, nullptr);
+    for (uint32_t i = 0; i < maxFramesInFlight; ++i) 
+    {
+        vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+        vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+    }
+
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+
+    vkDestroyBuffer(device, modelBuffer, nullptr);
+    vkFreeMemory(device, modelBufferMemory, nullptr);
 
     for (uint32_t i = 0; i < maxFramesInFlight; ++i)
     {
