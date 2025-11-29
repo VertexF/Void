@@ -898,21 +898,38 @@ int main()
     queueCreateInfo.queueCount = 1;
     queueCreateInfo.pQueuePriorities = &priority;
 
-    VkDeviceQueueCreateInfo queueTransferCreateInfo{};
-    queueTransferCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueTransferCreateInfo.queueFamilyIndex = transferQueueFamilyIndex;
-    queueTransferCreateInfo.queueCount = 1;
-    queueTransferCreateInfo.pQueuePriorities = &priority;
-
-    VkDeviceQueueCreateInfo localDeviceQueues[] = { queueCreateInfo, queueTransferCreateInfo };
-
     VkDeviceCreateInfo deviceCreateInfo{};
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.pNext = &deviceFeatures;
-    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-    deviceCreateInfo.enabledExtensionCount = uint32_t(deviceExtensions.size());
-    deviceCreateInfo.pQueueCreateInfos = localDeviceQueues;
-    deviceCreateInfo.queueCreateInfoCount = sizeof(localDeviceQueues) / sizeof(localDeviceQueues[0]);
+    if (transferQueueFamilyIndex != UINT32_MAX)
+    {
+        VkDeviceQueueCreateInfo queueTransferCreateInfo{};
+        queueTransferCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueTransferCreateInfo.queueFamilyIndex = transferQueueFamilyIndex;
+        queueTransferCreateInfo.queueCount = 1;
+        queueTransferCreateInfo.pQueuePriorities = &priority;
+
+        VkDeviceQueueCreateInfo localDeviceQueues[] = { queueCreateInfo, queueTransferCreateInfo };
+
+        deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        deviceCreateInfo.pNext = &deviceFeatures;
+        deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+        deviceCreateInfo.enabledExtensionCount = uint32_t(deviceExtensions.size());
+        deviceCreateInfo.pQueueCreateInfos = localDeviceQueues;
+        deviceCreateInfo.queueCreateInfoCount = sizeof(localDeviceQueues) / sizeof(localDeviceQueues[0]);
+    }
+    else 
+    {
+        VkDeviceQueueCreateInfo localDeviceQueues[] = { queueCreateInfo };
+
+        deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        deviceCreateInfo.pNext = &deviceFeatures;
+        deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+        deviceCreateInfo.enabledExtensionCount = uint32_t(deviceExtensions.size());
+        deviceCreateInfo.pQueueCreateInfos = localDeviceQueues;
+        deviceCreateInfo.queueCreateInfoCount = sizeof(localDeviceQueues) / sizeof(localDeviceQueues[0]);
+
+        //HACK
+        transferQueueFamilyIndex = mainQueueFamilyIndex;
+    }
 
     vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
 
