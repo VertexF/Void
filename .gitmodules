@@ -1,0 +1,9 @@
+[submodule "vender/cglm"]
+	path = vender/cglm
+	url = https://github.com/recp/cglm.git
+[submodule "vender/--force"]
+	path = vender/SDL3
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "vender/SDL"]
+	path = vender/SDL
+	url = https://github.com/libsdl-org/SDL.git
