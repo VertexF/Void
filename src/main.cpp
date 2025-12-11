@@ -5,7 +5,6 @@
 #include <array>
 #include <chrono>
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 #include <SDL3/SDL.h>
@@ -27,6 +26,15 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+#include "Foundation/Log.hpp"
+#include "Foundation/Assert.hpp"
+
+#if defined(DEBUG_CHECKING)
+#define check(result) VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Assert Code %u", result)
+#else
+#define check(result) (result)
+#endif
+
 namespace
 {
     SDL_Window* window;
@@ -42,7 +50,7 @@ namespace
     VkPhysicalDevice physicalDevice;
     VkSurfaceKHR surface;
 
-    uint32_t maxAnisotropy;
+    float maxAnisotropy;
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
 
@@ -144,7 +152,7 @@ static uint32_t clamp(uint32_t value, uint32_t minimum, uint32_t maximum)
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback (VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                                                      VkDebugUtilsMessageTypeFlagsEXT messageType,
                                                      const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-                                                     void* userData)
+                                                     void* /*userData*/)
 {
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
@@ -181,7 +189,6 @@ static long getFileSize(FILE* file)
 static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) 
 {
     // Find memory type
-    uint32_t memoryType = UINT32_MAX;
     VkPhysicalDeviceMemoryProperties memoryProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
 
@@ -193,11 +200,8 @@ static uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags proper
         }
     }
 
-    if (memoryType == UINT32_MAX)
-    {
-        printf("Failed to find suitable memory type.");
-        assert(false);
-    }
+    VOID_ERROR("Failed to find suitable memory type.");
+    return UINT32_MAX;
 }
 
 static VkCommandPool createCommandPool(uint32_t queueFamilyIndex) 
@@ -208,11 +212,7 @@ static VkCommandPool createCommandPool(uint32_t queueFamilyIndex)
     poolCreateInfo.queueFamilyIndex = queueFamilyIndex;
 
     VkCommandPool pool;
-    if (vkCreateCommandPool(device, &poolCreateInfo, nullptr, &pool))
-    {
-        assert(false);
-        printf("Failed to create a command pool.");
-    }
+    check(vkCreateCommandPool(device, &poolCreateInfo, nullptr, &pool));
 
     return pool;
 }
@@ -261,11 +261,7 @@ static void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPr
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     
-    if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
-    {
-        printf("Failed to create vertex buffer.");
-        assert(false);
-    }
+    check(vkCreateBuffer(device, &bufferInfo, nullptr, &buffer));
 
     VkMemoryRequirements memoryRequirements;
     vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
@@ -275,11 +271,7 @@ static void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPr
     bufferAllocationInfo.allocationSize = memoryRequirements.size;
     bufferAllocationInfo.memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(device, &bufferAllocationInfo, nullptr, &bufferMemory) != VK_SUCCESS)
-    {
-        printf("Failed to allocate the vertex buffer object");
-        assert(false);
-    }
+    check(vkAllocateMemory(device, &bufferAllocationInfo, nullptr, &bufferMemory));
 
     vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
@@ -383,8 +375,7 @@ static void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout 
     }
     else 
     {
-        printf("Not support memory image layout transition");
-        assert(false);
+        VOID_ERROR("Not support memory image layout transition");
     }
     
     vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
@@ -410,11 +401,7 @@ static void createImage(uint32_t width, uint32_t height, VkFormat format, VkImag
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.flags = 0;
 
-    if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
-    {
-        printf("Failed to create image.");
-        assert(false);
-    }
+    check(vkCreateImage(device, &imageInfo, nullptr, &image));
 
     VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(device, image, &memRequirements);
@@ -424,11 +411,7 @@ static void createImage(uint32_t width, uint32_t height, VkFormat format, VkImag
     allocateInfo.allocationSize = memRequirements.size;
     allocateInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(device, &allocateInfo, nullptr, &imageMemory) != VK_SUCCESS)
-    {
-        printf("Failed to allocate image memory");
-        assert(false);
-    }
+    check(vkAllocateMemory(device, &allocateInfo, nullptr, &imageMemory));
 
     vkBindImageMemory(device, image, imageMemory, 0);
 }
@@ -445,11 +428,8 @@ static void createTextureImage(const char* path, VkImage& textureImage, VkDevice
     //We also need the device size for the staging buffers.
     VkDeviceSize imageSize = texWidth * texHeight * 4;
     //Next we check if it's loaded correctly
-    if (!pixels)
-    {
-        printf("Failed to load texture image.");
-        assert(false);
-    }
+    VOID_ASSERTM(pixels != nullptr, "Failed to load texture image.");
+
     //Then we start with the staging buffers.
     VkBuffer imageStagingBuffer;
     VkDeviceMemory imageStagingBufferMemory;
@@ -507,11 +487,7 @@ static VkImageView createImageView(VkImage image, VkFormat format, VkImageAspect
     createImageViewInfo.subresourceRange.layerCount = 1;
 
     VkImageView imageView;
-    if (vkCreateImageView(device, &createImageViewInfo, nullptr, &imageView) != VK_SUCCESS)
-    {
-        printf("Failed to create texture image view");
-        assert(false);
-    }
+    check(vkCreateImageView(device, &createImageViewInfo, nullptr, &imageView));
 
     return imageView;
 }
@@ -540,11 +516,7 @@ static VkSampler createSampler()
     samplerInfo.maxLod = 0.f;
 
     VkSampler sampler;
-    if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) 
-    {
-        printf("Could not create sampler");
-        assert(false);
-    }
+    check(vkCreateSampler(device, &samplerInfo, nullptr, &sampler));
     return sampler;
 }
 
@@ -581,7 +553,8 @@ static VkFormat findSupportedFormat(const std::vector<VkFormat>& candidtes, VkIm
         }
     }
 
-    assert(!"No supported format based on the feature enum %d", features);
+    VOID_ERROR("No supported format based on the feature enum %d", features);
+    return VK_FORMAT_MAX_ENUM;
 }
 
 static VkFormat findDepthFormat() 
@@ -757,11 +730,7 @@ static void createFramebuffers()
         framebufferInfo.height = swapchainExtent.height;
         framebufferInfo.layers = 1;
 
-        if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapchainFramebuffers[i]) != VK_SUCCESS)
-        {
-            assert(false);
-            printf("Failed to create framebuffer %i", i);
-        }
+        check(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapchainFramebuffers[i]));
     }
 }
 
@@ -807,11 +776,7 @@ int main()
 #endif
     };
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) 
-    {
-        assert(false);
-        return 1;
-    }
+    VOID_ASSERT(SDL_Init(SDL_INIT_VIDEO));
 
     SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
     window = SDL_CreateWindow("Skeleton", 1080, 720, flags);
@@ -857,11 +822,7 @@ int main()
 
     vkCreateInstance(&instanceInfo, nullptr, &instance);
 
-    if (SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface) == false) 
-    {
-        assert(false);
-        printf("Failed to create SDL/Vulkan Surface.\n");
-    }
+    VOID_ASSERTM(SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface), "Failed to create SDL/Vulkan Surface.");
 
 #ifdef SKELETON_DEBUG
     VkDebugUtilsMessengerEXT vulkanDebugUtilsMessenger;
@@ -913,11 +874,6 @@ int main()
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, availableExtensions.data());
 
     std::vector<const char*> usableDeviceExtensions;
-    
-    //This is here to check we support demoting the fragment shader to a "helper". When discard is used a new optimisation in 
-    //the newest SPRIV compilers to helps with the `discard` key word in the fragment shader. 
-    bool demoteShaderToHelperInvocation = false;
-
     //Assuming you've picked the best GPU we assume that we have the most available.
     //NOTE: I'm looping through all the available extensions here even though we only care about the swapchain one, because we likely want more soon.
     for (uint32_t i = 0; i < availableExtensions.size(); ++i) 
@@ -936,18 +892,13 @@ int main()
 
         if (strcmp(availableExtensions[i].extensionName, VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME) == 0)
         {
-            demoteShaderToHelperInvocation = true;
             usableDeviceExtensions.push_back(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
             continue;
         }
     }
 
     //TODO: This check is bad, there might be GPU that has some random extension and NOT the VK_KHR_SWAPCHAIN_EXTENSION_NAME fix it later.
-    if (usableDeviceExtensions.empty())
-    {
-        assert(false);
-        printf("You need at least the %s device level extension working the GPU.\n", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    }
+    VOID_ASSERTM(usableDeviceExtensions.empty() == false, "You need at least the %s device level extension working the GPU.\n", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     //Looking for device features that are aviable.
     VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
@@ -958,12 +909,9 @@ int main()
     VkPhysicalDeviceVulkan13Features vulkan13Features = {};
     vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vulkan13Features.pNext = &indexingFeatures;
-    if (demoteShaderToHelperInvocation)
-    {
-        vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
-        currentPNext = &vulkan13Features;
-    }
-
+    vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
+    currentPNext = &vulkan13Features;
+    
     VkPhysicalDeviceFeatures2 deviceFeatures{};
     deviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     deviceFeatures.pNext = currentPNext;
@@ -1128,25 +1076,14 @@ int main()
     layoutInfo.pBindings = binding.data();
 
     VkDescriptorSetLayout descriptorSetLayout;
-    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
-    {
-        printf("Failed to create descriptor set layout");
-        assert(false);
-    }
+    check(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout));
 
     //Shader modules creation
     size_t sizeOfVertexCode = 0;
     size_t sizeOfFragmentCode = 0;
     char* binVertCode = fileReadBinary(SHADER_ASSETS"mainShader.vert.spv", &sizeOfVertexCode);
-    char* binFragCode;
-    if (demoteShaderToHelperInvocation)
-    {
-        binFragCode = fileReadBinary(SHADER_ASSETS"mainShader.frag.spv", &sizeOfFragmentCode);
-    }
-    else 
-    {
-        binFragCode = fileReadBinary(SHADER_ASSETS"mainShaderFallback.frag.spv", &sizeOfFragmentCode);
-    }
+    char* binFragCode = fileReadBinary(SHADER_ASSETS"mainShader.frag.spv", &sizeOfFragmentCode);
+
     VkShaderModule vertexShaderModule;
     VkShaderModule fragmentShaderModule;
 
@@ -1160,17 +1097,8 @@ int main()
     fragCreateInfo.codeSize = sizeOfFragmentCode;
     fragCreateInfo.pCode = reinterpret_cast<const uint32_t*>(binFragCode);
 
-    if (vkCreateShaderModule(device, &vertexCreateInfo, nullptr, &vertexShaderModule) != VK_SUCCESS)
-    {
-        printf("Failed to create the vertex shader module");
-        assert(false);
-    }
-
-    if (vkCreateShaderModule(device, &fragCreateInfo, nullptr, &fragmentShaderModule) != VK_SUCCESS)
-    {
-        printf("Failed to create the fragement shader module");
-        assert(false);
-    }
+    check(vkCreateShaderModule(device, &vertexCreateInfo, nullptr, &vertexShaderModule)); 
+    check(vkCreateShaderModule(device, &fragCreateInfo, nullptr, &fragmentShaderModule));
 
     free((void*)binVertCode);
     binVertCode = nullptr;
@@ -1288,11 +1216,7 @@ int main()
     renderPassCreateInfo.dependencyCount = 1;
     renderPassCreateInfo.pDependencies = &dependency;
 
-    if (vkCreateRenderPass(device, &renderPassCreateInfo, nullptr, &renderPass) != VK_SUCCESS) 
-    {
-        assert(false);
-        printf("Failed to create a render pass.");
-    }
+    check(vkCreateRenderPass(device, &renderPassCreateInfo, nullptr, &renderPass));
 
     VkPipelineLayout pipelineLayout;
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
@@ -1302,11 +1226,7 @@ int main()
     pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
     pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
 
-    if (vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS) 
-    {
-        assert(false);
-        printf("Failed to create the layout pipeline.\n");
-    }
+    check(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1325,11 +1245,7 @@ int main()
     pipelineInfo.subpass = 0;
 
     VkPipeline mainPipeline;
-    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mainPipeline) != VK_SUCCESS) 
-    {
-        assert(false);
-        printf("Failed to create pipeline.");
-    }
+    check(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mainPipeline));
 
     vkDestroyShaderModule(device, vertexShaderModule, nullptr);
     vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
@@ -1403,11 +1319,7 @@ int main()
     poolDescriptorCreateInfo.maxSets = imageCount;
 
     VkDescriptorPool descriptorPool;
-    if (vkCreateDescriptorPool(device, &poolDescriptorCreateInfo, nullptr, &descriptorPool) != VK_SUCCESS)
-    {
-        printf("Failed to create descriptor pool");
-        assert(false);
-    }
+    check(vkCreateDescriptorPool(device, &poolDescriptorCreateInfo, nullptr, &descriptorPool));
 
     //Descriptor sets creation
     std::vector<VkDescriptorSetLayout> layouts(imageCount, descriptorSetLayout);
@@ -1418,11 +1330,7 @@ int main()
     descriptorAllocateInfo.pSetLayouts = layouts.data();
 
     std::vector<VkDescriptorSet> descriptorSets(imageCount);
-    if (vkAllocateDescriptorSets(device, &descriptorAllocateInfo, descriptorSets.data()) != VK_SUCCESS) 
-    {
-        printf("Failed to allocate descriptors sets");
-        assert(false);
-    }
+    check(vkAllocateDescriptorSets(device, &descriptorAllocateInfo, descriptorSets.data()));
 
     for (uint32_t i = 0; i < imageCount; ++i) 
     {
@@ -1470,11 +1378,7 @@ int main()
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = uint32_t(commandBuffers.size());
 
-    if (vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers.data())) 
-    {
-        assert(false);
-        printf("Failed to create a command buffer.");
-    }
+    check(vkAllocateCommandBuffers(device, &allocateInfo, commandBuffers.data()));
 
     //Synchronise object creation
     std::vector<VkSemaphore> imageAvailableSemaphore(maxFramesInFlight);
@@ -1490,23 +1394,10 @@ int main()
 
     for (uint32_t i = 0; i < maxFramesInFlight; ++i)
     {
-        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore[i]) != VK_SUCCESS)
-        {
-            printf("Failed to create image available semaphore");
-            assert(false);
-        }
+        check(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore[i]));
+        check(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishSemaphore[i]));
 
-        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishSemaphore[i]) != VK_SUCCESS)
-        {
-            printf("Failed to create render finished semaphore");
-            assert(false);
-        }
-
-        if (vkCreateFence(device, &fenceInfo, nullptr, &framesInFlight[i]) != VK_SUCCESS)
-        {
-            printf("Failed to create the fence.");
-            assert(false);
-        }
+        check(vkCreateFence(device, &fenceInfo, nullptr, &framesInFlight[i]));
     }
 
     bool running = true;
@@ -1553,8 +1444,7 @@ int main()
         }
         else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         {
-            printf("Failed to acquire swapchain image at image index %d", imageIndex);
-            assert(false);
+            VOID_ERROR("Failed to acquire swapchain image at image index %d", imageIndex);
         }
 
         auto currentTime = std::chrono::high_resolution_clock::now();
@@ -1576,11 +1466,7 @@ int main()
         beginInfo.flags = 0;
         beginInfo.pInheritanceInfo = 0;
 
-        if (vkBeginCommandBuffer(commandBuffers[currentFrame], &beginInfo) != VK_SUCCESS)
-        {
-            assert(false);
-            printf("Failed to begin recording command buffer.");
-        }
+        check(vkBeginCommandBuffer(commandBuffers[currentFrame], &beginInfo));
 
         VkRenderPassBeginInfo renderPassBeginInfo{};
         renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1625,11 +1511,7 @@ int main()
 
         vkCmdEndRenderPass(commandBuffers[currentFrame]);
 
-        if (vkEndCommandBuffer(commandBuffers[currentFrame]) != VK_SUCCESS)
-        {
-            printf("Failed to record a command buffer");
-            assert(false);
-        }
+        check(vkEndCommandBuffer(commandBuffers[currentFrame]));
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1646,11 +1528,7 @@ int main()
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(mainQueue, 1, &submitInfo, framesInFlight[currentFrame]) != VK_SUCCESS)
-        {
-            printf("Failed to submit the command buffer to draw with the current queue.");
-            assert(false);
-        }
+        check(vkQueueSubmit(mainQueue, 1, &submitInfo, framesInFlight[currentFrame]));
 
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1674,8 +1552,7 @@ int main()
         }
         else if(result != VK_SUCCESS)
         {
-            printf("Failed or present swapchain image!");
-            assert(false);
+            VOID_ERROR("Failed or present swapchain image!");
         }
 
         currentFrame = (currentFrame + 1) % maxFramesInFlight;
