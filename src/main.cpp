@@ -7,7 +7,7 @@
 
 #if defined(_MSC_VER)
 #include <windows.h>
-#elif defined(__GNUC__)
+#elif defined(__linux__)
 #include <csignal>
 #endif
 
@@ -180,7 +180,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback (VkDebugUtilsMessageSeverity
 
 #if defined(_MSC_VER)
         __debugbreak();
-#elif defined(__GNUC__)
+#elif defined(__LINUX__)
         std::raise(SIGINT);
 #endif
     }

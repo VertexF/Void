@@ -14,8 +14,7 @@ set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 if(MSVC)
     set(VULKAN_LIB "$ENV{VULKAN_SDK}/Lib/vulkan-1.lib")
-    set(SDL_LIB "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL3/x64/SDL3.lib")
-else()
+    set(SDL_LIB "${CMAKE_CURRENT_SOURCE_DIR}/libs/Win/SDL3/x64/SDL3.lib")
 endif()
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES "src/Shaders/*.vert" "src/Shaders/*.frag" "src/Shaders/*.comp" "src/Shaders/*.mesh" "src/Shaders/*.task")
