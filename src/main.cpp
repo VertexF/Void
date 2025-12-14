@@ -5,12 +5,21 @@
 #include <array>
 #include <chrono>
 
+#if defined(_MSC_VER)
 #include <windows.h>
+#elif defined(__GNUC__)
+#include <csignal>
+#endif
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
+#if defined(__linux__)
+#include <vulkan/vulkan_wayland.h>
+//#include <vulkan/vulkan_xlib.h>
+#elif defined(__WIN32)
 #include <vulkan/vulkan_win32.h>
+#endif
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/struct/vec2.h>
@@ -154,7 +163,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback (VkDebugUtilsMessageSeverity
                                                      const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
                                                      void* /*userData*/)
 {
-    if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
         const char* type = (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) ? "ERROR"
             : (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) || (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) ?
@@ -169,7 +178,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback (VkDebugUtilsMessageSeverity
         OutputDebugStringA(message);
 #endif // _WIN32
 
+#if defined(_MSC_VER)
         __debugbreak();
+#elif defined(__GNUC__)
+        std::raise(SIGINT);
+#endif
     }
 
     return VK_FALSE;
@@ -759,7 +772,12 @@ int main()
     const char* REQUESTED_EXTENSIONS[] =
     {
         VK_KHR_SURFACE_EXTENSION_NAME,
+#if defined(_WIN32)
         VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#elif defined (__linux__)
+        VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
+        "VK_KHR_xlib_surface",
+#endif
 #if defined(SKELETON_DEBUG)
         VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
@@ -807,7 +825,7 @@ int main()
     appInfo.applicationVersion = VK_MAKE_VERSION(0, 0, 0);
     appInfo.pEngineName = "Skeleton";
     appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_4;
+    appInfo.apiVersion = VK_API_VERSION_1_3;
 
     VkInstanceCreateInfo instanceInfo{};
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -820,9 +838,14 @@ int main()
     instanceInfo.enabledExtensionCount = sizeof(REQUESTED_EXTENSIONS) / sizeof(REQUESTED_EXTENSIONS[0]);
     instanceInfo.ppEnabledExtensionNames = REQUESTED_EXTENSIONS;
 
-    vkCreateInstance(&instanceInfo, nullptr, &instance);
+    check(vkCreateInstance(&instanceInfo, nullptr, &instance));
 
-    VOID_ASSERTM(SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface), "Failed to create SDL/Vulkan Surface.");
+    //VOID_ASSERTM(SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface), "Failed to create SDL/Vulkan Surface.");
+
+    if(SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface) == false)
+    {
+        vprint(SDL_GetError());
+    }
 
 #ifdef SKELETON_DEBUG
     VkDebugUtilsMessengerEXT vulkanDebugUtilsMessenger;
@@ -1539,7 +1562,6 @@ int main()
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapchains;
         presentInfo.pImageIndices = &imageIndex;
-        presentInfo.pResults;
 
         result = vkQueuePresentKHR(mainQueue, &presentInfo);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResize) 

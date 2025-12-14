@@ -9,13 +9,12 @@ set(SDL3_INCLUDES "$ENV{VULKAN_SDK}/Include")
 set(VULKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL/include")
 set(CGLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/cglm/include")
 set(VENDER_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
+#Set the location of the engine source.
+set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 if(MSVC)
     set(VULKAN_LIB "$ENV{VULKAN_SDK}/Lib/vulkan-1.lib")
     set(SDL_LIB "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL3/x64/SDL3.lib")
-
-    #Set the location of the engine source.
-    set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 else()
 endif()
 
@@ -30,7 +29,10 @@ if (WIN32)
     target_compile_definitions(Void PRIVATE
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
-                               NOMINMAX)
+                               NOMINMAX
+                               VK_USE_PLATFORM_WIN32_KHR)
+else(UNIX)
+target_compile_definitions(Void PRIVATE  VK_USE_PLATFORM_X11_KHR)
 endif()
 
 target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR} 
@@ -104,7 +106,9 @@ if (WIN32)
 else()
     target_link_libraries(Void PRIVATE
                           dl
-                          pthread)
+                          pthread
+                          SDL3
+                          vulkan)
 endif()
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES} ${FOUNDATION_SOURCE})
@@ -120,13 +124,23 @@ if(MSVC)
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Void)
 endif()
 
-if (WIN32)
-    set(THINGS_TO_COPY "${CMAKE_CURRENT_SOURCE_DIR}/libs/SDL3/x64/SDL3.dll"
-	                   "${ENGINE_INCLUDE}/Assets")
+set(THINGS_TO_COPY "${ENGINE_INCLUDE}/Assets")
 
-	file(COPY ${THINGS_TO_COPY} DESTINATION ${CMAKE_BINARY_DIR})
+message(STATUS "${ENGINE_INCLUDE}/Assets")
+
+if (WIN32)
+    list(APPEND THINGS_TO_COPY "${CMAKE_CURRENT_SOURCE_DIR}/libs/Win/SDL3/x64/SDL3.dll")
+else(UNIX)
+    list(APPEND THINGS_TO_COPY "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so.0.2.28"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so.0"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/run_game.sh"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/install.sh")
 endif()
 
+file(COPY ${THINGS_TO_COPY} DESTINATION ${CMAKE_BINARY_DIR})
+
+#NOTE At release this needs to be updated to look for glslc at a particular location.
 if(UNIX)
 	set(GLSL_VALIDATOR "glslc")
 elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
