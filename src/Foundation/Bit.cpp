@@ -1,5 +1,5 @@
 #include "Bit.hpp"
-#include "log.hpp"
+#include "Log.hpp"
 #include "Memory.hpp"
 
 #if defined(_MSC_VER)

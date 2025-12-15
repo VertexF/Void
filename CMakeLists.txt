@@ -8,6 +8,7 @@ project(Void
 #C++ is only "required" to remove warnings for libraries
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mssse3")
 
 set(SDL3_INCLUDES "$ENV{VULKAN_SDK}/Include")
 set(VULKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL/include")

@@ -78,8 +78,8 @@ struct LogService
 #define vprint(format, ...)    LogService::instance()->printFormat(format, __VA_ARGS__);
 #define vprintret(format, ...) LogService::instance()->printFormat(format, __VA_ARGS__); instance()->printFormat("\n");
 #else
-#define vprint(format, ...)    LogService::instance()->printFormat(format, ## __VA_ARGS__);
-#define vprintret(format, ...) LogService::instance()->printFormat(format, ## __VA_ARGS__); instance()->printFormat("\n");
+#define vprint(format, ...)    LogService::instance()->printFormat(format, ##__VA_ARGS__);
+#define vprintret(format, ...) LogService::instance()->printFormat(format, ##__VA_ARGS__); instance()->printFormat("\n");
 #endif
 #else
 #define vprint(format, ...)

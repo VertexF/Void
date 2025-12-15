@@ -48,7 +48,8 @@ void GroupSse2Impl::convertSpecialToEmptyAndFullToDelete(int8_t* destination) co
 
     if (SSSE3_SUPPORT)
     {
-        auto res = _mm_or_si128(_mm_shuffle_epi8(x126, control), msbs);
+        auto shuffle = _mm_shuffle_epi8(x126, control);
+        auto res = _mm_or_si128(shuffle, msbs);
 
         _mm_storeu_si128(reinterpret_cast<__m128i*>(destination), res);
     }

@@ -134,13 +134,13 @@ bool processExcute(const char* workingDirectory, const char* processFullPath, co
     int result = chdir(workingDirectory);
     VOID_ASSERT(result == 0);
 
-    Allocator* allocator = &MemoryService::instance()->system_allocator;
+    Allocator* allocator = &MemoryService::instance()->systemAllocator;
 
     size_t fullCMDSize = strlen(processFullPath) + 1 + strlen(arguments) + 1;
     StringBuffer fullCMDBuffer;
     fullCMDBuffer.init(fullCMDSize, allocator);
 
-    char* fullCMD = fullCMDBuffer.append_use_f("%s %s", processFullPath, arguments);
+    char* fullCMD = fullCMDBuffer.appendUseF("%s %s", processFullPath, arguments);
 
     //TODO(marco): this works only if one process is started at a time.
     FILE* cmdStream = popen(fullCMD, "r");
@@ -164,7 +164,7 @@ bool processExcute(const char* workingDirectory, const char* processFullPath, co
             PROCESS_OUTPUT_BUFFER[byteRead] = 0;
             vprint("%s", PROCESS_OUTPUT_BUFFER);
 
-            if (strlen(searchError) > 0 && strstr(PROCCESS_OUTPUT_BUFFER, searchError))
+            if (strlen(searchError) > 0 && strstr(PROCESS_OUTPUT_BUFFER, searchError))
             {
                 executeSuccess = false;
             }

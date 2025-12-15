@@ -10,8 +10,11 @@
     #include <vender/imgui/imgui.h>
 #endif
 
+#if defined(_MSC_VER)
 //Define this and add StackWalker to heavy memory profile.
+//Also note this library seems to be windows only.
 #define VOID_MEMORY_STACK
+#endif
 
 #define HEAP_ALLOCATOR_STATS
 
@@ -21,11 +24,20 @@
 
 
 #define VOID_MEMORY_DEBUG
-#if defined(VOID_MEMORY_DEBUG)
-#define VOID_MEM_ASSERT(condition, message, ...) VOID_ASSERTM(condition, message, __VA_ARGS__)
-#else
-#define VOID_MEM_ASSERT(condition, message, ...)
-#endif //VOID_MEMORY_DEBUG
+
+#if defined(__WIN32)
+    #if defined(VOID_MEMORY_DEBUG)
+        #define VOID_MEM_ASSERT(condition, message, ...) VOID_ASSERTM(condition, message, __VA_ARGS__)
+    #else
+        #define VOID_MEM_ASSERT(condition, message, ...)
+    #endif //VOID_MEMORY_DEBUG
+#elif(__linux__)
+    #if defined(VOID_MEMORY_DEBUG)
+        #define VOID_MEM_ASSERT(condition, message, ...) VOID_ASSERTM(condition, message, ##__VA_ARGS__)
+    #else
+        #define VOID_MEM_ASSERT(condition, message, ...)
+    #endif //VOID_MEMORY_DEBUG
+#endif
 
 static size_t MEMORY_SIZE = void_mega(32) + tlsf_size() + 8;
 
@@ -161,12 +173,14 @@ void HeapAllocator::debugUI()
 class VoidStackWalker : public StackWalker
 {
 public:
+    virtual ~VoidStackWalker() override = default;
+
     VoidStackWalker() : StackWalker()
     {
     }
 
 protected:
-    virtual void OnOuput(LPCSTR szText)
+    virtual void OnOuput(LPCSTR szText) override
     {
         vprint("\nStackL \n%s\n", szText);
         StackWalker::OnOutput(szText);
