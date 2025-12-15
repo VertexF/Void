@@ -7,3 +7,12 @@
 [submodule "vender/SDL"]
 	path = vender/SDL
 	url = https://github.com/libsdl-org/SDL.git
+[submodule "vender/tlsf"]
+	path = vender/tlsf
+	url = https://github.com/mattconte/tlsf.git
+[submodule "vender/StackWalker"]
+	path = vender/StackWalker
+	url = https://github.com/JochenKalmbach/StackWalker.git
+[submodule "vender/rapidhash"]
+	path = vender/rapidhash
+	url = https://github.com/Nicoshev/rapidhash.git

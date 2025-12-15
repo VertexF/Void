@@ -4,7 +4,7 @@
 #include "Platform.hpp"
 
 #if defined(_MSC_VER)
-#include <debugapi.h>
+#include <windows.h>
 #endif
 
 #include <stdio.h>
