@@ -16,7 +16,6 @@
 #include <vulkan/vulkan.h>
 #if defined(__linux__)
 #include <vulkan/vulkan_wayland.h>
-//#include <vulkan/vulkan_xlib.h>
 #elif defined(__WIN32)
 #include <vulkan/vulkan_win32.h>
 #endif
@@ -776,6 +775,8 @@ int main()
         VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #elif defined (__linux__)
         VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
+        //For surface creation we need to have x11 extension available. 
+        //We can't include <vulkan/vulkan_xlib.h> because it doesn't compile so we just include the raw const char*
         "VK_KHR_xlib_surface",
 #endif
 #if defined(SKELETON_DEBUG)

@@ -31,7 +31,7 @@ if (WIN32)
                                NOMINMAX
                                VK_USE_PLATFORM_WIN32_KHR)
 else(UNIX)
-target_compile_definitions(Void PRIVATE  VK_USE_PLATFORM_X11_KHR)
+target_compile_definitions(Void PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
 
 target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR} 
