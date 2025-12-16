@@ -8,7 +8,9 @@ project(Void
 #C++ is only "required" to remove warnings for libraries
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mssse3")
+if(UNIX)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mssse3")
+endif()
 
 set(SDL3_INCLUDES "$ENV{VULKAN_SDK}/Include")
 set(VULKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL/include")
@@ -28,7 +30,9 @@ endif()
 file(GLOB_RECURSE GLSL_SOURCE_FILES "src/Shaders/*.vert" "src/Shaders/*.frag" "src/Shaders/*.comp" "src/Shaders/*.mesh" "src/Shaders/*.task")
 file(GLOB_RECURSE GLSL_HEADER_FILES "src/Shaders/*.h")
 
-set(VOID_SOURCE src/main.cpp)
+set(VOID_SOURCE src/main.cpp
+                src/Graphics/Game.h
+                src/Graphics/Game.cpp)
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
 
@@ -46,6 +50,7 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${CMAKE_CURRENT_SOURCE_DIR}
                                                ${ENGINE_INCLUDE}
                                                ${SDL3_INCLUDES}
+                                               ${RAPID_HASH_DIR}
                                                ${TLSF_INCLUDE_DIR}
                                                ${CGLM_INCLUDE_DIR}
                                                ${VENDER_INCLUDE})
@@ -121,6 +126,83 @@ else()
                           SDL3
                           vulkan)
 endif()
+
+add_library(External STATIC
+    vender/tlsf/tlsf.c
+    vender/tlsf/tlsf.h
+
+    #vender/json.hpp
+
+    #vender/imgui/imconfig.h
+    #vender/imgui/imgui_draw.cpp
+    #vender/imgui/imgui_impl_sdl2.cpp
+    #vender/imgui/imgui_impl_sdl2.h
+    #vender/imgui/imgui_impl_sdlrenderer2.h
+    #vender/imgui/imgui_impl_sdlrenderer2.cpp
+    #vender/imgui/imgui_internal.h
+    #vender/imgui/imgui_memory_editor.h
+    #vender/imgui/imgui_tables.cpp
+    #vender/imgui/imgui_widgets.cpp
+    #vender/imgui/imgui.cpp
+    #vender/imgui/imgui.h
+    #vender/imgui/imstb_rectpack.h
+    #vender/imgui/imstb_textedit.h
+    #vender/imgui/imstb_truetype.h
+    #vender/stb_image.h
+    #vender/imgui/TextEditor.cpp
+    #vender/imgui/TextEditor.h
+
+    #vender/tracy/tracy/Tracy.hpp
+    #vender/tracy/tracy/TracyVulkan.hpp
+    #vender/tracy/TracyClient.cpp
+
+    #vender/enkiTS/LockLessMultiReadPipe.h
+    #vender/enkiTS/TaskScheduler.cpp
+    #vender/enkiTS/TaskScheduler.h
+
+    #vender/meshoptimizer/allocator.cpp
+    #vender/meshoptimizer/clusterizer.cpp
+    #vender/meshoptimizer/indexanalyzer.cpp
+    #vender/meshoptimizer/indexcodec.cpp
+    #vender/meshoptimizer/indexgenerator.cpp
+    #vender/meshoptimizer/meshoptimizer.h
+    #vender/meshoptimizer/overdrawoptimizer.cpp
+    #vender/meshoptimizer/partition.cpp
+    #vender/meshoptimizer/quantization.cpp
+    #vender/meshoptimizer/rasterizer.cpp
+    #vender/meshoptimizer/simplifier.cpp
+    #vender/meshoptimizer/spatialorder.cpp
+    #vender/meshoptimizer/stripifier.cpp
+    #vender/meshoptimizer/vcacheoptimizer.cpp
+    #vender/meshoptimizer/vertexcodec.cpp
+    #vender/meshoptimizer/vertexfilter.cpp
+    #vender/meshoptimizer/vfetchoptimizer.cpp
+)
+
+set_target_properties(External PROPERTIES SYSTEM ON)
+
+if (WIN32)
+    target_sources(External PRIVATE
+                   vender/StackWalker/Main/StackWalker/StackWalker.cpp
+                   vender/StackWalker/Main/StackWalker/StackWalker.h)
+endif()
+
+target_compile_definitions(External PRIVATE
+                          TRACY_ENABLE
+                          TRACY_ON_DEMAND
+                          TRACY_NO_SYSTEM_TRACING)
+
+if (WIN32)
+    target_include_directories(External SYSTEM PRIVATE
+                               ${SDL3_INCLUDES})
+else()
+    target_link_libraries(External PRIVATE
+                          dl)
+    target_include_directories(External SYSTEM PRIVATE
+                               ${SDL3_INCLUDES})
+endif()
+
+target_link_libraries(Void PRIVATE Foundation External)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES} ${FOUNDATION_SOURCE})
 

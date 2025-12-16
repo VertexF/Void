@@ -22,10 +22,9 @@
     #include <StackWalker.h>
 #endif //VOID_MEMORY_STACK
 
-
 #define VOID_MEMORY_DEBUG
 
-#if defined(__WIN32)
+#if defined(WIN32)
     #if defined(VOID_MEMORY_DEBUG)
         #define VOID_MEM_ASSERT(condition, message, ...) VOID_ASSERTM(condition, message, __VA_ARGS__)
     #else
@@ -180,7 +179,7 @@ public:
     }
 
 protected:
-    virtual void OnOuput(LPCSTR szText) override
+    virtual void OnOutput(LPCSTR szText) override
     {
         vprint("\nStackL \n%s\n", szText);
         StackWalker::OnOutput(szText);
@@ -335,7 +334,7 @@ void StackAllocator::deallocate(void* pointer)
 {
     VOID_ASSERT(pointer >= memory);
     VOID_ASSERTM(pointer < memory + totalSize, "Out of bound free on linear allocator (outside bounds). Try a tempting to free %p, %llu after beginning of buffer (memory %p size %llu, allocated %llu)", (uint8_t*)pointer, (uint8_t*)pointer - memory, memory, totalSize, allocatedSize);
-    VOID_ASSERTM(pointer < memory + allocatedSize, "Out of bound free on linear allocator (inside bounds, after allocated). Try a tempting to free %p, %llu after beginning of buffer (memory %p size %llu, allocated %llu)", (uint8_t*)pointer, (uint8_t*)pointer - memory, memory, totalSize, allocatedSize);
+    VOID_ASSERTM(pointer < memory + allocatedSize, "Out of bound free on linear allocator (inside bounds, after allocated). Try attempting to free %p, %llu after beginning of buffer (memory %p size %llu, allocated %llu)", (uint8_t*)pointer, (uint8_t*)pointer - memory, memory, totalSize, allocatedSize);
 
     const size_t sizeAtPointer = (uint8_t *)pointer - memory;
     allocatedSize = sizeAtPointer;
