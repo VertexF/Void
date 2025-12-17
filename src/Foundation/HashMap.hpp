@@ -23,19 +23,16 @@
     //  GCC Intrinsics
 #include <cpuid.h>
 #include <immintrin.h>
-void cpuid(int info[4], int InfoType)
+static void cpuid(int info[4], int InfoType)
 {
     __cpuid_count(InfoType, 0, info[0], info[1], info[2], info[3]);
 }
 
-bool isProcessFeaturePresent()
+static bool isProcessFeaturePresent()
 {
     int info[4];
     cpuid(info, 0);
-    int nIds = info[0];
-
     cpuid(info, 0x80000000);
-    unsigned nExIds = info[0];
 
     return (info[2] & ((int)1 << 9)) != 0;
 }

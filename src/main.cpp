@@ -730,7 +730,7 @@ static void createFramebuffers()
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = ARRAYSIZE(atttas);
+        framebufferInfo.attachmentCount = ArraySize(atttas);
         framebufferInfo.pAttachments = atttas;
         framebufferInfo.width = swapchainExtent.width;
         framebufferInfo.height = swapchainExtent.height;
@@ -968,7 +968,7 @@ int main()
     availableExtensions.shutdown();
 
     //TODO: This check is bad, there might be GPU that has some random extension and NOT the VK_KHR_SWAPCHAIN_EXTENSION_NAME fix it later.
-    VOID_ASSERTM(usableDeviceExtensions.size >= 0, "You need at least the %s device level extension working the GPU.\n", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    VOID_ASSERTM(usableDeviceExtensions.size != 0, "You need at least the %s device level extension working the GPU.\n", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     //Looking for device features that are aviable.
     VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
@@ -1147,7 +1147,7 @@ int main()
     VkDescriptorSetLayoutBinding descriptorSetLayoutBinding[] = { uboLayoutBinding, sampleLayoutBinding };
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = ARRAYSIZE(descriptorSetLayoutBinding);
+    layoutInfo.bindingCount = ArraySize(descriptorSetLayoutBinding);
     layoutInfo.pBindings = descriptorSetLayoutBinding;
 
     VkDescriptorSetLayout descriptorSetLayout;
@@ -1199,7 +1199,7 @@ int main()
 
     VkPipelineDynamicStateCreateInfo dynamicState{};
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = ARRAYSIZE(dynamicStates);
+    dynamicState.dynamicStateCount = ArraySize(dynamicStates);
     dynamicState.pDynamicStates = dynamicStates;
 
     auto bindingDescription = Vertex::getBindingDescriptions();
@@ -1280,7 +1280,7 @@ int main()
     VkAttachmentDescription atts[] = {colourAttachment, depthAttachment};
     VkRenderPassCreateInfo renderPassCreateInfo{};
     renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassCreateInfo.attachmentCount = ARRAYSIZE(atts);
+    renderPassCreateInfo.attachmentCount = ArraySize(atts);
     renderPassCreateInfo.pAttachments = atts;
     renderPassCreateInfo.subpassCount = 1;
     renderPassCreateInfo.pSubpasses = &subpass;
@@ -1377,7 +1377,6 @@ int main()
     createUniformBuffers();
 
     //Descriptor pool creation
-    //std::array<VkDescriptorPoolSize, 2> poolSize{};
     Array<VkDescriptorPoolSize> poolSize{};
     poolSize.init(&stackAllocator, 2, 2);
     poolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
