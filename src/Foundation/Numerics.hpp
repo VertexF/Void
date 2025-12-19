@@ -28,17 +28,6 @@ const T& clamp(const T& value, const T& low, const T& high)
     return((value < low) ? low : (high < value) ? high : value);
 }
 
-template<typename To, typename From>
-To safeCast(From a)
-{
-    To result = (To)a;
-    From check = (From)result;
-
-    VOID_ASSERT(check == result);
-
-    return result;
-}
-
 uint32_t ceilU32(float value);
 uint32_t ceilU32(double value);
 uint16_t ceilU16(float value);

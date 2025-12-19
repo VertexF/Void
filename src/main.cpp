@@ -33,6 +33,11 @@
 #include "Foundation/Array.hpp"
 #include "Foundation/ResourceManager.hpp"
 #include "Foundation/Time.hpp"
+#include "Foundation/Camera.hpp"
+#include "Foundation/Numerics.hpp"
+
+#include "Application/Window.hpp"
+#include "Application/Input.hpp"
 
 #if defined(DEBUG_CHECKING)
 #define check(result) VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Assert Code %u", result)
@@ -42,7 +47,6 @@
 
 namespace
 {
-    SDL_Window* window;
     VkInstance instance;
 
     HeapAllocator* allocator;
@@ -614,6 +618,10 @@ static char* fileReadBinary(const char* filename, size_t* size = nullptr)
 
 static void cleanupSwapchain() 
 {
+    vkDestroyImageView(device, depthImageView, nullptr);
+    vkDestroyImage(device, depthImage, nullptr);
+    vkFreeMemory(device, depthImageMemory, nullptr);
+
     for (uint32_t i = 0; i < swapchainFramebuffers.size; ++i)
     {
         vkDestroyFramebuffer(device, swapchainFramebuffers[i], nullptr);
@@ -770,11 +778,13 @@ int main()
     allocator = &MemoryService::instance()->systemAllocator;
     stackAllocator.init(void_mega(8));
 
+    Window::instance()->init(1280, 720, "Void");
+
     resourceManager.init(allocator, nullptr);
 
+    InputHandler::instance()->init(allocator);
+
     //TODO: Use reverse-Z perspective
-    //camera.camera.initPerspective(0.05f, 1000.f, 60.f, windowSetup.width * 1.f / windowSetup.height);
-    //camera.init(true, 20.f, 6.f, 0.1f);
 
     //Timing set up.
     timeServiceInit();
@@ -835,19 +845,6 @@ int main()
 #endif
     };
 
-    VOID_ASSERT(SDL_Init(SDL_INIT_VIDEO));
-
-    SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
-    window = SDL_CreateWindow("Skeleton", 1080, 720, flags);
-    if (!window)
-    {
-        printf("Failed to create window.\n");
-        SDL_Quit();
-        return 1;
-    }
-
-    SDL_ShowWindow(window);
-
 #ifdef SKELETON_DEBUG
     VkDebugUtilsMessengerCreateInfoEXT debugUtilInfo = {};
     debugUtilInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -883,7 +880,7 @@ int main()
 
     //VOID_ASSERTM(SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface), "Failed to create SDL/Vulkan Surface.");
 
-    if(SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface) == false)
+    if(SDL_Vulkan_CreateSurface(Window::instance()->platformHandle, instance, nullptr, &surface) == false)
     {
         vprint(SDL_GetError());
     }
@@ -1449,7 +1446,6 @@ int main()
         vkUpdateDescriptorSets(device, descriptorWrites.size, descriptorWrites.data, 0, nullptr);
     }
     layouts.shutdown();
-    //descriptorSets.shutdown();
     descriptorWrites.shutdown();
 
     //Command buffer creation
@@ -1490,39 +1486,33 @@ int main()
     Array<VkClearValue> clearColour{};
     clearColour.init(&stackAllocator, 2, 2);
 
-    bool running = true;
-    SDL_Event event;
-    bool framebufferResize = false;
-;
+    Camera camera;
+    camera.initPerspective(1000.f, 0.05f, 45.f, swapchainExtent.width / (float)swapchainExtent.height);
+    //camera.init(true, 20.f, 6.f, 0.1f);
+
     int64_t beginFrameTick = timeNow();
-    //int64_t absoluteBeginFrameTick = beginFrameTick;
     uint32_t currentFrame = 0;
-    while (running)
+    bool fullscreen = false;
+    while (Window::instance()->exitRequested == false)
     {
-        while (SDL_PollEvent(&event))
+        InputHandler::instance()->onEvent();
+        Window::instance()->centerMouse(InputHandler::instance()->isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
+
+        if (InputHandler::instance()->isKeyDown(Keys::KEY_ESCAPE))
         {
-            switch (event.type)
-            {
-            case SDL_EVENT_QUIT:
-            {
-                running = false;
-                break;
-            }
-            case SDL_EVENT_KEY_DOWN:
-            {
-                if (event.key.key == SDLK_ESCAPE || event.key.key == SDLK_Q)
-                {
-                    running = false;
-                }
-                break;
-            }
-            case SDL_EVENT_WINDOW_RESIZED:
-            {
-                framebufferResize = true;
-                break;
-            }
-            }
+            Window::instance()->exitRequested = true;
         }
+        else if (InputHandler::instance()->isKeyJustReleased(Keys::KEY_F))
+        {
+            fullscreen = !fullscreen;
+            Window::instance()->setFullscreen(fullscreen);
+        }
+        else if (InputHandler::instance()->isKeyJustReleased(Keys::KEY_R))
+        {
+            camera.reset();
+        }
+        InputHandler::instance()->newFrame();
+        InputHandler::instance()->update();
 
         vkWaitForFences(device, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1541,11 +1531,23 @@ int main()
         const int64_t currentTick = timeNow();
         float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
 
+        camera.update();
+
+        //ModelData modelData{};
+        //modelData.model = glms_rotate(glms_mat4_identity(), deltaTime * glm_rad(90.f), { 0.f, 0.f, 1.f });
+        //modelData.view = glms_lookat({ 2.f, 2.f, 2.f }, { 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f });
+        //modelData.proj = glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 100.f, 1.f);
+        //modelData.proj.m11 *= -1;
+
         ModelData modelData{};
         modelData.model = glms_rotate(glms_mat4_identity(), deltaTime * glm_rad(90.f), { 0.f, 0.f, 1.f });
         modelData.view = glms_lookat({ 2.f, 2.f, 2.f }, { 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f });
-        modelData.proj = glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 100.f, 1.f);
+        modelData.proj = camera.projection;
         modelData.proj.m11 *= -1;
+
+        camera.view;
+        camera.projection;// glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 100.f, 1.f);
+
 
         memcpy(uniformBuffersMapped[currentFrame], &modelData, sizeof(modelData));
 
@@ -1632,9 +1634,9 @@ int main()
         presentInfo.pImageIndices = &imageIndex;
 
         result = vkQueuePresentKHR(mainQueue, &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResize) 
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || Window::instance()->resizeRequested)
         {
-            framebufferResize = false;
+            Window::instance()->resizeRequested = false;
             recreateSwapchain();
 
             currentFrame = (currentFrame + 1) % maxFramesInFlight;
@@ -1654,10 +1656,6 @@ int main()
     PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     vkDestroyDebugUtilsMessengerEXT(instance, vulkanDebugUtilsMessenger, nullptr);
 #endif // SKELETON_DEBUG
-    
-    vkDestroyImageView(device, depthImageView, nullptr);
-    vkDestroyImage(device, depthImage, nullptr);
-    vkFreeMemory(device, depthImageMemory, nullptr);
 
     cleanupSwapchain();
 
@@ -1700,31 +1698,31 @@ int main()
 
     vkDestroyInstance(instance, nullptr);
 
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    Window::instance()->shutdown();
 
-    descriptorSets.shutdown();
+    //descriptorSets.shutdown();
 
-    uniformBuffers.shutdown();
-    uniformBuffersMemory.shutdown();
-    uniformBuffersMapped.shutdown();
+    //uniformBuffers.shutdown();
+    //uniformBuffersMemory.shutdown();
+    //uniformBuffersMapped.shutdown();
 
-    swapchainImageViews.shutdown();
-    swapchainFramebuffers.shutdown();
-    swapchainImages.shutdown();
+    //swapchainImageViews.shutdown();
+    //swapchainFramebuffers.shutdown();
+    //swapchainImages.shutdown();
 
-    vertices.shutdown();
-    indices.shutdown();
-    layouts.shutdown();
+    //vertices.shutdown();
+    //indices.shutdown();
+    //layouts.shutdown();
 
-    commandBuffers.shutdown();
-    imageAvailableSemaphore.shutdown();
-    renderFinishSemaphore.shutdown();
-    framesInFlight.shutdown();
+    //commandBuffers.shutdown();
+    //imageAvailableSemaphore.shutdown();
+    //renderFinishSemaphore.shutdown();
+    //framesInFlight.shutdown();
 
-    resourceManager.shutdown();
-    stackAllocator.shutdown();
-    MemoryService::instance()->shutdown();
+    //InputHandler::instance()->shutdown();
+    //resourceManager.shutdown();
+    //stackAllocator.shutdown();
+    //MemoryService::instance()->shutdown();
 
     return 0;
 }

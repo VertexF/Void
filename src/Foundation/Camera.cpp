@@ -32,7 +32,7 @@ void Camera::initOrthographic(float nearPlane, float farPlane, float viewportWid
 
 void Camera::reset() 
 {
-    position = { 0.f, 1.f, 0.f };
+    position = { 2.f, 2.f, 2.f };
     yaw = 0.f;
     pitch = 0.f;
     view = glms_mat4_identity();
@@ -84,7 +84,7 @@ void Camera::update()
     const versors yawRotation = glms_quat(yaw, 0, 1, 0);
     const versors rotation = glms_quat_normalize(glms_quat_mul(pitchRotation, yawRotation));
 
-    const mat4s translation = glms_translate_make(glms_vec3_scale(position, -1.f));
+    const mat4s translation = glms_translate_make(glms_vec3_scale(position, 1.f));
     view = glms_mat4_mul(glms_quat_mat4(rotation), translation);
 
     //Update the vector for movement
@@ -112,7 +112,7 @@ void Camera::calculateProjectionMatrix()
 {
     if (perspective) 
     {
-        projection = glms_perspective(glm_rad(fieldOfView), aspectRatio, nearPlane, farPlane);
+        projection = glms_perspective(glm_rad(fieldOfView), aspectRatio, 100.f, 1.f);
     }
     else 
     {

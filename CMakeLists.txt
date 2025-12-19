@@ -31,7 +31,13 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES "src/Shaders/*.vert" "src/Shaders/*.frag" "s
 file(GLOB_RECURSE GLSL_HEADER_FILES "src/Shaders/*.h")
 
 set(VOID_SOURCE src/main.cpp
-                src/Graphics/Game.h
+                src/Application/Input.hpp
+                src/Application/Input.cpp
+                src/Application/Window.hpp
+                src/Application/Window.cpp
+                src/Application/Keys.hpp
+                src/Application/Keys.cpp
+                src/Graphics/Game.hpp
                 src/Graphics/Game.cpp)
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
@@ -41,9 +47,12 @@ if (WIN32)
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX
+                               #VOID_IMGUI
                                VK_USE_PLATFORM_WIN32_KHR)
 else(UNIX)
-    target_compile_definitions(Void PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
+    target_compile_definitions(Void PRIVATE 
+                               #VOID_IMGUI
+                               VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
 
 target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR} 
@@ -95,6 +104,7 @@ set(FOUNDATION_SOURCE src/Foundation/Array.hpp
 add_library(Foundation STATIC ${FOUNDATION_SOURCE})
 
 target_compile_definitions(Foundation PRIVATE
+                                      CGLM_FORCE_DEPTH_ZERO_TO_ONE
                                       _CRT_SECURE_NO_WARNINGS
                                       TRACY_ENABLE
                                       TRACY_ON_DEMAND
