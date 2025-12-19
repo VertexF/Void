@@ -82,24 +82,25 @@ Device deviceFromPart(DevicePart part);
 
 struct InputVector2 
 {
-    float x;
-    float y;
+    float x = 0.f;
+    float y = 0.f;
 };
 
 struct Gamepad 
 {
-    float axis[GAMEPAD_AXIS_COUNT];
-    uint8_t buttons[GAMEPAD_BUTTON_COUNT];
-    uint8_t previousButtons[GAMEPAD_BUTTON_COUNT];
+    float axis[GAMEPAD_AXIS_COUNT]{0.f};
+    uint8_t buttons[GAMEPAD_BUTTON_COUNT]{0};
+    uint8_t previousButtons[GAMEPAD_BUTTON_COUNT]{0};
 
-    SDL_Gamepad* handle;
-    const char* name;
+    SDL_Gamepad* handle = nullptr;
+    const char* name = nullptr;
 
-    uint32_t id;
+    uint32_t id = UINT32_MAX;
 
-    bool isAttached() const { return id >= 0; }
-    bool isButtonDown(GamepadButtons button) const { return buttons[button]; }
-    bool isButtonJustPressed(GamepadButtons button) const { return (buttons[button] && !previousButtons[button]); }
+    bool isAttached() const;
+    bool isButtonDown(GamepadButtons button) const;
+    bool isButtonJustPressed(GamepadButtons button) const;
+    bool isButtonJustReleased(GamepadButtons key) const;
 };
 
 struct InputBinding 
@@ -163,10 +164,12 @@ struct InputBindingCreation
 
 struct InputHandler
 {
-    static InputHandler* instance();
-
     void init(Allocator* allocator);
     void shutdown();
+
+    bool isButtonDown(GamepadButtons button) const;
+    bool isButtonJustDown(GamepadButtons button) const;
+    bool isButtonJustReleased(GamepadButtons button) const;
 
     bool isKeyDown(Keys key) const;
     bool isKeyJustPressed(Keys key, bool repeat = false) const;
@@ -214,7 +217,8 @@ struct InputHandler
     Array<InputAction> actions;
     Array<InputBinding> bindings;
 
-    Gamepad gamepads[MAX_GAMEPADS];
+    uint32_t numOfConnectedGamepads{0};
+    Gamepad gamepads[MAX_GAMEPADS]{};
 
     uint8_t keys[KEY_COUNT]{0};
     uint8_t previousKeys[KEY_COUNT]{0};
@@ -227,13 +231,6 @@ struct InputHandler
     float mouseDragDistance[MOUSE_BUTTON_COUNT]{0.f};
 
     bool hasFocus{false};
-
-private:
-    InputHandler() = default;
-    InputHandler(InputHandler const& rhs) = delete;
-    InputHandler(InputHandler&& rhs) = delete;
-    void operator=(InputHandler const& rhs) = delete;
-    void operator=(InputHandler&& rhs) = delete;
 };
 
 #endif // !INPUT_HDR

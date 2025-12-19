@@ -13,7 +13,6 @@ static bool initGamepad(SDL_JoystickID joystickID, Gamepad& gamepad)
 {
     SDL_Gamepad* pad = SDL_OpenGamepad(joystickID);
     SDL_Joystick* joy = SDL_OpenJoystick(joystickID);
-    memset(&gamepad, 0, sizeof(Gamepad));
 
     if (pad) 
     {
@@ -86,30 +85,26 @@ constexpr float MOUSE_DRAG_MIN_DISTANCE = 4.f;
 
 struct InputBackend 
 {
-    void init(Gamepad* gamepads, uint32_t numGamepads);
+    void init(Gamepad* gamepads, uint32_t& maxGamepads);
 
     void getMouseState(InputVector2& position, uint8_t* buttons, uint32_t numButtons);
     void onEvent(uint8_t* keys, uint32_t numKeys, 
                  Gamepad* gamepads, uint32_t numGamepads, bool& hasFocus);
 };
 
-void InputBackend::init(Gamepad* gamepads, uint32_t numGamepads) 
+void InputBackend::init(Gamepad* gamepads, uint32_t &numGamepads)
 {
     if (SDL_WasInit(SDL_INIT_GAMEPAD) != 1) 
     {
         SDL_InitSubSystem(SDL_INIT_GAMEPAD);
     }
 
-    for (uint32_t i = 0; i < numGamepads; ++i)
-    {
-        gamepads[i].id = UINT32_MAX;
-    }
-
     int32_t numJoysticks;
     SDL_JoystickID* joystickArray = SDL_GetJoysticks(&numJoysticks);
+    numGamepads = numJoysticks;
     if (numJoysticks > 0) 
     {
-        vprint("Detected joysticks!");
+        vprint("Detected joysticks!\n");
 
         for (int32_t i = 0; i < numJoysticks; ++i) 
         {
@@ -324,13 +319,27 @@ Device deviceFromPart(DevicePart part)
     }
 }
 
-static InputBackend INPUT_BACKEND;
-
-InputHandler* InputHandler::instance() 
+bool Gamepad::isAttached() const 
 {
-    static InputHandler inputHandler;
-    return &inputHandler;
+    return id >= 0; 
 }
+
+bool Gamepad::isButtonDown(GamepadButtons button) const 
+{ 
+    return buttons[button]; 
+}
+
+bool Gamepad::isButtonJustPressed(GamepadButtons button) const 
+{ 
+    return (buttons[button] && !previousButtons[button]); 
+}
+
+bool Gamepad::isButtonJustReleased(GamepadButtons key) const
+{
+    return !buttons[key] && previousButtons[key];
+}
+
+static InputBackend INPUT_BACKEND;
 
 void InputHandler::init(Allocator* allocator)
 {
@@ -341,17 +350,7 @@ void InputHandler::init(Allocator* allocator)
     actions.init(allocator, 64);
     bindings.init(allocator, 256);
 
-    for (size_t i = 0; i < MAX_GAMEPADS; ++i) 
-    {
-        gamepads[i].handle = nullptr;
-    }
-
-    memset(keys, 0, KEY_COUNT);
-    memset(previousKeys, 0, KEY_COUNT);
-    memset(mouseButton, 0, MOUSE_BUTTON_COUNT);
-    memset(previousMouseButton, 0, MOUSE_BUTTON_COUNT);
-
-    INPUT_BACKEND.init(gamepads, MAX_GAMEPADS);
+    INPUT_BACKEND.init(gamepads, numOfConnectedGamepads);
 }
 
 void InputHandler::shutdown() 
@@ -363,6 +362,33 @@ void InputHandler::shutdown()
     stringBuffer.shutdown();
 
     vprint("Input Service shutting down\n");
+}
+
+bool InputHandler::isButtonDown(GamepadButtons button) const
+{
+    for (uint32_t i = 0; i < numOfConnectedGamepads; ++i)
+    {
+        return gamepads[i].isButtonDown(button) && hasFocus;
+    }
+    return false;
+}
+
+bool InputHandler::isButtonJustDown(GamepadButtons button) const
+{
+    for (uint32_t i = 0; i < numOfConnectedGamepads; ++i)
+    {
+        return gamepads[i].isButtonJustPressed(button) && hasFocus;
+    }
+    return false;
+}
+
+bool InputHandler::isButtonJustReleased(GamepadButtons button) const
+{
+    for (uint32_t i = 0; i < numOfConnectedGamepads; ++i)
+    {
+        return gamepads[i].isButtonJustReleased(button) && hasFocus;
+    }
+    return false;
 }
 
 bool InputHandler::isKeyDown(Keys key) const 
@@ -715,7 +741,7 @@ void InputHandler::newFrame()
         previousMouseButton[i] = mouseButton[i];
     }
 
-    for (uint32_t i = 0; i < MAX_GAMEPADS; ++i) 
+    for (uint32_t i = 0; i < numOfConnectedGamepads; ++i) 
     {
         if (gamepads[i].isAttached())
         {

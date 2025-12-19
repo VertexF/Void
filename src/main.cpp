@@ -782,8 +782,8 @@ int main()
 
     resourceManager.init(allocator, nullptr);
 
-    InputHandler::instance()->init(allocator);
-
+    InputHandler inputHandler;
+    inputHandler.init(allocator);
     //TODO: Use reverse-Z perspective
 
     //Timing set up.
@@ -1495,24 +1495,33 @@ int main()
     bool fullscreen = false;
     while (Window::instance()->exitRequested == false)
     {
-        InputHandler::instance()->onEvent();
-        Window::instance()->centerMouse(InputHandler::instance()->isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
+        //Actually does the SDL event pooling
+        inputHandler.onEvent();
+        Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
-        if (InputHandler::instance()->isKeyDown(Keys::KEY_ESCAPE))
+        if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
         {
             Window::instance()->exitRequested = true;
         }
-        else if (InputHandler::instance()->isKeyJustReleased(Keys::KEY_F))
+        else if (inputHandler.isKeyJustReleased(Keys::KEY_F))
         {
             fullscreen = !fullscreen;
             Window::instance()->setFullscreen(fullscreen);
         }
-        else if (InputHandler::instance()->isKeyJustReleased(Keys::KEY_R))
+        else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
         {
             camera.reset();
         }
-        InputHandler::instance()->newFrame();
-        InputHandler::instance()->update();
+
+        if (inputHandler.isButtonJustReleased(GAMEPAD_BUTTON_A))
+        {
+            Window::instance()->exitRequested = true;
+        }
+
+        //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
+        inputHandler.newFrame();
+        //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
+        inputHandler.update();
 
         vkWaitForFences(device, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1700,29 +1709,29 @@ int main()
 
     Window::instance()->shutdown();
 
-    //descriptorSets.shutdown();
+    descriptorSets.shutdown();
 
-    //uniformBuffers.shutdown();
-    //uniformBuffersMemory.shutdown();
-    //uniformBuffersMapped.shutdown();
+    uniformBuffers.shutdown();
+    uniformBuffersMemory.shutdown();
+    uniformBuffersMapped.shutdown();
 
-    //swapchainImageViews.shutdown();
-    //swapchainFramebuffers.shutdown();
-    //swapchainImages.shutdown();
+    swapchainImageViews.shutdown();
+    swapchainFramebuffers.shutdown();
+    swapchainImages.shutdown();
 
-    //vertices.shutdown();
-    //indices.shutdown();
-    //layouts.shutdown();
+    vertices.shutdown();
+    indices.shutdown();
+    layouts.shutdown();
 
-    //commandBuffers.shutdown();
-    //imageAvailableSemaphore.shutdown();
-    //renderFinishSemaphore.shutdown();
-    //framesInFlight.shutdown();
+    commandBuffers.shutdown();
+    imageAvailableSemaphore.shutdown();
+    renderFinishSemaphore.shutdown();
+    framesInFlight.shutdown();
 
-    //InputHandler::instance()->shutdown();
-    //resourceManager.shutdown();
-    //stackAllocator.shutdown();
-    //MemoryService::instance()->shutdown();
+    inputHandler.shutdown();
+    resourceManager.shutdown();
+    stackAllocator.shutdown();
+    MemoryService::instance()->shutdown();
 
     return 0;
 }
