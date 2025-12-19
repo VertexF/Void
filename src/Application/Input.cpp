@@ -54,9 +54,11 @@ static uint32_t toSDLMouseButton(MouseButtons button)
         return SDL_BUTTON_MIDDLE;
     case MOUSE_BUTTON_RIGHT:
         return SDL_BUTTON_RIGHT;
+    case MOUSE_BUTTON_COUNT:
+    case MOUSE_BUTTON_NONE:
+    default:
+        return UINT32_MAX;
     }
-
-    return UINT32_MAX;
 }
 
 //static const char** gamepadAxisNames() 
@@ -449,7 +451,7 @@ void InputHandler::update()
         {
             float deltaX = mousePosition.x - mouseClickedPosition[i].x;
             float deltaY = mousePosition.y - mouseClickedPosition[i].y;
-            mouseDragDistance[i] = std::sqrtf((deltaX * deltaX) + (deltaY * deltaY));
+            mouseDragDistance[i] = std::sqrt((deltaX * deltaX) + (deltaY * deltaY));
         }
     }
 
@@ -503,7 +505,13 @@ void InputHandler::update()
 
                 case DEVICE_PART_GAMEPAD_BUTTONS:
                     bindings[k].value = bindings[k].repeat ? gamepad.isButtonDown(static_cast<GamepadButtons>(bindings[k].button)) :
-                                                               gamepad.isButtonJustPressed(static_cast<GamepadButtons>(bindings[k].button));
+                                                             gamepad.isButtonJustPressed(static_cast<GamepadButtons>(bindings[k].button));
+                    break;
+                case DEVICE_PART_KEYBOARD:
+                    VOID_ERROR("Not implemented!\n");
+                    break;
+                case DEVICE_PART_MOUSE:
+                    VOID_ERROR("Not implemented!\n");
                     break;
                 }
             }
@@ -565,6 +573,12 @@ void InputHandler::update()
 
             break;
         }
+        case BINDING_TYPE_BUTTON_ONE_MOD:
+            VOID_ERROR("Not implemented!\n");
+            break;
+        case BINDING_TYPE_BUTTON_TWO_MOD:
+            VOID_ERROR("Not implemented!\n");
+            break;
         }
     }
 }

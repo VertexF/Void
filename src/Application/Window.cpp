@@ -5,6 +5,7 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#include <cstdlib>
 
 static SDL_Window* sdlWindow = nullptr;
 
