@@ -515,6 +515,10 @@ void InputHandler::update()
                     break;
                 }
             }
+            break;
+            case DEVICE_MOUSE:
+                VOID_ERROR("Not implemented!\n");
+                break;
         }
     }
 
