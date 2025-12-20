@@ -1488,30 +1488,16 @@ int main()
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.05f, 1000.f, 45.f, Window::instance()->width / (float)Window::instance()->height);
-    gameCamera.init(true, 6.f, 6.0f, 0.1f);
-    //camera.init(true, 20.f, 6.f, 0.1f);
+    gameCamera.init(true, 6.f, 2.0f, 0.1f);
 
     int64_t beginFrameTick = timeNow();
     uint32_t currentFrame = 0;
-    int64_t timepassed = beginFrameTick;
+    float timePassed = 0.f;
     bool fullscreen = false;
     while (Window::instance()->exitRequested == false)
     {
         //Actually does the SDL event pooling
         inputHandler.onEvent();
-
-        //Begin "physics"
-        const int64_t currentTick = timeNow();
-        float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
-        timepassed += currentTick;
-        beginFrameTick = currentTick;
-
-        //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
-        inputHandler.newFrame();
-        //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
-        inputHandler.update();
-        gameCamera.update(&inputHandler, Window::instance()->width, Window::instance()->height, deltaTime);
-        Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
         if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
         {
@@ -1532,6 +1518,20 @@ int main()
             Window::instance()->exitRequested = true;
         }
 
+        //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
+        inputHandler.newFrame();
+        //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
+        inputHandler.update();
+
+        //Begin "physics"
+        const int64_t currentTick = timeNow();
+        float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
+        timePassed += deltaTime;
+        beginFrameTick = currentTick;
+
+        gameCamera.update(&inputHandler, Window::instance()->width, Window::instance()->height, deltaTime);
+        Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
+
         vkWaitForFences(device, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
 
         uint32_t imageIndex;
@@ -1546,21 +1546,10 @@ int main()
             VOID_ERROR("Failed to acquire swapchain image at image index %d", imageIndex);
         }
 
-
-        //ModelData modelData{};
-        //modelData.model = glms_rotate(glms_mat4_identity(), deltaTime * glm_rad(90.f), { 0.f, 0.f, 1.f });
-        //modelData.view = glms_lookat({ 2.f, 2.f, 2.f }, { 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f });
-        //modelData.proj = glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 100.f, 1.f);
-        //modelData.proj.m11 *= -1;
-
         ModelData modelData{};
-        modelData.model = glms_rotate(glms_mat4_identity(), timepassed * glm_rad(90.f), { 0.f, 0.f, 1.f });
+        modelData.model = glms_rotate(glms_mat4_identity(), timePassed * glm_rad(90.f), { 0.f, 0.f, 1.f });
         modelData.proj = gameCamera.internal3DCamera.viewProjection;
         modelData.proj.m11 *= -1;
-
-        //camera.view;
-        //camera.projection;// glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 100.f, 1.f);
-
 
         memcpy(uniformBuffersMapped[currentFrame], &modelData, sizeof(modelData));
 

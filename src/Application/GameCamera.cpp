@@ -38,7 +38,7 @@ void GameCamera::reset()
 
     mouseDragging = false;
     ignoreDraggingFrames = 3;
-    mouseSensitivity = 10.f;
+    mouseSensitivity = 2.f;
 }
 
 void GameCamera::update(InputHandler* input, uint32_t windowWidth, uint32_t windowHeight, float deltaTime) 
@@ -69,12 +69,6 @@ void GameCamera::update(InputHandler* input, uint32_t windowWidth, uint32_t wind
         mouseDragging = false;
         ignoreDraggingFrames = 3;
     }
-
-    //targetYaw -= (input->mousePosition.x - (windowWidth / 2.f)) * mouseSensitivity * deltaTime;
-    //targetPitch -= (input->mousePosition.y - (windowHeight / 2.f)) * mouseSensitivity * deltaTime;
-
- /*   vprint("targetYaw %f\n", targetYaw);
-    vprint("targetPitch %f\n", targetPitch);*/
 
     vec3s cameraMovement{ 0.f, 0.f, 0.f };
     float cameraMovementDelta = movementDelta/* * 0.06f*/;
