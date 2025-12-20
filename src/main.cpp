@@ -38,6 +38,7 @@
 
 #include "Application/Window.hpp"
 #include "Application/Input.hpp"
+#include "Application/GameCamera.hpp"
 
 #if defined(DEBUG_CHECKING)
 #define check(result) VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Assert Code %u", result)
@@ -134,7 +135,6 @@ namespace
     struct ModelData
     {
         alignas(16) mat4s model;
-        alignas(16) mat4s view;
         alignas(16) mat4s proj;
     };
 
@@ -1486,17 +1486,31 @@ int main()
     Array<VkClearValue> clearColour{};
     clearColour.init(&stackAllocator, 2, 2);
 
-    Camera camera;
-    camera.initPerspective(1000.f, 0.05f, 45.f, swapchainExtent.width / (float)swapchainExtent.height);
+    GameCamera gameCamera;
+    gameCamera.internal3DCamera.initPerspective(0.05f, 1000.f, 45.f, Window::instance()->width / (float)Window::instance()->height);
+    gameCamera.init(true, 6.f, 6.0f, 0.1f);
     //camera.init(true, 20.f, 6.f, 0.1f);
 
     int64_t beginFrameTick = timeNow();
     uint32_t currentFrame = 0;
+    int64_t timepassed = beginFrameTick;
     bool fullscreen = false;
     while (Window::instance()->exitRequested == false)
     {
         //Actually does the SDL event pooling
         inputHandler.onEvent();
+
+        //Begin "physics"
+        const int64_t currentTick = timeNow();
+        float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
+        timepassed += currentTick;
+        beginFrameTick = currentTick;
+
+        //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
+        inputHandler.newFrame();
+        //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
+        inputHandler.update();
+        gameCamera.update(&inputHandler, Window::instance()->width, Window::instance()->height, deltaTime);
         Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
         if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
@@ -1510,18 +1524,13 @@ int main()
         }
         else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
         {
-            camera.reset();
+            gameCamera.reset();
         }
 
         if (inputHandler.isButtonJustReleased(GAMEPAD_BUTTON_A))
         {
             Window::instance()->exitRequested = true;
         }
-
-        //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
-        inputHandler.newFrame();
-        //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
-        inputHandler.update();
 
         vkWaitForFences(device, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1537,10 +1546,6 @@ int main()
             VOID_ERROR("Failed to acquire swapchain image at image index %d", imageIndex);
         }
 
-        const int64_t currentTick = timeNow();
-        float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
-
-        camera.update();
 
         //ModelData modelData{};
         //modelData.model = glms_rotate(glms_mat4_identity(), deltaTime * glm_rad(90.f), { 0.f, 0.f, 1.f });
@@ -1549,13 +1554,12 @@ int main()
         //modelData.proj.m11 *= -1;
 
         ModelData modelData{};
-        modelData.model = glms_rotate(glms_mat4_identity(), deltaTime * glm_rad(90.f), { 0.f, 0.f, 1.f });
-        modelData.view = glms_lookat({ 2.f, 2.f, 2.f }, { 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f });
-        modelData.proj = camera.projection;
+        modelData.model = glms_rotate(glms_mat4_identity(), timepassed * glm_rad(90.f), { 0.f, 0.f, 1.f });
+        modelData.proj = gameCamera.internal3DCamera.viewProjection;
         modelData.proj.m11 *= -1;
 
-        camera.view;
-        camera.projection;// glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 100.f, 1.f);
+        //camera.view;
+        //camera.projection;// glms_perspective(glm_rad(45.f), swapchainExtent.width / (float)swapchainExtent.height, 100.f, 1.f);
 
 
         memcpy(uniformBuffersMapped[currentFrame], &modelData, sizeof(modelData));
@@ -1646,6 +1650,7 @@ int main()
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || Window::instance()->resizeRequested)
         {
             Window::instance()->resizeRequested = false;
+            gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             recreateSwapchain();
 
             currentFrame = (currentFrame + 1) % maxFramesInFlight;

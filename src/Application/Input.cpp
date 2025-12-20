@@ -154,7 +154,7 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
         }
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
-        {
+            {
             int32_t key = events.key.scancode;
             if (key >= 0 && key < static_cast<int32_t>(numKeys))
             {
@@ -169,39 +169,39 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
             int newHeight{0};
             SDL_GetWindowSizeInPixels(Window::instance()->platformHandle, &newWidth, &newHeight);
 
-            //Update only if needed.
+                //Update only if needed.
             if (uint32_t(newWidth) != Window::instance()->width || uint32_t(newHeight) != Window::instance()->height)
-            {
-                Window::instance()->resizeRequested = true;
+                {
+                    Window::instance()->resizeRequested = true;
                 Window::instance()->width = uint32_t(newWidth);
                 Window::instance()->height = uint32_t(newHeight);
 
-                vprint("Resize to %u, %u\n", Window::instance()->width, Window::instance()->height);
+                    vprint("Resize to %u, %u\n", Window::instance()->width, Window::instance()->height);
+                }
+            break;
             }
-            break;
-        }
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
-            vprint("Focus gained\n");
-            hasFocus = true;
-            break;
+                vprint("Focus gained\n");
+                hasFocus = true;
+                break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
-            vprint("Focus Lost\n");
-            hasFocus = false;
-            break;
+                vprint("Focus Lost\n");
+                hasFocus = false;
+                break;
         case SDL_EVENT_WINDOW_MAXIMIZED:
-            vprint("Maximised\n");
-            break;
+                vprint("Maximised\n");
+                break;
         case SDL_EVENT_WINDOW_MINIMIZED:
-            vprint("Minimised\n");
-            Window::instance()->minimisedRequested = true;
-            break;
+                vprint("Minimised\n");
+                Window::instance()->minimisedRequested = true;
+                break;
         case SDL_EVENT_WINDOW_RESTORED:
-            vprint("Restored\n");
-            Window::instance()->minimisedRequested = false;
-            break;
+                vprint("Restored\n");
+                Window::instance()->minimisedRequested = false;
+                break;
         case SDL_EVENT_WINDOW_EXPOSED:
-            vprint("Exposed\n");
-            break;
+                vprint("Exposed\n");
+                break;
 
         case SDL_EVENT_GAMEPAD_ADDED:
         {
@@ -323,7 +323,7 @@ Device deviceFromPart(DevicePart part)
 
 bool Gamepad::isAttached() const 
 {
-    return id >= 0; 
+    return id != UINT32_MAX; 
 }
 
 bool Gamepad::isButtonDown(GamepadButtons button) const 

@@ -4,7 +4,7 @@
 #include "Platform.hpp"
 #include "Assert.hpp"
 
-#define VOID_MATH_OVERFLOW_CHECK
+//#define VOID_MATH_OVERFLOW_CHECK
 
 #undef max
 #undef min

@@ -95,7 +95,7 @@ struct Gamepad
     SDL_Gamepad* handle = nullptr;
     const char* name = nullptr;
 
-    int32_t id = INT32_MAX;
+    uint32_t id = UINT32_MAX;
 
     bool isAttached() const;
     bool isButtonDown(GamepadButtons button) const;

@@ -12,8 +12,8 @@ if(UNIX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mssse3")
 endif()
 
-set(SDL3_INCLUDES "$ENV{VULKAN_SDK}/Include")
-set(VULKAN_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL/include")
+set(SDL3_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL/include")
+set(VULKAN_INCLUDE_DIR "$ENV{VULKAN_SDK}/Include")
 set(CGLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/cglm/include")
 set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf")
 set(STACK_WALKER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/StackWalker/Main/StackWalker")
@@ -31,6 +31,8 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES "src/Shaders/*.vert" "src/Shaders/*.frag" "s
 file(GLOB_RECURSE GLSL_HEADER_FILES "src/Shaders/*.h")
 
 set(VOID_SOURCE src/main.cpp
+                src/Application/GameCamera.hpp
+                src/Application/GameCamera.cpp
                 src/Application/Input.hpp
                 src/Application/Input.cpp
                 src/Application/Window.hpp
@@ -47,11 +49,11 @@ if (WIN32)
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX
-                               #VOID_IMGUI
+                               #VOID_IMGUI                        
                                VK_USE_PLATFORM_WIN32_KHR)
 else(UNIX)
     target_compile_definitions(Void PRIVATE 
-                               #VOID_IMGUI
+                               #VOID_IMGUI                     
                                VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
 

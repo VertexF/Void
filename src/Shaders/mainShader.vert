@@ -3,7 +3,6 @@
 layout (std140, binding = 0) uniform ModelData
 {
 	mat4 model;
-	mat4 view;
 	mat4 proj;
 }modelData;
 
@@ -16,7 +15,9 @@ layout (location = 1) out vec2 fragTexCoord;
 
 void main()
 {
-	gl_Position = modelData.proj * modelData.view * modelData.model * vec4(inPosition, 1.0);
+	vec4 worldPosition = modelData.model * vec4(inPosition, 1.0);
+
+	gl_Position = modelData.proj * worldPosition;
 	fragColour = inColour;
 	fragTexCoord = inTexCoord;
 }
