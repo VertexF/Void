@@ -39,8 +39,8 @@ set(VOID_SOURCE src/main.cpp
                 src/Application/Window.cpp
                 src/Application/Keys.hpp
                 src/Application/Keys.cpp
-                src/Graphics/Game.hpp
-                src/Graphics/Game.cpp)
+                src/Graphics/VulkanRenderer.hpp
+                src/Graphics/VulkanRenderer.cpp)
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
 
