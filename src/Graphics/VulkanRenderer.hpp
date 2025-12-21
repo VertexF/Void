@@ -106,42 +106,6 @@ struct VulkanRenderer
     VkImageView depthImageView;
 };
 
-static uint32_t findMemoryType(VulkanRenderer* renderer, uint32_t typeFilter, VkMemoryPropertyFlags properties);
-
-static VkCommandPool createCommandPool(VulkanRenderer* renderer, uint32_t queueFamilyIndex);
-
-static VkCommandBuffer beginOneTimeCommandBuffer(VulkanRenderer* renderer, const VkCommandPool& pool);
-static void endOneTimeCommandBuffer(VulkanRenderer* renderer, VkCommandBuffer commandBuffer, const VkCommandPool& cmdPool, const VkQueue& queue);
-
-static void createBuffer(VulkanRenderer* renderer, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-static void copyBuffer(VulkanRenderer* renderer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-static void copyBufferToImage(VulkanRenderer* renderer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-
-static bool hasStencilComponent(VkFormat format);
-
-static void transitionImageLayout(VulkanRenderer* renderer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
-
-static void createImage(VulkanRenderer* renderer, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
-
-static void createTextureImage(VulkanRenderer* renderer, const char* path, VkImage& textureImage, VkDeviceMemory& textureImageMemory);
-static VkImageView createImageView(VulkanRenderer* renderer, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
-static VkImageView createTextureImageView(VulkanRenderer* renderer, const VkImage& image, VkFormat format);
-
-static VkSampler createSampler(VulkanRenderer* renderer);
-
-static void createUniformBuffers(VulkanRenderer* renderer);
-
-static VkFormat findSupportedFormat(VulkanRenderer* renderer, const Array<VkFormat>& candidtes, VkImageTiling tiling, VkFormatFeatureFlags features);
-
-static VkFormat findDepthFormat(VulkanRenderer* renderer);
-static void createDepthResources(VulkanRenderer* renderer);
-
-static void cleanupSwapchain(VulkanRenderer* renderer);
-static void createSwapchain(VulkanRenderer* renderer);
-static void createImageViews(VulkanRenderer* renderer);
-static void createFramebuffers(VulkanRenderer* renderer);
-static void recreateSwapchain(VulkanRenderer* renderer);
-
 int runGame(VulkanRenderer* renderer);
 
 #endif // !VULKAN_RENDERER_HDR
