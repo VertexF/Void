@@ -11,7 +11,7 @@ static constexpr uint32_t MAX_GAMEPADS = 4;
 struct SDL_Gamepad;
 struct Allocator;
 
-enum GamepadAxis 
+enum GamepadAxis : uint8_t 
 {
     GAMEPAD_AXIS_LEFTX = 0,
     GAMEPAD_AXIS_LEFTY,
@@ -22,7 +22,7 @@ enum GamepadAxis
     GAMEPAD_AXIS_COUNT
 };
 
-enum GamepadButtons 
+enum GamepadButtons : uint8_t
 {
     GAMEPAD_BUTTON_A = 0,
     GAMEPAD_BUTTON_B,
@@ -42,7 +42,7 @@ enum GamepadButtons
     GAMEPAD_BUTTON_COUNT
 };
 
-enum MouseButtons 
+enum MouseButtons : uint8_t
 {
     MOUSE_BUTTON_NONE = -1,
     MOUSE_BUTTON_LEFT = 0,
@@ -89,13 +89,13 @@ struct InputVector2
 struct Gamepad 
 {
     float axis[GAMEPAD_AXIS_COUNT]{0.f};
-    uint8_t buttons[GAMEPAD_BUTTON_COUNT]{0};
-    uint8_t previousButtons[GAMEPAD_BUTTON_COUNT]{0};
 
     SDL_Gamepad* handle = nullptr;
     const char* name = nullptr;
 
     uint32_t id = UINT32_MAX;
+    uint8_t buttons[GAMEPAD_BUTTON_COUNT]{ 0 };
+    uint8_t previousButtons[GAMEPAD_BUTTON_COUNT]{ 0 };
 
     bool isAttached() const;
     bool isButtonDown(GamepadButtons button) const;
@@ -105,22 +105,22 @@ struct Gamepad
 
 struct InputBinding 
 {
-    BindingType type;
-    Device device;
-    DevicePart devicePart;
-    uint8_t actionMapIndex;
+    float value = 0.0f;
+
+    float minDeadzone = 0.1f;
+    float maxDeadzone = 0.95f;
 
     uint16_t actionIndex;
     uint16_t button;
 
-    float value = 0.0f;
-
+    uint8_t actionMapIndex;
     uint8_t isComposite;
     uint8_t isPartOfComposite;
     uint8_t repeat;
 
-    float minDeadzone = 0.1f;
-    float maxDeadzone = 0.95f;
+    BindingType type;
+    Device device;
+    DevicePart devicePart;
 
     InputBinding& set(BindingType inType, Device inDevice, DevicePart inDevicePart, uint16_t inButton,
                       uint8_t inIsComposite, uint8_t inIsPartOfComposite, uint8_t inRepeat);
@@ -155,11 +155,6 @@ struct InputActionCreation
 {
     const char* name;
     uint32_t actionMap;
-};
-
-struct InputBindingCreation 
-{
-    uint32_t action;
 };
 
 struct InputHandler
@@ -212,23 +207,26 @@ struct InputHandler
                                       DevicePart deviceLeft, uint16_t buttonLeft,
                                       DevicePart deviceRight, uint16_t buttonRight,
                                       bool repeat = true);
+
+    uint8_t keys[KEY_COUNT]{ 0 };
+    uint8_t previousKeys[KEY_COUNT]{ 0 };
+
+    Gamepad gamepads[MAX_GAMEPADS]{};
+
+    InputVector2 mouseClickedPosition[MOUSE_BUTTON_COUNT]{};
+    float mouseDragDistance[MOUSE_BUTTON_COUNT]{ 0.f };
+    uint8_t mouseButton[MOUSE_BUTTON_COUNT]{ 0 };
+    uint8_t previousMouseButton[MOUSE_BUTTON_COUNT]{ 0 };
+
     StringBuffer stringBuffer;
     Array<InputActionMap> actionMaps;
     Array<InputAction> actions;
     Array<InputBinding> bindings;
 
-    uint32_t numOfConnectedGamepads{0};
-    Gamepad gamepads[MAX_GAMEPADS]{};
-
-    uint8_t keys[KEY_COUNT]{0};
-    uint8_t previousKeys[KEY_COUNT]{0};
-
     InputVector2 mousePosition{};
     InputVector2 previousMousePosition{};
-    InputVector2 mouseClickedPosition[MOUSE_BUTTON_COUNT]{};
-    uint8_t mouseButton[MOUSE_BUTTON_COUNT]{0};
-    uint8_t previousMouseButton[MOUSE_BUTTON_COUNT]{0};
-    float mouseDragDistance[MOUSE_BUTTON_COUNT]{0.f};
+
+    uint32_t numOfConnectedGamepads{0};
 
     bool hasFocus{false};
 };

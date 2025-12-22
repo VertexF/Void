@@ -2,9 +2,6 @@
 #define VULKAN_RENDERER_HDR
 
 #include <vulkan/vulkan.h>
-#if defined(__linux__)
-#include <vulkan/vulkan_wayland.h>
-#endif //__linux__
 
 #include <cglm/struct/vec2.h>
 #include <cglm/struct/vec3.h>
@@ -77,20 +74,11 @@ struct VulkanRenderer
     VkPhysicalDevice physicalDevice;
     VkSurfaceKHR surface;
 
-    float maxAnisotropy;
-
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
 
     VkFormat swapchainFormat;
     VkRenderPass renderPass;
     VkExtent2D swapchainExtent;
-
-    uint32_t imageCount;
-
-    //Setting this to the max value of a 32uint because it's possible that the first family index that is found is 0, 
-    //UINT_MAX should error out some where else and be obvious in code what happened.
-    uint32_t mainQueueFamilyIndex = UINT32_MAX;
-    uint32_t transferQueueFamilyIndex = UINT32_MAX;
 
     VkCommandPool commandPool;
     VkCommandPool transferCommandPool;
@@ -104,6 +92,13 @@ struct VulkanRenderer
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
+
+    float maxAnisotropy;
+    uint32_t imageCount;
+    //Setting this to the max value of a 32uint because it's possible that the first family index that is found is 0, 
+    //UINT_MAX should error out some where else and be obvious in code what happened.
+    uint32_t mainQueueFamilyIndex = UINT32_MAX;
+    uint32_t transferQueueFamilyIndex = UINT32_MAX;
 };
 
 int runGame(VulkanRenderer* renderer);

@@ -183,9 +183,9 @@ struct Array
         size += source.size;
     }
 
-    T* data = nullptr;
     uint32_t size = 0;
     uint32_t capacity = 0;
+    T* data = nullptr;
     Allocator* allocator = nullptr;
 };
 
@@ -214,8 +214,8 @@ struct ArrayView
         return data[index];
     }
 
-    T* data = nullptr;
     uint32_t size = 0;
+    T* data = nullptr;
 };
 
 #endif // !ARRAY_HDR

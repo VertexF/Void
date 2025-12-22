@@ -18,7 +18,7 @@ struct BlobHeader
 
 struct Blob 
 {
-    BlobHeader header = {};
+    BlobHeader header{};
 };
 
 #endif // !BLOB_HDR

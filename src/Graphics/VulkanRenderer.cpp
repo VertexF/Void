@@ -150,6 +150,7 @@ static void createBuffer(VulkanRenderer* renderer, VkDeviceSize size, VkBufferUs
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = size;
     bufferInfo.usage = usage;
+    //You shouldn't make the buffer sharingMode VK_SHARING_MODE_CONCURRENT because we aren't sharing data between then we are copying it from on to another.
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     check(vkCreateBuffer(renderer->device, &bufferInfo, nullptr, &buffer));
@@ -220,8 +221,6 @@ static void transitionImageLayout(VulkanRenderer* renderer, VkImage image, VkFor
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = 0;
 
     if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
     {
@@ -1183,10 +1182,6 @@ int runGame(VulkanRenderer* renderer)
     VkImageView textureImageView = createTextureImageView(renderer, image, VK_FORMAT_R8G8B8A8_SRGB);
     VkSampler textureSampler = createSampler(renderer);
 
-    //Index and vertex buffer creation.
-    //Transfering of buffers works because the usage e.g VK_BUFFER_USAGE_TRANSFER_SRC_BIT and synced up. 
-    //Meaning that when we create a vertex staging buffer with TRANSFER_SRC_BIT and our vertex buffer with TRANSFER_DST_BIT the copy from one to another is valid.
-    //You shouldn't make the buffer sharingMode VK_SHARING_MODE_EXCLUSIVE because we aren't sharing data between then we are copying it from on to another.
     VkDeviceSize vertexbufferSize = sizeof(vertices[0]) * vertices.size;
     VkDeviceSize indexBufferSize = sizeof(indices[0]) * indices.size;
     VkDeviceSize totalBufferSize = vertexbufferSize + indexBufferSize;
@@ -1194,6 +1189,9 @@ int runGame(VulkanRenderer* renderer)
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
 
+    //Index and vertex buffer creation.
+    //Transfering of buffers works because the usage e.g VK_BUFFER_USAGE_TRANSFER_SRC_BIT and synced up. 
+    //Meaning that when we create a vertex staging buffer with TRANSFER_SRC_BIT and our vertex buffer with TRANSFER_DST_BIT the copy from one to another is valid.
     createBuffer(renderer, totalBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
@@ -1380,125 +1378,128 @@ int runGame(VulkanRenderer* renderer)
         gameCamera.update(&inputHandler, Window::instance()->width, Window::instance()->height, deltaTime);
         Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
-        vkWaitForFences(renderer->device, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
-
-        uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(renderer->device, renderer->swapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &imageIndex);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR)
+        if (Window::instance()->minimised == false)
         {
-            recreateSwapchain(renderer);
-            continue;
-        }
-        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-        {
-            VOID_ERROR("Failed to acquire swapchain image at image index %d", imageIndex);
-        }
+            vkWaitForFences(renderer->device, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
 
-        ModelData modelData{};
-        modelData.model = glms_rotate(glms_mat4_identity(), timePassed * glm_rad(90.f), { 0.f, 0.f, 1.f });
-        modelData.proj = gameCamera.internal3DCamera.viewProjection;
-        modelData.proj.m11 *= -1;
+            uint32_t imageIndex;
+            VkResult result = vkAcquireNextImageKHR(renderer->device, renderer->swapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &imageIndex);
+            if (result == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                recreateSwapchain(renderer);
+                continue;
+            }
+            else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+            {
+                VOID_ERROR("Failed to acquire swapchain image at image index %d", imageIndex);
+            }
 
-        memcpy(renderer->uniformBuffersMapped[currentFrame], &modelData, sizeof(modelData));
+            ModelData modelData{};
+            modelData.model = glms_rotate(glms_mat4_identity(), timePassed * glm_rad(90.f), { 0.f, 0.f, 1.f });
+            modelData.proj = gameCamera.internal3DCamera.viewProjection;
+            modelData.proj.m11 *= -1;
 
-        vkResetFences(renderer->device, 1, &framesInFlight[currentFrame]);
+            memcpy(renderer->uniformBuffersMapped[currentFrame], &modelData, sizeof(modelData));
 
-        vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+            vkResetFences(renderer->device, 1, &framesInFlight[currentFrame]);
 
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = 0;
-        beginInfo.pInheritanceInfo = 0;
+            vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 
-        check(vkBeginCommandBuffer(commandBuffers[currentFrame], &beginInfo));
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags = 0;
+            beginInfo.pInheritanceInfo = 0;
 
-        VkRenderPassBeginInfo renderPassBeginInfo{};
-        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBeginInfo.renderPass = renderer->renderPass;
-        renderPassBeginInfo.framebuffer = renderer->swapchainFramebuffers[imageIndex];
-        renderPassBeginInfo.renderArea.offset = { 0, 0 };
-        renderPassBeginInfo.renderArea.extent = renderer->swapchainExtent;
+            check(vkBeginCommandBuffer(commandBuffers[currentFrame], &beginInfo));
 
-        // 0.218f, 0.f, 0.265f, 1.f
-        clearColour[0] = { { 0.f, 0.535f, 1.f, 1.f } };
-        clearColour[1] = { { 0.f, 0 } };
-        renderPassBeginInfo.clearValueCount = clearColour.size;
-        renderPassBeginInfo.pClearValues = clearColour.data;
+            VkRenderPassBeginInfo renderPassBeginInfo{};
+            renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassBeginInfo.renderPass = renderer->renderPass;
+            renderPassBeginInfo.framebuffer = renderer->swapchainFramebuffers[imageIndex];
+            renderPassBeginInfo.renderArea.offset = { 0, 0 };
+            renderPassBeginInfo.renderArea.extent = renderer->swapchainExtent;
 
-        vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+            // 0.218f, 0.f, 0.265f, 1.f
+            clearColour[0] = { { 0.f, 0.535f, 1.f, 1.f } };
+            clearColour[1] = { { 0.f, 0 } };
+            renderPassBeginInfo.clearValueCount = clearColour.size;
+            renderPassBeginInfo.pClearValues = clearColour.data;
 
-        vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline);
+            vkCmdBeginRenderPass(commandBuffers[currentFrame], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        VkViewport viewport{};
-        viewport.x = 0.f;
-        viewport.y = 0.f;
-        viewport.width = float(renderer->swapchainExtent.width);
-        viewport.height = float(renderer->swapchainExtent.height);
-        viewport.minDepth = 0.f;
-        viewport.maxDepth = 1.f;
-        vkCmdSetViewport(commandBuffers[currentFrame], 0, 1, &viewport);
+            vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline);
 
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = renderer->swapchainExtent;
-        vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
+            VkViewport viewport{};
+            viewport.x = 0.f;
+            viewport.y = 0.f;
+            viewport.width = float(renderer->swapchainExtent.width);
+            viewport.height = float(renderer->swapchainExtent.height);
+            viewport.minDepth = 0.f;
+            viewport.maxDepth = 1.f;
+            vkCmdSetViewport(commandBuffers[currentFrame], 0, 1, &viewport);
 
-        VkBuffer vertexBuffers[] = { modelBuffer };
-        VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffers[currentFrame], modelBuffer, vertexbufferSize, VK_INDEX_TYPE_UINT16);
+            VkRect2D scissor{};
+            scissor.offset = { 0, 0 };
+            scissor.extent = renderer->swapchainExtent;
+            vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &scissor);
 
-        vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+            VkBuffer vertexBuffers[] = { modelBuffer };
+            VkDeviceSize offsets[] = { 0 };
+            vkCmdBindVertexBuffers(commandBuffers[currentFrame], 0, 1, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(commandBuffers[currentFrame], modelBuffer, vertexbufferSize, VK_INDEX_TYPE_UINT16);
 
-        vkCmdDrawIndexed(commandBuffers[currentFrame], uint32_t(indices.size), 1, 0, 0, 0);
+            vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdEndRenderPass(commandBuffers[currentFrame]);
+            vkCmdDrawIndexed(commandBuffers[currentFrame], uint32_t(indices.size), 1, 0, 0, 0);
 
-        check(vkEndCommandBuffer(commandBuffers[currentFrame]));
+            vkCmdEndRenderPass(commandBuffers[currentFrame]);
 
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            check(vkEndCommandBuffer(commandBuffers[currentFrame]));
 
-        VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[currentFrame] };
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
-        submitInfo.pWaitDstStageMask = waitStages;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+            VkSubmitInfo submitInfo{};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        VkSemaphore signalSemaphores[] = { renderFinishSemaphore[currentFrame] };
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = signalSemaphores;
+            VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[currentFrame] };
+            VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitDstStageMask = waitStages;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
-        check(vkQueueSubmit(renderer->mainQueue, 1, &submitInfo, framesInFlight[currentFrame]));
+            VkSemaphore signalSemaphores[] = { renderFinishSemaphore[currentFrame] };
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = signalSemaphores;
 
-        VkPresentInfoKHR presentInfo{};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = signalSemaphores;
+            check(vkQueueSubmit(renderer->mainQueue, 1, &submitInfo, framesInFlight[currentFrame]));
 
-        VkSwapchainKHR swapchains[] = { renderer->swapchain };
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = swapchains;
-        presentInfo.pImageIndices = &imageIndex;
+            VkPresentInfoKHR presentInfo{};
+            presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+            presentInfo.waitSemaphoreCount = 1;
+            presentInfo.pWaitSemaphores = signalSemaphores;
 
-        result = vkQueuePresentKHR(renderer->mainQueue, &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || Window::instance()->resizeRequested)
-        {
-            Window::instance()->resizeRequested = false;
-            gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
-            recreateSwapchain(renderer);
+            VkSwapchainKHR swapchains[] = { renderer->swapchain };
+            presentInfo.swapchainCount = 1;
+            presentInfo.pSwapchains = swapchains;
+            presentInfo.pImageIndices = &imageIndex;
+
+            result = vkQueuePresentKHR(renderer->mainQueue, &presentInfo);
+            if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || Window::instance()->resizeRequested)
+            {
+                Window::instance()->resizeRequested = false;
+                gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
+                recreateSwapchain(renderer);
+
+                currentFrame = (currentFrame + 1) % maxFramesInFlight;
+                continue;
+            }
+            else if (result != VK_SUCCESS)
+            {
+                VOID_ERROR("Failed or present swapchain image!");
+            }
 
             currentFrame = (currentFrame + 1) % maxFramesInFlight;
-            continue;
         }
-        else if (result != VK_SUCCESS)
-        {
-            VOID_ERROR("Failed or present swapchain image!");
-        }
-
-        currentFrame = (currentFrame + 1) % maxFramesInFlight;
     }
 
     vkDeviceWaitIdle(renderer->device);

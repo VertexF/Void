@@ -193,11 +193,11 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
                 break;
         case SDL_EVENT_WINDOW_MINIMIZED:
                 vprint("Minimised\n");
-                Window::instance()->minimisedRequested = true;
+                Window::instance()->minimised = true;
                 break;
         case SDL_EVENT_WINDOW_RESTORED:
                 vprint("Restored\n");
-                Window::instance()->minimisedRequested = false;
+                Window::instance()->minimised = false;
                 break;
         case SDL_EVENT_WINDOW_EXPOSED:
                 vprint("Exposed\n");

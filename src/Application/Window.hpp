@@ -23,7 +23,7 @@ struct Window
     float displayRefresh = 1.f / 60.f;
     bool exitRequested = false;
     bool resizeRequested = false;
-    bool minimisedRequested = false;
+    bool minimised = false;
 
 private:
     Window() = default;

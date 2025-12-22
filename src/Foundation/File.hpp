@@ -4,7 +4,6 @@
 #include "Platform.hpp"
 #include <stdio.h>
 
-
 struct Allocator;
 struct StringArray;
 
@@ -92,7 +91,7 @@ struct ScopedFile
     ScopedFile(const char* filename, const char* mode);
     ~ScopedFile();
 
-    FileHandle file = {};
+    FileHandle file{};
 };
 
 

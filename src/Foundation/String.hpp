@@ -54,9 +54,9 @@ struct StringBuffer
     void clear();
 
     char* data = nullptr;
+    Allocator* allocator = nullptr;
     uint32_t bufferSize = 1024;
     uint32_t currentSize = 0;
-    Allocator* allocator = nullptr;
 };
 
 struct StringArray 
@@ -77,9 +77,9 @@ struct StringArray
     FlatHashMapIterator* stringIterator;
 
     char* data = nullptr;
+    Allocator* allocator = nullptr;
     uint32_t bufferSize = 1024;
     uint32_t currentSize = 0;
-    Allocator* allocator = nullptr;
 };
 
 #endif // !STRING_HDR

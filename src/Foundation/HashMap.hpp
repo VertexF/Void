@@ -44,9 +44,9 @@ namespace
 {
     //Control bytes
     //This is following Google's abseil librar convention - based on performance.
-    const int8_t CONTROL_BITMASK_EMPTY = -128;  //0b10000000;
-    const int8_t CONTROL_BITMASK_DELETED = -2;  //0b11111110;
-    const int8_t CONTROL_BITMASK_SENTINEL = -1; //0b11111111;
+    constexpr int8_t CONTROL_BITMASK_EMPTY = -128;  //0b10000000;
+    constexpr int8_t CONTROL_BITMASK_DELETED = -2;  //0b11111110;
+    constexpr int8_t CONTROL_BITMASK_SENTINEL = -1; //0b11111111;
 
     bool controlIsEmpty(int8_t control) { return control == CONTROL_BITMASK_EMPTY; }
     bool controlIsFull(int8_t control) { return control >= 0; }
