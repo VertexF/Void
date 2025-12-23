@@ -1,10 +1,20 @@
+#include "Foundation/Memory.hpp"
 #include "Graphics/VulkanRenderer.hpp"
 
 int main() 
 {
-	VulkanRenderer* renderer = new VulkanRenderer{};
+	MemoryServiceConfiguration memoryConfiguration;
+	memoryConfiguration.maximumDynamicSize = void_giga(1ull);
+
+	MemoryService::instance()->init(&memoryConfiguration);
+	MemoryService::instance()->scratchAllocator.init(void_mega(8));
+	HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
+
+	VulkanRenderer* renderer = (VulkanRenderer*)void_alloca(sizeof(VulkanRenderer), allocator);
 
 	runGame(renderer);
 
-	delete renderer;
+	void_free(renderer, allocator);
+
+	MemoryService::instance()->shutdown();
 }

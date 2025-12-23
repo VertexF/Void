@@ -58,6 +58,7 @@ void MemoryService::init(void* configuration)
 
 void MemoryService::shutdown()
 {
+    scratchAllocator.shutdown();
     systemAllocator.shutdown();
 
     vprint("Memory Service Shutdown.\n");
@@ -111,9 +112,6 @@ void MemoryService::imguiDraw()
 
 void MemoryService::test()
 {
-    //TODO Write and test the memory allocators and fix what the API is vs what's in the code.
-    //static LinearAllocator linear;
-    //linear.init(1024);
 }
 
 void HeapAllocator::init(size_t size)
@@ -224,51 +222,6 @@ void HeapAllocator::deallocate(void* pointer)
 #endif
 }
 
-void LinearAllocator::init(size_t size)
-{
-    memory = (uint8_t*)malloc(size);
-    totalSize = size;
-    allocatedSize = 0;
-}
-
-void LinearAllocator::shutdown()
-{
-    clear();
-    free(memory);
-}
-
-void* LinearAllocator::allocate(size_t size, size_t alignment)
-{
-    VOID_ASSERT(size > 0);
-
-    const size_t newStart = memoryAlign(allocatedSize, alignment);
-    VOID_ASSERT(newStart < totalSize);
-    const size_t newAllocatedSize = newStart + size;
-    if (newAllocatedSize > totalSize)
-    {
-        VOID_MEM_ASSERT(false, "Overflow");
-        return nullptr;
-    }
-
-    allocatedSize = newAllocatedSize;
-    return memory + newStart;
-}
-
-void* LinearAllocator::allocate(size_t size, size_t alignment, const char* file, int32_t line)
-{
-    return allocate(size, alignment);
-}
-
-void LinearAllocator::deallocate(void* /*pointer*/)
-{
-    //This allocator does not allocate on a per pointer bases.
-}
-
-void LinearAllocator::clear() 
-{
-    allocatedSize = 0;
-}
-
 void memoryCopy(void* destination, void* source, size_t size) 
 {
     memcpy(destination, source, size);
@@ -309,22 +262,22 @@ void StackAllocator::shutdown()
 
 void* StackAllocator::allocate(size_t size, size_t alignment) 
 {
-    VOID_ASSERT(size > 0);
-
+    VOID_ASSERT(size > 0);                                        
+                                                                  
     const size_t newStart = memoryAlign(allocatedSize, alignment);
-    VOID_ASSERT(newStart < totalSize);
-
-    const size_t newAllocatedSize = newStart + size;
-    if (newAllocatedSize > totalSize)
-    {
-        VOID_MEM_ASSERT(false, "Overflow");
-        return nullptr;
-    }
-
-    allocatedSize = newAllocatedSize;
-    return memory + newStart;
-}
-
+    VOID_ASSERT(newStart < totalSize);                            
+                                                                  
+    const size_t newAllocatedSize = newStart + size;              
+    if (newAllocatedSize > totalSize)                             
+    {                                                             
+        VOID_MEM_ASSERT(false, "Overflow");                       
+        return nullptr;                                           
+    }                                                             
+                                                                  
+    allocatedSize = newAllocatedSize;                             
+    return memory + newStart;                                     
+}                                                                 
+                                                                  
 void* StackAllocator::allocate(size_t size, size_t alignment, const char* file, int32_t line) 
 {
     return allocate(size, alignment);

@@ -450,7 +450,7 @@ static VkFormat findSupportedFormat(VulkanRenderer* renderer, const Array<VkForm
 static VkFormat findDepthFormat(VulkanRenderer* renderer)
 {
     Array<VkFormat> possibleDepthFormat;
-    possibleDepthFormat.init(&renderer->stackAllocator, 3);
+    possibleDepthFormat.init(renderer->stackAllocator, 3);
     possibleDepthFormat.push(VK_FORMAT_D32_SFLOAT);
     possibleDepthFormat.push(VK_FORMAT_D32_SFLOAT_S8_UINT);
     possibleDepthFormat.push(VK_FORMAT_D24_UNORM_S8_UINT);
@@ -491,7 +491,7 @@ static void createSwapchain(VulkanRenderer* renderer)
     uint32_t formatCount = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(renderer->physicalDevice, renderer->surface, &formatCount, nullptr);
     Array<VkSurfaceFormatKHR> surfaceFormats;
-    surfaceFormats.init(&renderer->stackAllocator, formatCount, formatCount);
+    surfaceFormats.init(renderer->stackAllocator, formatCount, formatCount);
     if (formatCount != 0)
     {
         vkGetPhysicalDeviceSurfaceFormatsKHR(renderer->physicalDevice, renderer->surface, &formatCount, surfaceFormats.data);
@@ -500,7 +500,7 @@ static void createSwapchain(VulkanRenderer* renderer)
     VkSurfaceFormatKHR swapchainSurface{};
     for (uint32_t i = 0; i < surfaceFormats.size; ++i)
     {
-        if (surfaceFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
+        if (surfaceFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM)
         {
             swapchainSurface = surfaceFormats[i];
         }
@@ -511,7 +511,7 @@ static void createSwapchain(VulkanRenderer* renderer)
     vkGetPhysicalDeviceSurfacePresentModesKHR(renderer->physicalDevice, renderer->surface, &presentationModeCount, nullptr);
 
     Array<VkPresentModeKHR> presentationModes;
-    presentationModes.init(&renderer->stackAllocator, presentationModeCount, presentationModeCount);
+    presentationModes.init(renderer->stackAllocator, presentationModeCount, presentationModeCount);
     if (presentationModeCount != 0)
     {
         vkGetPhysicalDeviceSurfacePresentModesKHR(renderer->physicalDevice, renderer->surface, &presentationModeCount, presentationModes.data);
@@ -545,7 +545,7 @@ static void createSwapchain(VulkanRenderer* renderer)
     createSwapchain.imageColorSpace = swapchainSurface.colorSpace;
     createSwapchain.imageExtent = renderer->swapchainExtent;
     createSwapchain.imageArrayLayers = 1;
-    createSwapchain.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    createSwapchain.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;//VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     //We always assume the presentation queue family and the graphics queue family are the same. 
     createSwapchain.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     createSwapchain.queueFamilyIndexCount = 0;
@@ -580,7 +580,7 @@ static void createFramebuffers(VulkanRenderer* renderer)
 
     for (uint32_t i = 0; i < renderer->swapchainImageViews.size; ++i)
     {
-        VkImageView atttas[] =
+        VkImageView imageViewAttachments[] =
         {
             renderer->swapchainImageViews[i],
             renderer->depthImageView
@@ -589,8 +589,8 @@ static void createFramebuffers(VulkanRenderer* renderer)
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderer->renderPass;
-        framebufferInfo.attachmentCount = ArraySize(atttas);
-        framebufferInfo.pAttachments = atttas;
+        framebufferInfo.attachmentCount = ArraySize(imageViewAttachments);
+        framebufferInfo.pAttachments = imageViewAttachments;
         framebufferInfo.width = renderer->swapchainExtent.width;
         framebufferInfo.height = renderer->swapchainExtent.height;
         framebufferInfo.layers = 1;
@@ -622,12 +622,8 @@ static void recreateSwapchain(VulkanRenderer* renderer)
 int runGame(VulkanRenderer* renderer)
 {
     //Init services
-    MemoryServiceConfiguration memoryConfiguration;
-    memoryConfiguration.maximumDynamicSize = void_giga(1ull);
-
-    MemoryService::instance()->init(&memoryConfiguration);
     renderer->allocator = &MemoryService::instance()->systemAllocator;
-    renderer->stackAllocator.init(void_mega(8));
+    renderer->stackAllocator = &MemoryService::instance()->scratchAllocator;
 
     Window::instance()->init(1280, 720, "Void");
 
@@ -729,8 +725,6 @@ int runGame(VulkanRenderer* renderer)
 
     check(vkCreateInstance(&instanceInfo, nullptr, &renderer->instance));
 
-    //VOID_ASSERTM(SDL_Vulkan_CreateSurface(window, instance, nullptr, &surface), "Failed to create SDL/Vulkan Surface.");
-
     if (SDL_Vulkan_CreateSurface(Window::instance()->platformHandle, renderer->instance, nullptr, &renderer->surface) == false)
     {
         vprint(SDL_GetError());
@@ -745,13 +739,13 @@ int runGame(VulkanRenderer* renderer)
     //Selecting physical device
     uint32_t physicalDeviceCount;
     vkEnumeratePhysicalDevices(renderer->instance, &physicalDeviceCount, nullptr);
-    Array<VkPhysicalDevice> gpus{};
-    gpus.init(&renderer->stackAllocator, physicalDeviceCount, physicalDeviceCount);
+    Array<VkPhysicalDevice> gpus;
+    gpus.init(renderer->stackAllocator, physicalDeviceCount, physicalDeviceCount);
     vkEnumeratePhysicalDevices(renderer->instance, &physicalDeviceCount, gpus.data);
 
     uint32_t highestScore = 0;
     uint32_t bestGPUIndex = 0;
-    for (uint32_t i = 0; i < gpus.size; ++i)
+    for (uint32_t i = 0; i < physicalDeviceCount; ++i)
     {
         //Here we are checking the properties of the GPUs and listing them out. 
         //The score is a number which tracks the quality of the GPU we are selecting.
@@ -759,6 +753,14 @@ int runGame(VulkanRenderer* renderer)
         uint32_t score = 0;
         VkPhysicalDeviceProperties properties;
         vkGetPhysicalDeviceProperties(gpus[i], &properties);
+        VkPhysicalDeviceFeatures features;
+        vkGetPhysicalDeviceFeatures(gpus[i], &features);
+
+        score += features.multiDrawIndirect;
+        score += features.shaderStorageBufferArrayDynamicIndexing;
+        score += features.shaderUniformBufferArrayDynamicIndexing;
+        score += features.shaderSampledImageArrayDynamicIndexing;
+        score += features.shaderStorageImageArrayDynamicIndexing;
 
         if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
         {
@@ -785,13 +787,13 @@ int runGame(VulkanRenderer* renderer)
     uint32_t extensionCount = 0;
     vkEnumerateDeviceExtensionProperties(renderer->physicalDevice, nullptr, &extensionCount, nullptr);
     Array<VkExtensionProperties> availableExtensions{};
-    availableExtensions.init(&renderer->stackAllocator, extensionCount, extensionCount);
+    availableExtensions.init(renderer->stackAllocator, extensionCount, extensionCount);
     vkEnumerateDeviceExtensionProperties(renderer->physicalDevice, nullptr, &extensionCount, availableExtensions.data);
 
     Array<const char*> usableDeviceExtensions{};
     usableDeviceExtensions.init(renderer->allocator, 8);
     //Assuming you've picked the best GPU we assume that we have the most available.
-    //NOTE: I'm looping through all the available extensions here even though we only care about the swapchain one, because we likely want more soon.
+    //NOTE: We need to likely avoid doing this to reduce the string comparing. I think this is okay for now, but I think we will eventually need to just assume these exist on peoples computers.
     for (uint32_t i = 0; i < availableExtensions.size; ++i)
     {
         if (strcmp(availableExtensions[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
@@ -800,9 +802,21 @@ int runGame(VulkanRenderer* renderer)
             continue;
         }
 
-        if (strcmp(availableExtensions[i].extensionName, VK_KHR_8BIT_STORAGE_EXTENSION_NAME) == 0)
+        if (strcmp(availableExtensions[i].extensionName, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) == 0)
         {
-            usableDeviceExtensions.push(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+            usableDeviceExtensions.push(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+            continue;
+        }
+
+        if (strcmp(availableExtensions[i].extensionName, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0)
+        {
+            usableDeviceExtensions.push(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+            continue;
+        }
+
+        if (strcmp(availableExtensions[i].extensionName, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) == 0)
+        {
+            usableDeviceExtensions.push(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
             continue;
         }
 
@@ -819,15 +833,19 @@ int runGame(VulkanRenderer* renderer)
     VOID_ASSERTM(usableDeviceExtensions.size != 0, "You need at least the %s device level extension working the GPU.\n", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     //Looking for device features that are aviable.
-    VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-    indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    indexingFeatures.pNext = nullptr;
-    void* currentPNext = &indexingFeatures;
+    VkPhysicalDeviceVulkan12Features vulkan12Features{};
+    vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vulkan12Features.pNext = nullptr;
+    vulkan12Features.bufferDeviceAddress = VK_TRUE;
+    vulkan12Features.descriptorIndexing = VK_TRUE;
+    void* currentPNext = nullptr;
 
-    VkPhysicalDeviceVulkan13Features vulkan13Features = {};
+    VkPhysicalDeviceVulkan13Features vulkan13Features{};
     vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    vulkan13Features.pNext = &indexingFeatures;
+    vulkan13Features.pNext = &vulkan12Features;
     vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
+    vulkan13Features.dynamicRendering = VK_TRUE;
+    vulkan13Features.synchronization2 = VK_TRUE;
     currentPNext = &vulkan13Features;
 
     VkPhysicalDeviceFeatures2 deviceFeatures{};
@@ -841,13 +859,13 @@ int runGame(VulkanRenderer* renderer)
     uint32_t familyPropertyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(renderer->physicalDevice, &familyPropertyCount, nullptr);
     Array<VkQueueFamilyProperties> queueFamilyProperties{};
-    queueFamilyProperties.init(&renderer->stackAllocator, familyPropertyCount, familyPropertyCount);
+    queueFamilyProperties.init(renderer->stackAllocator, familyPropertyCount, familyPropertyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(renderer->physicalDevice, &familyPropertyCount, queueFamilyProperties.data);
 
     VkBool32 surfaceSupported = VK_FALSE;
     for (uint32_t i = 0; i < familyPropertyCount; ++i)
     {
-        if (queueFamilyProperties.size == 0)
+        if (familyPropertyCount == 0)
         {
             continue;
         }
@@ -1221,7 +1239,7 @@ int runGame(VulkanRenderer* renderer)
 
     //Descriptor pool creation
     Array<VkDescriptorPoolSize> poolSize{};
-    poolSize.init(&renderer->stackAllocator, 2, 2);
+    poolSize.init(renderer->stackAllocator, 2, 2);
     poolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSize[0].descriptorCount = renderer->imageCount;
     poolSize[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1330,7 +1348,7 @@ int runGame(VulkanRenderer* renderer)
     }
 
     Array<VkClearValue> clearColour{};
-    clearColour.init(&renderer->stackAllocator, 2, 2);
+    clearColour.init(renderer->stackAllocator, 2, 2);
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.05f, 1000.f, 45.f, Window::instance()->width / (float)Window::instance()->height);
@@ -1573,8 +1591,6 @@ int runGame(VulkanRenderer* renderer)
 
     inputHandler.shutdown();
     renderer->resourceManager.shutdown();
-    renderer->stackAllocator.shutdown();
-    MemoryService::instance()->shutdown();
 
     return 0;
 }

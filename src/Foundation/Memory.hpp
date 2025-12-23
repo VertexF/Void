@@ -112,26 +112,6 @@ struct DoubleStackAllocator : public Allocator
     size_t bottom = 0;
 };
 
-//This allocator can only be reset.
-struct LinearAllocator : public Allocator
-{
-    virtual ~LinearAllocator() override = default;
-
-    void init(size_t size);
-    void shutdown();
-
-    virtual void* allocate(size_t size, size_t alignment) override;
-    virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) override;
-
-    virtual void deallocate(void* pointer) override;
-
-    void clear();
-
-    uint8_t* memory = nullptr;
-    size_t totalSize = 0;
-    size_t allocatedSize = 0;
-};
-
 //DO NOT use this for runtime processes. ONLY compilation resources.
 //Don't use to allocate stuff in run time.
 struct MallocAllocator : public Allocator
@@ -159,8 +139,8 @@ struct MemoryService
     void imguiDraw();
 #endif
 
-    LinearAllocator scratchAllocator = {};
-    HeapAllocator systemAllocator = {};
+    StackAllocator scratchAllocator{};
+    HeapAllocator systemAllocator{};
 
     //tests the allocators.
     void test();

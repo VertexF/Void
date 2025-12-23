@@ -26,10 +26,10 @@ struct Vertex
         return bindingDescription;
     }
 
-    static Array<VkVertexInputAttributeDescription> getAttributeDescriptions(StackAllocator& stackAllocator)
+    static Array<VkVertexInputAttributeDescription> getAttributeDescriptions(StackAllocator* stackAllocator)
     {
         Array<VkVertexInputAttributeDescription> attributeDescriptions{};
-        attributeDescriptions.init(&stackAllocator, 3, 3);
+        attributeDescriptions.init(stackAllocator, 3, 3);
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -59,10 +59,10 @@ struct VulkanRenderer
 {
     VkInstance instance;
 
-    HeapAllocator* allocator;
-    StackAllocator stackAllocator;
+    HeapAllocator* allocator = nullptr;
+    StackAllocator* stackAllocator = nullptr;
 
-    ResourceManager resourceManager;
+    ResourceManager resourceManager{};
 
     Array<VkImageView> swapchainImageViews;
     Array<VkFramebuffer> swapchainFramebuffers;
