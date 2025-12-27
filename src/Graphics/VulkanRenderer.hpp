@@ -57,16 +57,20 @@ struct ModelData
 
 struct VulkanRenderer
 {
-    VkInstance instance;
-
-    HeapAllocator* allocator = nullptr;
-    StackAllocator* stackAllocator = nullptr;
-
     ResourceManager resourceManager{};
 
     Array<VkImageView> swapchainImageViews;
     Array<VkFramebuffer> swapchainFramebuffers;
     Array<VkImage> swapchainImages;
+
+    Array<VkBuffer> uniformBuffers;
+    Array<VkDeviceMemory> uniformBuffersMemory;
+    Array<void*> uniformBuffersMapped;
+
+    VkInstance instance;
+
+    HeapAllocator* allocator = nullptr;
+    StackAllocator* stackAllocator = nullptr;
 
     VkDevice device;
     VkSwapchainKHR swapchain;
@@ -84,10 +88,6 @@ struct VulkanRenderer
     VkCommandPool transferCommandPool;
     VkQueue mainQueue;
     VkQueue transferQueue;
-
-    Array<VkBuffer> uniformBuffers;
-    Array<VkDeviceMemory> uniformBuffersMemory;
-    Array<void*> uniformBuffersMapped;
 
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;

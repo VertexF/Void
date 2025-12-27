@@ -14,7 +14,7 @@
 #include <cglm/struct/cam.h>
 
 #define SHADER_ASSETS "Assets/Shaders/"
-#define SKELETON_DEBUG
+#define VOID_DEBUG
 
 #include "Foundation/Log.hpp"
 #include "Foundation/Assert.hpp"
@@ -621,7 +621,6 @@ static void recreateSwapchain(VulkanRenderer* renderer)
 
 int runGame(VulkanRenderer* renderer)
 {
-    //Init services
     renderer->allocator = &MemoryService::instance()->systemAllocator;
     renderer->stackAllocator = &MemoryService::instance()->scratchAllocator;
 
@@ -631,7 +630,6 @@ int runGame(VulkanRenderer* renderer)
 
     InputHandler inputHandler;
     inputHandler.init(renderer->allocator);
-    //TODO: Use reverse-Z perspective
 
     //Timing set up.
     timeServiceInit();
@@ -676,23 +674,23 @@ int runGame(VulkanRenderer* renderer)
         //We can't include <vulkan/vulkan_xlib.h> because it doesn't compile so we just include the raw const char*
         "VK_KHR_xlib_surface",
 #endif
-#if defined(SKELETON_DEBUG)
+#if defined(VOID_DEBUG)
         VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 #else
-#endif //SKELETON_DEBUG
+#endif //VOID_DEBUG
     };
 
     const char* REQUESTED_LAYERS[] =
     {
-#if defined(SKELETON_DEBUG)
+#if defined(VOID_DEBUG)
         "VK_LAYER_KHRONOS_validation"
 #else
         ""
 #endif
     };
 
-#ifdef SKELETON_DEBUG
+#ifdef VOID_DEBUG
     VkDebugUtilsMessengerCreateInfoEXT debugUtilInfo = {};
     debugUtilInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     debugUtilInfo.pNext = nullptr;
@@ -702,7 +700,7 @@ int runGame(VulkanRenderer* renderer)
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
     debugUtilInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
     debugUtilInfo.pUserData = nullptr;
-#endif // SKELETON_DEBUG
+#endif // VOID_DEBUG
 
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -715,11 +713,11 @@ int runGame(VulkanRenderer* renderer)
     VkInstanceCreateInfo instanceInfo{};
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceInfo.pApplicationInfo = &appInfo;
-#ifdef SKELETON_DEBUG
+#ifdef VOID_DEBUG
     instanceInfo.pNext = &debugUtilInfo;
     instanceInfo.enabledLayerCount = sizeof(REQUESTED_LAYERS) / sizeof(REQUESTED_LAYERS[0]);
     instanceInfo.ppEnabledLayerNames = REQUESTED_LAYERS;
-#endif // SKELETON_DEBUG
+#endif // VOID_DEBUG
     instanceInfo.enabledExtensionCount = sizeof(REQUESTED_EXTENSIONS) / sizeof(REQUESTED_EXTENSIONS[0]);
     instanceInfo.ppEnabledExtensionNames = REQUESTED_EXTENSIONS;
 
@@ -730,11 +728,11 @@ int runGame(VulkanRenderer* renderer)
         vprint(SDL_GetError());
     }
 
-#ifdef SKELETON_DEBUG
+#ifdef VOID_DEBUG
     VkDebugUtilsMessengerEXT vulkanDebugUtilsMessenger;
     PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(renderer->instance, "vkCreateDebugUtilsMessengerEXT");
     vkCreateDebugUtilsMessengerEXT(renderer->instance, &debugUtilInfo, nullptr, &vulkanDebugUtilsMessenger);
-#endif // SKELETON_DEBUG
+#endif // VOID_DEBUG
 
     //Selecting physical device
     uint32_t physicalDeviceCount;
@@ -799,24 +797,6 @@ int runGame(VulkanRenderer* renderer)
         if (strcmp(availableExtensions[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
         {
             usableDeviceExtensions.push(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-            continue;
-        }
-
-        if (strcmp(availableExtensions[i].extensionName, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) == 0)
-        {
-            usableDeviceExtensions.push(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-            continue;
-        }
-
-        if (strcmp(availableExtensions[i].extensionName, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) == 0)
-        {
-            usableDeviceExtensions.push(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-            continue;
-        }
-
-        if (strcmp(availableExtensions[i].extensionName, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) == 0)
-        {
-            usableDeviceExtensions.push(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
             continue;
         }
 
@@ -1522,10 +1502,10 @@ int runGame(VulkanRenderer* renderer)
 
     vkDeviceWaitIdle(renderer->device);
 
-#ifdef SKELETON_DEBUG
+#ifdef VOID_DEBUG
     PFN_vkDestroyDebugUtilsMessengerEXT vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(renderer->instance, "vkDestroyDebugUtilsMessengerEXT");
     vkDestroyDebugUtilsMessengerEXT(renderer->instance, vulkanDebugUtilsMessenger, nullptr);
-#endif // SKELETON_DEBUG
+#endif // VOID_DEBUG
 
     cleanupSwapchain(renderer);
 

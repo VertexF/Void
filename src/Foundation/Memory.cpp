@@ -49,11 +49,11 @@ MemoryService* MemoryService::instance()
     return &memoryService;
 }
 
-void MemoryService::init(void* configuration)
+void MemoryService::init(uint64_t heapSize, uint64_t stackSize)
 {
     vprint("Memory Service Init.\n");
-    MemoryServiceConfiguration* memoryConfiguration = static_cast<MemoryServiceConfiguration*>(configuration);
-    systemAllocator.init(memoryConfiguration ? memoryConfiguration->maximumDynamicSize : MEMORY_SIZE);
+    scratchAllocator.init(stackSize != 0 ? stackSize : void_mega(8));
+    systemAllocator.init(heapSize != 0 ? heapSize : MEMORY_SIZE);
 }
 
 void MemoryService::shutdown()
@@ -109,10 +109,6 @@ void MemoryService::imguiDraw()
     ImGui::End();
 }
 #endif //void_IMGUI
-
-void MemoryService::test()
-{
-}
 
 void HeapAllocator::init(size_t size)
 {

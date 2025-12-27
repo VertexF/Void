@@ -3,18 +3,13 @@
 
 int main() 
 {
-	MemoryServiceConfiguration memoryConfiguration;
-	memoryConfiguration.maximumDynamicSize = void_giga(1ull);
+	MemoryService::instance()->init(void_giga(1ull), void_mega(8));
 
-	MemoryService::instance()->init(&memoryConfiguration);
-	MemoryService::instance()->scratchAllocator.init(void_mega(8));
-	HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
-
-	VulkanRenderer* renderer = (VulkanRenderer*)void_alloca(sizeof(VulkanRenderer), allocator);
+	VulkanRenderer* renderer = (VulkanRenderer*)void_alloca(sizeof(VulkanRenderer), &MemoryService::instance()->systemAllocator);
 
 	runGame(renderer);
 
-	void_free(renderer, allocator);
+	void_free(renderer, &MemoryService::instance()->systemAllocator);
 
 	MemoryService::instance()->shutdown();
 }

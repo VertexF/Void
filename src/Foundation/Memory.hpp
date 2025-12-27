@@ -122,17 +122,11 @@ struct MallocAllocator : public Allocator
     virtual void deallocate(void* pointer) override;
 };
 
-struct MemoryServiceConfiguration 
-{
-    //We can only allocate 32MB of memory all at once by default.
-    size_t maximumDynamicSize = 32 * 1024 * 1024;
-};
-
 struct MemoryService
 {
     static MemoryService* instance();
 
-    void init(void* configuration);
+    void init(uint64_t heapSize, uint64_t stackSize);
     void shutdown();
 
 #if defined VOID_IMGUI
@@ -141,11 +135,6 @@ struct MemoryService
 
     StackAllocator scratchAllocator{};
     HeapAllocator systemAllocator{};
-
-    //tests the allocators.
-    void test();
-
-    static constexpr const char* name = "Air Memory Service";
 };
 
 #define void_alloca(size, allocator) ((allocator)->allocate(size, 1, __FILE__, __LINE__))
