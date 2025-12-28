@@ -812,7 +812,7 @@ void main()
                 }
                 else
                 {
-                    VOID_ASSERT(false, "No position data found.");
+                    VOID_ERROR("No position data found.");
                     continue;
                 }
 
@@ -895,7 +895,7 @@ void main()
                     meshDraw.materialData.flags |= MaterialFeatures_TexcoordVertexAttribute;
                 }
 
-                VOID_ASSERT(meshPrimitive.material != glTF::INVALID_INT_VALUE, "Mesh with no material is not supported.");
+                VOID_ASSERTM(meshPrimitive.material != glTF::INVALID_INT_VALUE, "Mesh with no material is not supported.");
                 glTF::Material& material = scene.materials[meshPrimitive.material];
 
                 //Descriptor set

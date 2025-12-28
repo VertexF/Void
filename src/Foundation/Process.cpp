@@ -126,9 +126,9 @@ const char* processGetOutput()
 
 #else
 
-bool processExcute(const char* workingDirectory, const char* processFullPath, const char* arguments, const char* searchError)
+bool processExecute(const char *workingDirectory, const char *processFullPath, const char *arguments, const char *searchError)
 {
-    char currentDir[4096];
+     char currentDir[4096];
     getcwd(currentDir, 4096);
 
     int result = chdir(workingDirectory);
@@ -195,10 +195,10 @@ bool processExcute(const char* workingDirectory, const char* processFullPath, co
 
     chdir(currentDir);
     fullCMDBuffer.shutdown();
-    return executeSuccess;
+    return executeSuccess;   
 }
 
-const char* processGetOutput()
+const char *processGetOutput()
 {
     return PROCESS_OUTPUT_BUFFER;
 }

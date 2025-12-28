@@ -1,15 +1,6 @@
 #ifndef GPU_DEVICE_HDR
 #define GPU_DEVICE_HDR
 
-#if defined(_MSC_VER)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif //WIN32_LEAN_AND_MEAN
-#define VK_USE_PLATFORM_WIN32_KHR
-#else
-#define VK_USE_PLATFORM_XLIB_KHR
-#endif //_MSC_VER
-
 #include <vulkan/vulkan.h>
 #include "vender/vk_mem_alloc.h"
 

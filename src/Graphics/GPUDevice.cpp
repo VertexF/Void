@@ -1,4 +1,5 @@
 #include "GPUDevice.hpp"
+
 #include "CommandBuffer.hpp"
 
 #include "Foundation/Memory.hpp"
@@ -35,33 +36,22 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <cctype>
+
 namespace 
 {
 #define VULKAN_DEBUG_REPORT
     const char* REQUESTED_EXTENSIONS[] =
     {
         VK_KHR_SURFACE_EXTENSION_NAME,
-#ifdef VK_USE_PLATFORM_WIN32_KHR
+#if defined(_WIN32)
         VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_MACOS_MVK)
-        VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_XC8_KHR)
-        VK_KHR_XCB_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-        VK_KHR_ANDDROID_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-        VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_XCB_KHR)
-        VK_KHR_XCB_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
+#elif defined (__linux__)
         VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_MIR_KHR || VK_USE_PLATFORM_DISPLAY_KHR)
-        VK_KHR_DISPLAY_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-        VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_IOS_MVK)
-        VK_MVK_IOS_SURFACE_EXTENSION_NAME,
-#endif //VK_USE_PLATFORM_WIN32_KHR
+        //For surface creation we need to have x11 extension available. 
+        //We can't include <vulkan/vulkan_xlib.h> because it doesn't compile so we just include the raw const char*
+        "VK_KHR_xlib_surface",
+#endif
 
 #if defined(VULKAN_DEBUG_REPORT)
         VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
@@ -79,19 +69,35 @@ namespace
     };
 
 #if defined(VULKAN_DEBUG_REPORT)
-    VkBool32 debugUtilsCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                                VkDebugUtilsMessageTypeFlagsEXT types,
-                                const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-                                void* userData)
-    {
-        vprint("MessageID: %s %i\nMessage: %s\n\n", callbackData->pMessageIdName, callbackData->messageIdNumber, callbackData->pMessage);
 
-        if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-        {
-            __debugbreak();
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+    void* /*userData*/)
+{
+    if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    {
+        const char* type = (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) ? "ERROR"
+            : (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) || (messageType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) ?
+            "WARNING" : "INFO";
+
+        static constexpr uint32_t bufferSize = 4096;
+        char message[bufferSize];
+        snprintf(message, bufferSize, "%s : %s\n", type, callbackData->pMessage);
+
+        printf("%s", message);
+#ifdef _WIN32
+        OutputDebugStringA(message);
+#endif // _WIN32
+
+#if defined(_MSC_VER)
+        __debugbreak();
+#elif defined(__LINUX__)
+        std::raise(SIGINT);
+#endif
     }
 
-        return VK_FALSE;
+    return VK_FALSE;
 }
 
     VkDebugUtilsMessengerCreateInfoEXT createDebugUtilsMessengerInfo()
@@ -99,7 +105,7 @@ namespace
         VkDebugUtilsMessengerCreateInfoEXT creationInfo = {};
         creationInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         creationInfo.pNext = nullptr;
-        creationInfo.pfnUserCallback = debugUtilsCallback;
+        creationInfo.pfnUserCallback = debugCallback;
         creationInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
                                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
         creationInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
@@ -2631,7 +2637,7 @@ VkShaderModuleCreateInfo GPUDevice::compileShader(const char* code, uint32_t cod
     size_t stageDefineLength = strlen(stageDefine);
     for (uint32_t i = 0; i < stageDefineLength; ++i)
     {
-        stageDefine[i] = toupper(stageDefine[i]);
+        stageDefine[i] = putchar(toupper((int)stageDefine[i]));
     }
     //Compile to SPV
 #if defined(_MSC_VER)
