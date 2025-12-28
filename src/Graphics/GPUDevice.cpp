@@ -8,28 +8,6 @@
 #include "Foundation/File.hpp"
 #include "Foundation/Numerics.hpp"
 
-//#define VMA_MAX max
-//#define VMA_MIN min
-//#define VMA_USE_STL_CONTAINERS 0
-//#define VMA_USE_STL_VECTOR 0
-//#define VMA_USE_STL_UNORDERED_MAP 0
-//#define VMA_USE_STL_LIST 0
-
-//#if defined (_MSC_VER)
-//#pragma warning (disable: 4127)
-//#pragma warning (disable: 4189)
-//#pragma warning (disable: 4191)
-//#pragma warning (disable: 4296)
-//#pragma warning (disable: 4324)
-//#pragma warning (disable: 4355)
-//#pragma warning (disable: 4365)
-//#pragma warning (disable: 4625)
-//#pragma warning (disable: 4626)
-//#pragma warning (disable: 4668)
-//#pragma warning (disable: 5026)
-//#pragma warning (disable: 5027)
-//#endif // _MSC_VER
-
 #define VMA_IMPLEMENTATION
 #include "vender/vk_mem_alloc.h"
 
@@ -1320,7 +1298,7 @@ void GPUDevice::init(const DeviceCreation& creation)
         correctlyAllocatedBuffer, queuedCommandBuffers);
 
     vulkanImageIndex = 0;
-    currentFrame = 0;
+    currentFrame = 1;
     previousFrame = 0;
     absoluteFrame = 0;
     timestampsEnabled = false;

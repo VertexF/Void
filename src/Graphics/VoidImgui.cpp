@@ -2,6 +2,7 @@
 
 #include "Foundation/HashMap.hpp"
 #include "Foundation/Memory.hpp"
+#include "Foundation/File.hpp"
 
 #include "GPUDevice.hpp"
 #include "CommandBuffer.hpp"
@@ -27,7 +28,6 @@ namespace
     FlatHashMap<uint32_t, uint32_t> TEXTURE_TO_DESCRIPTOR_SET;
 
     const char* VERTEX_SHADER_CODE =
-    {
         "#version 450\n"
         "layout(location = 0) in vec2 position;\n"
         "layout(location = 1) in vec2 UV;\n"
@@ -40,11 +40,9 @@ namespace
         "   fragUV = UV;\n"
         "   fragColour = colour / 255.0f;\n"
         "   gl_Position = projectionMatrix * vec4(position.xy, 0, 1);\n"
-        "}\n"
-    };
+        "}\n";
 
     const char* VERTEX_SHADER_CODE_BINDLESS =
-    {
         "#version 450\n"
         "layout(location = 0) in vec2 position;\n"
         "layout(location = 1) in vec2 UV;\n"
@@ -59,11 +57,9 @@ namespace
         "   fragColour = colour / 255.0f;\n"
         "   textureID = gl_InstanceIndex;\n"
         "   gl_Position = projectionMatrix * vec4(position.xy, 0, 1);\n"
-        "}\n"
-    };
+        "}\n";
 
     const char* FRAGMENT_SHADER_CODE =
-    {
         "#version 450\n"
         "#extension GL_EXT_nonuniform_qualifier : enable\n"
         "layout(location = 0) in vec2 fragUV;\n"
@@ -73,11 +69,9 @@ namespace
         "void main()\n"
         "{\n"
         "   outColour = fragColour * texture(Texture, fragUV.st);\n"
-        "}\n"
-    };
+        "}\n";
 
     const char* FRAGMENT_SHADER_CODE_BINDLESS =
-    {
         "#version 450\n"
         "#extension GL_EXT_nonuniform_qualifier : enable\n"
         "layout(location = 0) in vec2 fragUV;\n"
@@ -89,8 +83,7 @@ namespace
         "void main()\n"
         "{\n"
         "   outColour = fragColour * texture(textures[nonuniformEXT(textureID)], fragUV.st);\n"
-        "}\n"
-    };
+        "}\n";
 
     void setStyleDarkGold()
     {
@@ -343,22 +336,30 @@ void ImguiService::init(void* configuration)
     io.Fonts->TexID = reinterpret_cast<ImTextureID>(&FONT_TEXTURE);
 
     //Manual code. Used to remove dependency from that.
-    ShaderStateCreation shaderCreation = {};
+    ShaderStateCreation shaderCreation{};
 
     if (gpu->bindlessSupported)
     {
+        FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/imguiBindless.vert.spv", &MemoryService::instance()->scratchAllocator);
+        FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/imguiBindless.frag.spv", &MemoryService::instance()->scratchAllocator);
+
         shaderCreation.setName("Imgui")
-            .addStage(VERTEX_SHADER_CODE_BINDLESS, static_cast<uint32_t>(strlen(VERTEX_SHADER_CODE_BINDLESS)), VK_SHADER_STAGE_VERTEX_BIT)
-            .addStage(FRAGMENT_SHADER_CODE_BINDLESS, static_cast<uint32_t>(strlen(FRAGMENT_SHADER_CODE_BINDLESS)), VK_SHADER_STAGE_FRAGMENT_BIT);
+            .addStage(vertexShaderCode.data, vertexShaderCode.size, VK_SHADER_STAGE_VERTEX_BIT)
+            .addStage(fragShaderCode.data, fragShaderCode.size, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .setSPVInput(true);
     }
     else
     {
+        FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/imgui.vert.spv", &MemoryService::instance()->scratchAllocator);
+        FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/imgui.frag.spv", &MemoryService::instance()->scratchAllocator);
+
         shaderCreation.setName("Imgui")
-            .addStage(VERTEX_SHADER_CODE, static_cast<uint32_t>(strlen(VERTEX_SHADER_CODE)), VK_SHADER_STAGE_VERTEX_BIT)
-            .addStage(FRAGMENT_SHADER_CODE, static_cast<uint32_t>(strlen(FRAGMENT_SHADER_CODE)), VK_SHADER_STAGE_FRAGMENT_BIT);
+            .addStage(vertexShaderCode.data, vertexShaderCode.size, VK_SHADER_STAGE_VERTEX_BIT)
+            .addStage(fragShaderCode.data, fragShaderCode.size, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .setSPVInput(true);
     }
 
-    PipelineCreation pipelineCreation = {};
+    PipelineCreation pipelineCreation{};
     pipelineCreation.name = "Pipeline_Imgui";
     pipelineCreation.shaders = shaderCreation;
 
@@ -371,7 +372,7 @@ void ImguiService::init(void* configuration)
     pipelineCreation.vertexInput.addVertexStream({ 0, 20, VertexInput::VertexInputRateType::PER_VERTEX });
     pipelineCreation.renderPass = gpu->getSwapchainOutput();
 
-    DescriptorSetLayoutCreation descriptorSetLayoutCreation = {};
+    DescriptorSetLayoutCreation descriptorSetLayoutCreation{};
     if (gpu->bindlessSupported)
     {
         descriptorSetLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, "LocalConstants" })
@@ -397,7 +398,7 @@ void ImguiService::init(void* configuration)
     UI_CB = gpu->createBuffer(cbCreation);
 
     //Create descriptor set
-    DescriptorSetCreation dsCreation = {};
+    DescriptorSetCreation dsCreation{};
     if (gpu->bindlessSupported == false)
     {
         dsCreation.setLayout(pipelineCreation.descriptorSetLayout[0])

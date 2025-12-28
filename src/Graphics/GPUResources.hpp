@@ -245,6 +245,7 @@ struct ShaderStage
 {
     const char* code = nullptr;
     uint32_t codeSize = 0;
+    uint32_t* data = nullptr;
     VkShaderStageFlagBits type = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
 };
 
