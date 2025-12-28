@@ -39,8 +39,23 @@ set(VOID_SOURCE src/main.cpp
                 src/Application/Window.cpp
                 src/Application/Keys.hpp
                 src/Application/Keys.cpp
+
                 src/Graphics/VulkanRenderer.hpp
-                src/Graphics/VulkanRenderer.cpp)
+                src/Graphics/VulkanRenderer.cpp
+                src/Graphics/VoidImgui.hpp
+                src/Graphics/VoidImgui.cpp
+                src/Graphics/CommandBuffer.hpp
+                src/Graphics/CommandBuffer.cpp
+                src/Graphics/GPUDevice.cpp
+                src/Graphics/GPUDevice.hpp
+                src/Graphics/GPUEnum.hpp
+                src/Graphics/GPUProfiler.hpp
+                src/Graphics/GPUProfiler.cpp
+                src/Graphics/GPUResources.hpp
+                src/Graphics/GPUResources.cpp
+                src/Graphics/Renderer.hpp
+                src/Graphics/Renderer.cpp
+)
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
 
@@ -64,12 +79,15 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${RAPID_HASH_DIR}
                                                ${TLSF_INCLUDE_DIR}
                                                ${CGLM_INCLUDE_DIR}
-                                               ${VENDER_INCLUDE})
+                                               ${VENDER_INCLUDE}
+"${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
 
-set(FOUNDATION_SOURCE src/Foundation/Array.hpp
+set(FOUNDATION_SOURCE src/Foundation/Gltf.hpp
+                      src/Foundation/Gltf.cpp
+                      src/Foundation/Array.hpp
                       src/Foundation/Assert.hpp
                       src/Foundation/Bit.cpp
                       src/Foundation/Bit.hpp
@@ -143,26 +161,20 @@ add_library(External STATIC
     vender/tlsf/tlsf.c
     vender/tlsf/tlsf.h
 
-    #vender/json.hpp
+    vender/json.hpp
 
-    #vender/imgui/imconfig.h
-    #vender/imgui/imgui_draw.cpp
-    #vender/imgui/imgui_impl_sdl2.cpp
-    #vender/imgui/imgui_impl_sdl2.h
-    #vender/imgui/imgui_impl_sdlrenderer2.h
-    #vender/imgui/imgui_impl_sdlrenderer2.cpp
-    #vender/imgui/imgui_internal.h
-    #vender/imgui/imgui_memory_editor.h
-    #vender/imgui/imgui_tables.cpp
-    #vender/imgui/imgui_widgets.cpp
-    #vender/imgui/imgui.cpp
-    #vender/imgui/imgui.h
-    #vender/imgui/imstb_rectpack.h
-    #vender/imgui/imstb_textedit.h
-    #vender/imgui/imstb_truetype.h
-    #vender/stb_image.h
-    #vender/imgui/TextEditor.cpp
-    #vender/imgui/TextEditor.h
+    vender/imgui/imconfig.h
+    vender/imgui/imgui_draw.cpp
+    vender/imgui/backends/imgui_impl_sdl3.cpp
+    vender/imgui/backends/imgui_impl_sdl3.h
+    vender/imgui/imgui_internal.h
+    vender/imgui/imgui_tables.cpp
+    vender/imgui/imgui_widgets.cpp
+    vender/imgui/imgui.cpp
+    vender/imgui/imgui.h
+    vender/imgui/imstb_rectpack.h
+    vender/imgui/imstb_textedit.h
+    vender/imgui/imstb_truetype.h
 
     #vender/tracy/tracy/Tracy.hpp
     #vender/tracy/tracy/TracyVulkan.hpp
@@ -205,13 +217,15 @@ target_compile_definitions(External PRIVATE
                           TRACY_NO_SYSTEM_TRACING)
 
 if (WIN32)
-    target_include_directories(External SYSTEM PRIVATE
-                               ${SDL3_INCLUDES})
+    target_include_directories(External PRIVATE
+                               ${SDL3_INCLUDES}
+                               "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
 else()
     target_link_libraries(External PRIVATE
                           dl)
-    target_include_directories(External SYSTEM PRIVATE
-                               ${SDL3_INCLUDES})
+    target_include_directories(External PRIVATE
+                               ${SDL3_INCLUDES}
+                               "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
 endif()
 
 target_link_libraries(Void PRIVATE Foundation External)

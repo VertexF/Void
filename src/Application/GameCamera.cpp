@@ -5,6 +5,7 @@
 
 #include <cglm/struct/affine.h>
 #include <cglm/struct/cam.h>
+#include <imgui/imgui.h>
 
 //We are doing this to get frame indepenent lerp.
 //http://www.rorydriscoll.com/2016/03/07/frame-rate-independent-damping-using-lerp/
@@ -51,7 +52,7 @@ void GameCamera::update(InputHandler* input, uint32_t windowWidth, uint32_t wind
     internal3DCamera.update();
 
     //Ignore first dragging frames for mouse movement waiting the cursor to be placed at the center of the screen.
-    if (input->isMouseDragging(MOUSE_BUTTON_RIGHT) /*&& !ImGui::IsAnyItemHovered()*/)
+    if (input->isMouseDragging(MOUSE_BUTTON_RIGHT) && !ImGui::IsAnyItemHovered())
     {
         if (ignoreDraggingFrames == 0) 
         {

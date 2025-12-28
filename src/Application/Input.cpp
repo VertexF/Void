@@ -8,6 +8,8 @@
 #include <cmath>
 
 #include <SDL3/SDL.h>
+#include <imgui.h>
+#include <backends/imgui_impl_sdl3.h>
 
 static bool initGamepad(SDL_JoystickID joystickID, Gamepad& gamepad)
 {
@@ -140,6 +142,7 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
     SDL_Event events;
     while (SDL_PollEvent(&events))
     {
+        ImGui_ImplSDL3_ProcessEvent(&events);
         switch (events.type)
         {
         case SDL_EVENT_QUIT:
@@ -363,7 +366,7 @@ void InputHandler::shutdown()
 
     stringBuffer.shutdown();
 
-    vprint("Input Service shutting down\n");
+    vprint("Input shutting down\n");
 }
 
 bool InputHandler::isButtonDown(GamepadButtons button) const

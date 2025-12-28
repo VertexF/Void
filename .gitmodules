@@ -16,3 +16,6 @@
 [submodule "vender/rapidhash"]
 	path = vender/rapidhash
 	url = https://github.com/Nicoshev/rapidhash.git
+[submodule "vender/imgui"]
+	path = vender/imgui
+	url = https://github.com/ocornut/imgui.git
