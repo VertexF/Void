@@ -842,9 +842,11 @@ int runGame(VulkanRenderer* renderer)
     vkGetPhysicalDeviceQueueFamilyProperties(renderer->physicalDevice, &familyPropertyCount, queueFamilyProperties.data);
 
     VkBool32 surfaceSupported = VK_FALSE;
-    for (uint32_t i = 0; i < familyPropertyCount; ++i)
+    renderer->mainQueueFamilyIndex = UINT32_MAX;
+    renderer->transferQueueFamilyIndex = UINT32_MAX;
+    for (uint32_t i = 0; i < queueFamilyProperties.size; ++i)
     {
-        if (familyPropertyCount == 0)
+        if (queueFamilyProperties.size == 0)
         {
             continue;
         }
