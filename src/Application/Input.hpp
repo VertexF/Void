@@ -42,7 +42,7 @@ enum GamepadButtons : uint8_t
     GAMEPAD_BUTTON_COUNT
 };
 
-enum MouseButtons : uint8_t
+enum MouseButtons : int8_t
 {
     MOUSE_BUTTON_NONE = -1,
     MOUSE_BUTTON_LEFT = 0,
