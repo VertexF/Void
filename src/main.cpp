@@ -794,7 +794,7 @@ int main(int argc, char** argv)
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
-    gameCamera.init(true, 20.f, 6.0f, 0.1f);
+    gameCamera.init(true, 10.f, 6.0f, 0.1f);
 
     float modelScale = 1.f;
     while (Window::instance()->exitRequested == false)
@@ -904,6 +904,7 @@ int main(int argc, char** argv)
                 inputHandler.newFrame();
                 inputHandler.update();
                 gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+                Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
                 //TODO: Match these name with what's in the shader.
                 UniformData uniformData{};

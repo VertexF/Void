@@ -41,7 +41,7 @@ void GameCamera::reset()
 
     mouseDragging = false;
     ignoreDraggingFrames = 3;
-    mouseSensitivity = 2.f;
+    mouseSensitivity = 0.5f;
 }
 
 void GameCamera::update(InputHandler* input, float windowWidth, float windowHeight, float deltaTime) 
@@ -58,8 +58,8 @@ void GameCamera::update(InputHandler* input, float windowWidth, float windowHeig
     {
         if (ignoreDraggingFrames == 0) 
         {
-            targetYaw -= (input->mousePosition.x - ((float)Window::instance()->width / 2.f)) * mouseSensitivity * deltaTime;
-            targetPitch -= (input->mousePosition.y - ((float)Window::instance()->height / 2.f)) * mouseSensitivity * deltaTime;
+            targetYaw += (input->mousePosition.x - (windowWidth / 2.f)) * mouseSensitivity * deltaTime;
+            targetPitch += (input->mousePosition.y - (windowHeight / 2.f)) * mouseSensitivity * deltaTime;
         }
         else 
         {
@@ -113,11 +113,11 @@ void GameCamera::update(InputHandler* input, float windowWidth, float windowHeig
 
     if (input->isKeyDown(KEY_UP) || input->isKeyDown(KEY_W))
     {
-        cameraMovement = glms_vec3_add(cameraMovement, glms_vec3_scale(internal3DCamera.direction, cameraMovementDelta));
+        cameraMovement = glms_vec3_add(cameraMovement, glms_vec3_scale(internal3DCamera.direction, -cameraMovementDelta));
     }
     else if (input->isKeyDown(KEY_DOWN) || input->isKeyDown(KEY_S))
     {
-        cameraMovement = glms_vec3_add(cameraMovement, glms_vec3_scale(internal3DCamera.direction, -cameraMovementDelta));
+        cameraMovement = glms_vec3_add(cameraMovement, glms_vec3_scale(internal3DCamera.direction, cameraMovementDelta));
     }
 
     targetMovement = glms_vec3_add(targetMovement, cameraMovement);

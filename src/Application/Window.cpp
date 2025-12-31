@@ -65,13 +65,13 @@ void Window::centerMouse(bool dragging) const
 {
     if (dragging) 
     {
-        SDL_WarpMouseInWindow(sdlWindow, roundU16(width / 2.f), roundU16(height / 2.f));
-        SDL_SetWindowMouseGrab(sdlWindow, true);
+        SDL_WarpMouseInWindow(sdlWindow, (float)roundU32(width / 2.f), (float)roundU32(height / 2.f));
+        SDL_SetWindowRelativeMouseMode(sdlWindow, true);
         SDL_HideCursor();
     }
     else 
     {
-        SDL_SetWindowMouseGrab(sdlWindow, false);
+        SDL_SetWindowRelativeMouseMode(sdlWindow, false);
         SDL_ShowCursor();
     }
 }
