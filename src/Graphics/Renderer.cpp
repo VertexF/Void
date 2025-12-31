@@ -26,7 +26,7 @@ namespace
 
             TextureCreation creation;
             creation.setData(imageData)
-                    .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, TextureType::Type::TEXTURE_2D)
+                    .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
                     .setFlags(1, 0)
                     .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
                     .setName(name);
@@ -103,7 +103,7 @@ Resource* TextureLoader::unload(const char* name)
     return nullptr;
 }
 
-Resource* TextureLoader::createFromFile(const char* name, const char* filename, ResourceManager* resourceManager) 
+Resource* TextureLoader::createFromFile(const char* name, const char* filename, ResourceManager* /*resourceManager*/) 
 {
     return renderer->createTexture(name, filename);
 }
@@ -446,7 +446,7 @@ void Renderer::upmapBuffer(BufferResource* buffer)
     }
 }
 
-CommandBuffer* Renderer::getCommandBuffer(Queue::QueueType type, bool begin) 
+CommandBuffer* Renderer::getCommandBuffer(VkQueueFlagBits type, bool begin)
 {
     return gpu->getCommandBuffer(type, begin);
 }

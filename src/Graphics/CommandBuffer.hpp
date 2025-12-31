@@ -5,7 +5,7 @@
 
 struct CommandBuffer 
 {
-    void init(Queue::QueueType newType, uint32_t newBufferSize, uint32_t newSubmitSize, bool newBaked);
+    void init(VkQueueFlagBits newType, uint32_t newBufferSize, uint32_t newSubmitSize, bool newBaked);
     void terminate();
 
     //Command buffer interface
@@ -21,11 +21,9 @@ struct CommandBuffer
     void clear(float red, float green, float blue, float alpha);
     void clearDepthStencil(float depth, uint8_t stencil);
 
-    void draw(Topology::TopologyType topology, uint32_t firstVertex, uint32_t vertexCount, 
-                                                uint32_t firstInstance, uint32_t instanceCount);
-    void drawIndexed(Topology::TopologyType topology, uint32_t indexCount, uint32_t instanceCount, 
-                                                        uint32_t firstIndex, int32_t vertexOffset, 
-                                                        uint32_t firstInstance);
+    void draw(uint32_t firstVertex, uint32_t vertexCount, uint32_t firstInstance, uint32_t instanceCount);
+    void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, 
+                                          uint32_t firstInstance);
     void drawIndirect(BufferHandle handle, uint32_t offset, uint32_t stride);
     void drawIndexedIndirect(BufferHandle handle, uint32_t offset, uint32_t stride);
 
@@ -55,7 +53,7 @@ struct CommandBuffer
 
     uint32_t currentCommand;
     uint32_t resourceHandle;
-    Queue::QueueType type = Queue::QueueType::GRAPHICS;
+    VkQueueFlagBits type = VK_QUEUE_GRAPHICS_BIT;
     uint32_t bufferSize = 0;
     uint32_t submitSize = 0;
 

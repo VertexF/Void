@@ -10,7 +10,7 @@ uint MaterialFeatures_TexcoordVertexAttribute = 1 << 6;
 
 layout(std140, binding = 0) uniform LocalConstants
 {
-    mat4 cameraModel;
+    mat4 globalModel;
     mat4 viewPerspective;
     vec4 eye;
     vec4 light;
@@ -42,8 +42,8 @@ layout(location = 3) out vec4 vPosition;
 
 void main()
 {
-    gl_Position = viewPerspective * cameraModel * model * vec4(position, 1);
-    vPosition = cameraModel * model * vec4(position, 1.0);
+    gl_Position = viewPerspective * globalModel * model * vec4(position, 1);
+    vPosition = globalModel * model * vec4(position, 1.0);
 
     if ((flags & MaterialFeatures_TexcoordVertexAttribute) != 0)
     {

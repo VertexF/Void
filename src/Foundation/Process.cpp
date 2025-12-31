@@ -61,7 +61,7 @@ bool processExecute(const char* workingDirectory, const char* processFullPath, c
     }
 
     //Create startup information with std redirection.
-    STARTUPINFOA startupInfo = {};
+    STARTUPINFOA startupInfo{};
     startupInfo.cb = sizeof(startupInfo);
     startupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
     startupInfo.hStdInput = handleStdinPipeRead;

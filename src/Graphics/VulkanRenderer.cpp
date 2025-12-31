@@ -625,7 +625,7 @@ int runGame(VulkanRenderer* renderer)
 
     Window::instance()->init(1280, 720, "Void");
 
-    renderer->resourceManager.init(renderer->allocator, nullptr);
+    renderer->resourceManager.init(renderer->allocator);
 
     InputHandler inputHandler;
     inputHandler.init(renderer->allocator);

@@ -176,7 +176,8 @@ uint32_t roundU32(float value)
     {
         vprint("Overflow converting values %llu, %llu\n", valueContainer, UINT32_MAX);
     }
-    return (uint32_t)valueContainer;
+    const uint32_t result = (uint32_t)valueContainer;
+    return result;
 }
 
 uint32_t roundU32(double value)

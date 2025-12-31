@@ -12,7 +12,7 @@ struct GameCamera
     void init(bool enabled = true, float rotation = 10.f, float movementSpeed = 10.f, float movementDelta = 0.f);
     void reset();
 
-    void update(InputHandler* input, uint32_t windowWidth, uint32_t windowHeight, float deltaTime);
+    void update(InputHandler* input, float windowWidth, float windowHeight, float deltaTime);
     void applyJittering(float x, float y);
 
     Camera internal3DCamera{};

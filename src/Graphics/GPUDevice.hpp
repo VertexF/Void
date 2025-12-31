@@ -4,6 +4,8 @@
 #include <vulkan/vulkan.h>
 #include "vender/vk_mem_alloc.h"
 
+#include "Application/GameCamera.hpp"
+
 #include "Foundation/Platform.hpp"
 
 #include "Graphics/GPUResources.hpp"
@@ -77,7 +79,7 @@ struct DeviceCreation
 
     DeviceCreation& setWindow(uint32_t newWidth, uint32_t newHeight, void* handle);
     DeviceCreation& setAllocator(Allocator* newAllocator);
-    DeviceCreation& setLinearAllocator(StackAllocator* allocator);
+    DeviceCreation& setLinearAllocator(StackAllocator* alloc);
 };
 
 struct GPUDevice
@@ -129,7 +131,6 @@ struct GPUDevice
     void setPresentMode(PresentMode::Types type);
     void frameCountersAdvanced();
     bool getFamilyQueue(VkPhysicalDevice physicalDevice);
-    VkShaderModuleCreateInfo compileShader(const char* code, uint32_t codeSize, VkShaderStageFlagBits stage, const char* name);
 
     //Swapchain
     void createSwapchain();
@@ -145,7 +146,7 @@ struct GPUDevice
     void setBufferGlobalOffset(BufferHandle buffer, uint32_t offset);
 
     //Command buffers
-    CommandBuffer* getCommandBuffer(Queue::QueueType type, bool begin);
+    CommandBuffer* getCommandBuffer(VkQueueFlagBits type, bool begin);
     CommandBuffer* getInstantCommandBuffer();
 
     void queueCommandBuffer(CommandBuffer* commandBuffer);
@@ -292,8 +293,6 @@ struct GPUDevice
     Array<VkFence> vulkanCommandBufferExecutedFence;
 
     TextureHandle depthTexture;
-
-    static constexpr uint32_t MAX_FRAMES = 3;
 
     //Window specific
     VkSurfaceKHR vulkanWindowSurface;

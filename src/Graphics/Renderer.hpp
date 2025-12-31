@@ -89,7 +89,7 @@ struct Renderer
     void* mapBuffer(BufferResource* buffer, uint32_t offset = 0, uint32_t size = 0);
     void upmapBuffer(BufferResource* buffer);
 
-    CommandBuffer* getCommandBuffer(Queue::QueueType type, bool begin);
+    CommandBuffer* getCommandBuffer(VkQueueFlagBits type, bool begin);
     void queueCommandBuffer(CommandBuffer* commands);
 
     ResourcePoolTyped<TextureResource> textures;

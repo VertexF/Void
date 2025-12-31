@@ -69,7 +69,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 #endif // _WIN32
 
 #if defined(_MSC_VER)
-        __debugbreak();
+        //__debugbreak();
 #elif defined(__LINUX__)
         std::raise(SIGINT);
 #endif
@@ -80,7 +80,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
     VkDebugUtilsMessengerCreateInfoEXT createDebugUtilsMessengerInfo()
     {
-        VkDebugUtilsMessengerCreateInfoEXT creationInfo = {};
+        VkDebugUtilsMessengerCreateInfoEXT creationInfo{};
         creationInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         creationInfo.pNext = nullptr;
         creationInfo.pfnUserCallback = debugCallback;
@@ -120,10 +120,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     size_t UBO_ALIGNMENT = 256;
     size_t SSBO_ALIGNMENT = 256;
 
-    //Pure vulkan static functions
     void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, bool isDepth)
     {
-        VkImageMemoryBarrier barrier = {};
+        VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.oldLayout = oldLayout;
         barrier.newLayout = newLayout;
@@ -132,11 +131,24 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
         barrier.image = image;
-        barrier.subresourceRange.aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
+
+        if (isDepth)
+        {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+            if (TextureFormat::hasStencil(format))
+            {
+                barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+        }
+        else
+        {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
 
         VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
@@ -168,7 +180,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         texture->height = creation.height;
         texture->depth = creation.depth;
         texture->mipmaps = creation.mipmaps;
-        texture->type = creation.type;
+        texture->imageType = creation.imageType;
+        texture->imageViewType = creation.imageViewType;
         texture->name = creation.name;
         texture->vkFormat = creation.format;
         texture->sampler = nullptr;
@@ -176,11 +189,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         texture->handle = handle;
 
         //Create the image
-        VkImageCreateInfo imageInfo = {};
+        VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.format = texture->vkFormat;
         imageInfo.flags = 0;
-        imageInfo.imageType = toVKImageType(creation.type);
+        imageInfo.imageType = texture->imageType;
         imageInfo.extent.width = creation.width;
         imageInfo.extent.height = creation.height;
         imageInfo.extent.depth = creation.depth;
@@ -209,7 +222,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        VmaAllocationCreateInfo memoryInfo = {};
+        VmaAllocationCreateInfo memoryInfo{};
         memoryInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
         check(vmaCreateImage(gpu.VMAAllocator, &imageInfo, &memoryInfo, &texture->vkImage, &texture->vmaAllocation, nullptr));
@@ -217,10 +230,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64_t)(texture->vkImage), creation.name);
 
         //Create the image view
-        VkImageViewCreateInfo info = {};
+        VkImageViewCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         info.image = texture->vkImage;
-        info.viewType = toVKImageViewType(creation.type);
+        info.viewType = texture->imageViewType;
         info.format = imageInfo.format;
 
         if (TextureFormat::hasDepthOrStencil(creation.format))
@@ -238,49 +251,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(texture->vkImageView), creation.name);
         texture->vkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    }
-
-    bool isEndOfLine(char character)
-    {
-        bool result = ((character == '\n') || (character == '\r'));
-        return result;
-    }
-
-    void dumpShaderCode(StringBuffer& tmpStringBuffer, const char* code, VkShaderStageFlagBits stage, const char* name)
-    {
-        vprint("Error in creation of the shader %s, stage %s. Writing shader:\n", name, toStageDefines(stage));
-
-        const char* currentCode = code;
-        uint32_t lineIndex = 1;
-        while (currentCode)
-        {
-            const char* endOfLine = currentCode;
-            if (endOfLine == nullptr || *endOfLine == 0)
-            {
-                break;
-            }
-
-            while (isEndOfLine(*endOfLine) == false)
-            {
-                ++endOfLine;
-            }
-
-            if (*endOfLine == '\r')
-            {
-                ++endOfLine;
-            }
-
-            if (*endOfLine == '\n')
-            {
-                ++endOfLine;
-            }
-
-            tmpStringBuffer.clear();
-            char* line = tmpStringBuffer.appendUseSubString(currentCode, 0, (endOfLine - currentCode));
-            vprint("%u: %s", lineIndex++, line);
-
-            currentCode = endOfLine;
-        }
     }
 
     void vulkanFillWriteDescriptorSets(GPUDevice& gpu, const DescriptorSetLayout* descriptorSetLayout, VkDescriptorSet vkDescriptorSet,
@@ -417,7 +387,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
     void vulkanCreateSwapchainPass(GPUDevice& gpu, const RenderPassCreation& creation, RenderPass* renderPass)
     {
-        VkAttachmentDescription colourAttachment = {};
+        VkAttachmentDescription colourAttachment{};
         colourAttachment.format = gpu.vulkanSurfaceFormat.format;
         colourAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -427,12 +397,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         colourAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         colourAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-        VkAttachmentReference colourAttachmentRef = {};
+        VkAttachmentReference colourAttachmentRef{};
         colourAttachmentRef.attachment = 0;
         colourAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         //Depth attachment
-        VkAttachmentDescription depthAttachment = {};
+        VkAttachmentDescription depthAttachment{};
         Texture* depthTextureVK = gpu.accessTexture(gpu.depthTexture);
         depthAttachment.format = depthTextureVK->vkFormat;
         depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -443,18 +413,18 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentReference depthAttachmentRef = {};
+        VkAttachmentReference depthAttachmentRef{};
         depthAttachmentRef.attachment = 1;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        VkSubpassDescription subpass = {};
+        VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colourAttachmentRef;
         subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
         VkAttachmentDescription attachments[] = { colourAttachment, depthAttachment };
-        VkRenderPassCreateInfo renderPassInfo = {};
+        VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 2;
         renderPassInfo.pAttachments = attachments;
@@ -466,7 +436,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         gpu.setResourceName(VK_OBJECT_TYPE_RENDER_PASS, reinterpret_cast<uint64_t>(renderPass->vkRenderPass), creation.name);
 
         //Create framebuffer info device.
-        VkFramebufferCreateInfo framebufferInfo = {};
+        VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderPass->vkRenderPass;
         framebufferInfo.attachmentCount = 2;
@@ -490,14 +460,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         renderPass->height = gpu.swapchainHeight;
 
         //Manually transition the texture
-        VkCommandBufferBeginInfo beginInfo = {};
+        VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         CommandBuffer* commandBuffer = gpu.getInstantCommandBuffer();
         vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
 
-        VkBufferImageCopy region = {};
+        VkBufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
@@ -520,7 +490,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
 
         //Submit command buffer
-        VkSubmitInfo submitInfo = {};
+        VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
@@ -532,14 +502,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     void vulkanCreateFramebuffer(GPUDevice& gpu, RenderPass* renderPass, const TextureHandle* outputTexture,
                                  uint32_t numRenderTargets, TextureHandle depthStencilTexture)
     {
-        VkFramebufferCreateInfo framebufferInfo = {};
+        VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderPass->vkRenderPass;
         framebufferInfo.width = renderPass->width;
         framebufferInfo.height = renderPass->height;
         framebufferInfo.layers = 1;
 
-        VkImageView framebufferAttachments[MAX_IMAGE_OUTPUT + 1] = {};
+        VkImageView framebufferAttachments[MAX_IMAGE_OUTPUT + 1]{};
         uint32_t activeAttachments = 0;
         for (; activeAttachments < numRenderTargets; ++activeAttachments)
         {
@@ -561,8 +531,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
     VkRenderPass vulkanCreateRenderPass(GPUDevice& gpu, const RenderPassOutput& output, const char* name)
     {
-        VkAttachmentDescription colourAttachments[8] = {};
-        VkAttachmentReference colourAttachmentsRef[8] = {};
+        VkAttachmentDescription colourAttachments[8]{};
+        VkAttachmentReference colourAttachmentsRef[8]{};
 
         VkAttachmentLoadOp colourOP;
         VkAttachmentLoadOp depthOP;
@@ -636,8 +606,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         }
 
         //Depth attachment setup
-        VkAttachmentDescription depthAttachment = {};
-        VkAttachmentReference depthAttachmentRef = {};
+        VkAttachmentDescription depthAttachment{};
+        VkAttachmentReference depthAttachmentRef{};
 
         if (output.depthStencilFormat != VK_FORMAT_UNDEFINED)
         {
@@ -656,11 +626,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
         //Subpass setup
         //TODO: For now this is just a simpler subpass we might want to do more with it.
-        VkSubpassDescription subpass = {};
+        VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 
         //Calculate the active attachments for the subpass.
-        VkAttachmentDescription attachments[MAX_IMAGE_OUTPUT + 1] = {};
+        VkAttachmentDescription attachments[MAX_IMAGE_OUTPUT + 1]{};
         uint32_t activeAttachments = 0;
         for (; activeAttachments < output.numColourFormats; ++activeAttachments)
         {
@@ -680,7 +650,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             depthStencilCount = 1;
         }
 
-        VkRenderPassCreateInfo renderPassInfo = {};
+        VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = (activeAttachments ? activeAttachments - 1 : 0) + depthStencilCount;
         renderPassInfo.pAttachments = attachments;
@@ -730,7 +700,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         //Re-create image in place
         TextureCreation textureCreation;
         textureCreation.setFlags(texture->mipmaps, texture->flags)
-                       .setFormatType(texture->vkFormat, texture->type)
+                       .setFormatType(texture->vkFormat, texture->imageType, texture->imageViewType)
                        .setName(texture->name)
                        .setSize(width, height, depth);
         vulkanCreateTexture(gpu, textureCreation, texture->handle, texture);
@@ -754,7 +724,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
 }//Anon
 
-
 struct CommandBufferRing
 {
     void init(GPUDevice* newGPU);
@@ -767,15 +736,15 @@ struct CommandBufferRing
 
     static uint16_t poolFromIndex(uint32_t index);
 
-    static const uint16_t MAX_THREADS = 1;
-    static const uint16_t MAX_POOLS = MAX_SWAPCHAIN_IMAGES * MAX_THREADS;
-    static const uint16_t BUFFER_PER_POOL = 4;
-    static const uint16_t MAX_BUFFERS = BUFFER_PER_POOL * MAX_POOLS;
+    GPUDevice* gpu = nullptr;
+    Array<VkCommandPool> vulkanCommandPools;
+    Array<CommandBuffer> commandBuffers;
+    Array<uint8_t> nextFreePerThreadFrame;
 
-    GPUDevice* gpu;
-    VkCommandPool vulkanCommandPools[MAX_POOLS];
-    CommandBuffer commandBuffers[MAX_BUFFERS];
-    uint8_t nextFreePerThreadFrame[MAX_POOLS];
+    static constexpr uint16_t MAX_THREADS = 1;
+    static constexpr uint16_t BUFFER_PER_POOL = 4;
+    uint8_t imageThreadCount = 0;
+    uint8_t commandBufferCount = 0;
 };
 static CommandBufferRing commandBufferRing;
 
@@ -783,9 +752,16 @@ void CommandBufferRing::init(GPUDevice* newGPU)
 {
     gpu = newGPU;
 
-    for (uint32_t i = 0; i < MAX_POOLS; ++i)
+    imageThreadCount = MAX_THREADS * gpu->vulkanSwapchainImageCount;
+    commandBufferCount = imageThreadCount * BUFFER_PER_POOL;
+    
+    vulkanCommandPools.init(gpu->allocator, imageThreadCount, imageThreadCount);
+    commandBuffers.init(gpu->allocator, commandBufferCount, commandBufferCount);
+    nextFreePerThreadFrame.init(gpu->allocator, imageThreadCount, imageThreadCount);
+
+    for (uint32_t i = 0; i < imageThreadCount; ++i)
     {
-        VkCommandPoolCreateInfo cmdPoolInfo = {};
+        VkCommandPoolCreateInfo cmdPoolInfo{};
         cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         cmdPoolInfo.pNext = nullptr;
         cmdPoolInfo.queueFamilyIndex = gpu->vulkanQueueFamily;
@@ -794,9 +770,9 @@ void CommandBufferRing::init(GPUDevice* newGPU)
         check(vkCreateCommandPool(gpu->vulkanDevice, &cmdPoolInfo, gpu->vulkanAllocationCallbacks, &vulkanCommandPools[i]));
     }
 
-    for (uint32_t i = 0; i < MAX_BUFFERS; ++i)
+    for (uint32_t i = 0; i < commandBufferCount; ++i)
     {
-        VkCommandBufferAllocateInfo cmd = {};
+        VkCommandBufferAllocateInfo cmd{};
         cmd.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         cmd.pNext = nullptr;
 
@@ -814,10 +790,14 @@ void CommandBufferRing::init(GPUDevice* newGPU)
 
 void CommandBufferRing::shutdown()
 {
-    for (uint32_t i = 0; i < MAX_SWAPCHAIN_IMAGES * MAX_THREADS; ++i)
+    for (uint32_t i = 0; i < imageThreadCount; ++i)
     {
         vkDestroyCommandPool(gpu->vulkanDevice, vulkanCommandPools[i], gpu->vulkanAllocationCallbacks);
     }
+
+    vulkanCommandPools.shutdown();
+    commandBuffers.shutdown();
+    nextFreePerThreadFrame.shutdown();
 }
 
 void CommandBufferRing::resetPools(uint32_t frameIndex)
@@ -837,7 +817,7 @@ CommandBuffer* CommandBufferRing::getCommandBuffer(uint32_t frame, bool begin)
     {
         commandBuffer->reset();
 
-        VkCommandBufferBeginInfo beginInfo = {};
+        VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.pNext = nullptr;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -945,9 +925,9 @@ DeviceCreation& DeviceCreation::setAllocator(Allocator* newAllocator)
     return *this;
 }
 
-DeviceCreation& DeviceCreation::setLinearAllocator(StackAllocator* allocator)
+DeviceCreation& DeviceCreation::setLinearAllocator(StackAllocator* alloc)
 {
-    tempAllocator = allocator;
+    tempAllocator = alloc;
     return *this;
 }
 
@@ -968,15 +948,15 @@ void GPUDevice::init(const DeviceCreation& creation)
     VkResult result;
     vulkanAllocationCallbacks = nullptr;
 
-    VkApplicationInfo applicationInfo = {};
+    VkApplicationInfo applicationInfo{};
     applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     applicationInfo.pNext = nullptr;
-    applicationInfo.pApplicationName = "Air Game";
+    applicationInfo.pApplicationName = "Void Game";
     applicationInfo.applicationVersion = 1;
-    applicationInfo.pEngineName = "Air Engine";
+    applicationInfo.pEngineName = "Void Engine";
     applicationInfo.apiVersion = VK_MAKE_VERSION(1, 3, 0);
 
-    VkInstanceCreateInfo createInfo = {};
+    VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pNext = nullptr;
     createInfo.flags = 0;
@@ -1000,7 +980,7 @@ void GPUDevice::init(const DeviceCreation& creation)
         VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
     };
 
-    VkValidationFeaturesEXT features = {};
+    VkValidationFeaturesEXT features{};
     features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
     features.pNext = nullptr;
     features.enabledValidationFeatureCount = sizeof(featuresRequested) / sizeof(featuresRequested[0]);
@@ -1122,18 +1102,18 @@ void GPUDevice::init(const DeviceCreation& creation)
     uint32_t deviceExtensionCount = 1;
     const char* deviceExtensions[] = { "VK_KHR_swapchain" };
     const float queuePriority[] = { 1.f };
-    VkDeviceQueueCreateInfo queueInfo[1] = {};
+    VkDeviceQueueCreateInfo queueInfo[1]{};
     queueInfo[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queueInfo[0].queueFamilyIndex = vulkanQueueFamily;
     queueInfo[0].queueCount = 1;
     queueInfo[0].pQueuePriorities = queuePriority;
 
     //Enable all features
-    VkPhysicalDeviceFeatures2 physicalDeviceFeature2 = {};
+    VkPhysicalDeviceFeatures2 physicalDeviceFeature2{};
     physicalDeviceFeature2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vkGetPhysicalDeviceFeatures2(vulkanPhysicalDevice, &physicalDeviceFeature2);
 
-    VkDeviceCreateInfo deviceCreateInfo = {};
+    VkDeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceCreateInfo.queueCreateInfoCount = sizeof(queueInfo) / sizeof(queueInfo[0]);
     deviceCreateInfo.pQueueCreateInfos = queueInfo;
@@ -1205,12 +1185,11 @@ void GPUDevice::init(const DeviceCreation& creation)
     swapchainOutput.colour(vulkanSurfaceFormat.format);
 
     setPresentMode(presentMode);
-
     //Create swapchain
     createSwapchain();
 
     //Create VMA Allocator
-    VmaAllocatorCreateInfo allocatorInfo = {};
+    VmaAllocatorCreateInfo allocatorInfo{};
     allocatorInfo.physicalDevice = vulkanPhysicalDevice;
     allocatorInfo.device = vulkanDevice;
     allocatorInfo.instance = vulkanInstance;
@@ -1235,7 +1214,7 @@ void GPUDevice::init(const DeviceCreation& creation)
         { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, GLOBAL_POOL_ELEMENTS }
     };
 
-    VkDescriptorPoolCreateInfo poolInfo = {};
+    VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     poolInfo.maxSets = GLOBAL_POOL_ELEMENTS * ArraySize(poolSizes);
@@ -1245,12 +1224,12 @@ void GPUDevice::init(const DeviceCreation& creation)
     check(result);
 
     //Create timestamp query pool used for GPU timings.
-    VkQueryPoolCreateInfo vkQueryPoolInfo = {};
+    VkQueryPoolCreateInfo vkQueryPoolInfo{};
     vkQueryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
     vkQueryPoolInfo.pNext = nullptr;
     vkQueryPoolInfo.flags = 0;
     vkQueryPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    vkQueryPoolInfo.queryCount = creation.GPUTimeQueriesPerFrame * 2u * MAX_FRAMES;
+    vkQueryPoolInfo.queryCount = creation.GPUTimeQueriesPerFrame * 2u * vulkanSwapchainImageCount;
     vkQueryPoolInfo.pipelineStatistics = 0;
     result = vkCreateQueryPool(vulkanDevice, &vkQueryPoolInfo, vulkanAllocationCallbacks, &vulkanTimestampQueryPool);
 
@@ -1267,19 +1246,19 @@ void GPUDevice::init(const DeviceCreation& creation)
     //TODO: memory allocate memory of all the Device render frame stuff.
     uint8_t* memory = void_allocam(sizeof(GPUTimestampManager) + sizeof(CommandBuffer*) * 128, allocator);
 
-    VkSemaphoreCreateInfo semaphoreInfo = {};
+    VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
     vulkanImageAcquiredSemaphore.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
     vulkanRenderCompleteSemaphore.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
     vulkanCommandBufferExecutedFence.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
 
-    for (size_t i = 0; i < vulkanSwapchainImageCount; ++i)
+    for (uint32_t i = 0; i < vulkanSwapchainImageCount; ++i)
     {
         vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &vulkanImageAcquiredSemaphore[i]);
         vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &vulkanRenderCompleteSemaphore[i]);
 
-        VkFenceCreateInfo fenceInfo = {};
+        VkFenceCreateInfo fenceInfo{};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.pNext = nullptr;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -1287,7 +1266,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     }
 
     gpuTimestampManager = reinterpret_cast<GPUTimestampManager*>(memory);
-    gpuTimestampManager->init(allocator, creation.GPUTimeQueriesPerFrame, MAX_FRAMES);
+    gpuTimestampManager->init(allocator, creation.GPUTimeQueriesPerFrame, vulkanSwapchainImageCount);
 
     commandBufferRing.init(this);
 
@@ -1307,13 +1286,13 @@ void GPUDevice::init(const DeviceCreation& creation)
     descriptorSetUpdates.init(allocator, 16);
 
     //Init primitive resource.
-    SamplerCreation samplerCreaion = {};
+    SamplerCreation samplerCreaion{};
     samplerCreaion.setAddressModeUVW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
         .setMinMagMip(VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR)
         .setName("Sampler Default");
     defaultSampler = createSampler(samplerCreaion);
 
-    BufferCreation fullscreenBufferVbCreation = {};
+    BufferCreation fullscreenBufferVbCreation{};
     fullscreenBufferVbCreation.typeFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     fullscreenBufferVbCreation.usage = ResourceType::Type::IMMUTABLE;
     fullscreenBufferVbCreation.size = 0;
@@ -1322,7 +1301,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     fullscreenVertexBuffer = createBuffer(fullscreenBufferVbCreation);
 
     //Create depth image
-    TextureCreation depthTextureCreation = {};
+    TextureCreation depthTextureCreation{};
     depthTextureCreation.initialData = nullptr;
     depthTextureCreation.width = swapchainWidth;
     depthTextureCreation.height = swapchainHeight;
@@ -1330,13 +1309,14 @@ void GPUDevice::init(const DeviceCreation& creation)
     depthTextureCreation.mipmaps = 1;
     depthTextureCreation.flags = 0;
     depthTextureCreation.format = VK_FORMAT_D32_SFLOAT;
-    depthTextureCreation.type = TextureType::Type::TEXTURE_2D;
+    depthTextureCreation.imageType = VK_IMAGE_TYPE_2D;
+    depthTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
     depthTextureCreation.name = "DepthImage_Texture";
     depthTexture = createTexture(depthTextureCreation);
 
     swapchainOutput.depth(VK_FORMAT_D32_SFLOAT);
 
-    RenderPassCreation swapchainPassCreation = {};
+    RenderPassCreation swapchainPassCreation{};
     swapchainPassCreation.setType(RenderPassType::Types::SWAPCHAIN).setName("Swapchain");
     swapchainPassCreation.setOperations(RenderPassType::Operations::CLEAR,
         RenderPassType::Operations::CLEAR,
@@ -1344,7 +1324,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     swapchainPass = createRenderPass(swapchainPassCreation);
 
     //Init the dummy resources
-    TextureCreation dummyTextureCreation = {};
+    TextureCreation dummyTextureCreation{};
     dummyTextureCreation.initialData = nullptr;
     dummyTextureCreation.width = 1;
     dummyTextureCreation.height = 1;
@@ -1352,10 +1332,11 @@ void GPUDevice::init(const DeviceCreation& creation)
     dummyTextureCreation.mipmaps = 1;
     dummyTextureCreation.flags = 0;
     dummyTextureCreation.format = VK_FORMAT_R8_UINT;
-    dummyTextureCreation.type = TextureType::Type::TEXTURE_2D;
+    dummyTextureCreation.imageType = VK_IMAGE_TYPE_2D;
+    dummyTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
     dummyTexture = createTexture(dummyTextureCreation);
 
-    BufferCreation dummyConstantBufferCreation = {};
+    BufferCreation dummyConstantBufferCreation{};
     dummyConstantBufferCreation.typeFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     dummyConstantBufferCreation.usage = ResourceType::Type::IMMUTABLE;
     dummyConstantBufferCreation.size = 16;
@@ -1378,12 +1359,12 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     //Dynamic buffer handling
     dynamicPerFrameSize = 1024 * 1024 * 10;
-    BufferCreation buffCreation = {};
+    BufferCreation buffCreation{};
     buffCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        ResourceType::Type::IMMUTABLE, dynamicPerFrameSize * MAX_FRAMES).setName("Dynamic_Persistent_Buffer");
+        ResourceType::Type::IMMUTABLE, dynamicPerFrameSize * vulkanSwapchainImageCount).setName("Dynamic_Persistent_Buffer");
     dynamicBuffer = createBuffer(buffCreation);
 
-    MapBufferParameters cbMap = {};
+    MapBufferParameters cbMap{};
     cbMap.buffer = dynamicBuffer;
     cbMap.offset = 0;
     cbMap.size = 0;
@@ -1400,7 +1381,7 @@ void GPUDevice::shutdown()
     vkDeviceWaitIdle(vulkanDevice);
     commandBufferRing.shutdown();
 
-    for (size_t i = 0; i < MAX_SWAPCHAIN_IMAGES; ++i)
+    for (uint32_t i = 0; i < vulkanSwapchainImageCount; ++i)
     {
         vkDestroySemaphore(vulkanDevice, vulkanImageAcquiredSemaphore[i], vulkanAllocationCallbacks);
         vkDestroySemaphore(vulkanDevice, vulkanRenderCompleteSemaphore[i], vulkanAllocationCallbacks);
@@ -1413,7 +1394,7 @@ void GPUDevice::shutdown()
 
     gpuTimestampManager->shutdown();
 
-    MapBufferParameters cbMap = {};
+    MapBufferParameters cbMap{};
     cbMap.buffer = dynamicBuffer;
     cbMap.offset = 0;
     cbMap.size = 0;
@@ -1436,7 +1417,7 @@ void GPUDevice::shutdown()
         ResourceUpdate& resourceDeletion = resourceDeletionQueue[i];
 
         //Skip just freed resources.
-        if (resourceDeletion.currentFrame == -1)
+        if (resourceDeletion.currentFrame == UINT_MAX)
         {
             continue;
         }
@@ -1547,16 +1528,16 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
         return handle;
     }
 
-    VkBufferCreateInfo bufferInfo = {};
+    VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | creation.typeFlags;
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
-    VmaAllocationCreateInfo memoryInfo = {};
+    VmaAllocationCreateInfo memoryInfo{};
     memoryInfo.flags = VMA_ALLOCATION_CREATE_STRATEGY_BEST_FIT_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
-    VmaAllocationInfo allocationInfo = {};
+    VmaAllocationInfo allocationInfo{};
     check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &buffer->vkBuffer, &buffer->vmaAllocation, &allocationInfo));
 
     setResourceName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(buffer->vkBuffer), creation.name);
@@ -1590,18 +1571,18 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
     if (creation.initialData)
     {
         //Create stating buffer
-        VkBufferCreateInfo bufferInfo = {};
+        VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
         uint32_t imageSize = creation.width * creation.height * 4;
         bufferInfo.size = imageSize;
 
-        VmaAllocationCreateInfo memoryInfo = {};
+        VmaAllocationCreateInfo memoryInfo{};
         memoryInfo.flags = VMA_ALLOCATION_CREATE_STRATEGY_BEST_FIT_BIT;
         memoryInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
-        VmaAllocationInfo allocationInfo = {};
+        VmaAllocationInfo allocationInfo{};
         VkBuffer stagingBuffer;
         VmaAllocation stagingAllocation;
         check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &stagingBuffer, &stagingAllocation, &allocationInfo));
@@ -1613,14 +1594,14 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         vmaUnmapMemory(VMAAllocator, stagingAllocation);
 
         //Execute command buffer
-        VkCommandBufferBeginInfo beginInfo = {};
+        VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         CommandBuffer* commandBuffer = getInstantCommandBuffer();
         vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
 
-        VkBufferImageCopy region = {};
+        VkBufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
@@ -1645,7 +1626,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
 
         //Submit command buffer
-        VkSubmitInfo submitInfo = {};
+        VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
@@ -1698,7 +1679,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
         vkLayout[layout] = pipeline->descriptorSetLayout[layout]->vkDescriptorSetLayout;
     }
 
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.pSetLayouts = vkLayout;
     pipelineLayoutInfo.setLayoutCount = creation.numActiveLayouts;
@@ -1712,7 +1693,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
     //Create full pipeline
     if (shaderStateData->graphicsPipeline)
     {
-        VkGraphicsPipelineCreateInfo pipelineInfo = {};
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 
         //Shader stage
@@ -1722,11 +1703,11 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
         pipelineInfo.layout = pipelineLayout;
 
         //Vertex input
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
         //Vertex attributes.
-        VkVertexInputAttributeDescription vertexAttributes[8] = {};
+        VkVertexInputAttributeDescription vertexAttributes[8]{};
         if (creation.vertexInput.numVertexAttributes)
         {
             for (uint32_t i = 0; i < creation.vertexInput.numVertexAttributes; ++i)
@@ -1734,7 +1715,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
                 const VertexAttribute& vertexAttribute = creation.vertexInput.vertexAttributes[i];
                 vertexAttributes[i] =
                 {
-                    vertexAttribute.location, vertexAttribute.binding,  toVKVertexFormat(vertexAttribute.format), vertexAttribute.offset
+                    vertexAttribute.location, vertexAttribute.binding, vertexAttribute.format, vertexAttribute.offset
                 };
             }
 
@@ -1756,9 +1737,9 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
             for (uint32_t i = 0; i < creation.vertexInput.numVertexStreams; ++i)
             {
                 const VertexStream& vertexStream = creation.vertexInput.vertexStreams[i];
-                VkVertexInputRate vertexRate = vertexStream.inputRate == VertexInput::VertexInputRateType::PER_VERTEX ?
-                    VkVertexInputRate::VK_VERTEX_INPUT_RATE_VERTEX :
-                    VkVertexInputRate::VK_VERTEX_INPUT_RATE_INSTANCE;
+                VkVertexInputRate vertexRate = vertexStream.inputRate == VK_VERTEX_INPUT_RATE_VERTEX ?
+                                                                         VK_VERTEX_INPUT_RATE_VERTEX :
+                                                                         VK_VERTEX_INPUT_RATE_INSTANCE;
                 vertexBindings[i] = { vertexStream.binding, vertexStream.stride, vertexRate };
             }
             vertexInputInfo.pVertexBindingDescriptions = vertexBindings;
@@ -1771,7 +1752,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
 
         pipelineInfo.pVertexInputState = &vertexInputInfo;
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
@@ -1786,7 +1767,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
             {
                 const BlendState& blendState = creation.blendState.blendStates[i];
 
-                colourBlendAttachment[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+                colourBlendAttachment[i].colorWriteMask = blendState.colourWriteMask;
                 colourBlendAttachment[i].blendEnable = blendState.blendEnabled ? VK_TRUE : VK_FALSE;
                 colourBlendAttachment[i].srcColorBlendFactor = blendState.sourceColour;
                 colourBlendAttachment[i].dstColorBlendFactor = blendState.destinationColour;
@@ -1814,7 +1795,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
             colourBlendAttachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         }
 
-        VkPipelineColorBlendStateCreateInfo colourBlending = {};
+        VkPipelineColorBlendStateCreateInfo colourBlending{};
         colourBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         colourBlending.logicOpEnable = VK_FALSE;
         colourBlending.logicOp = VK_LOGIC_OP_COPY;
@@ -1828,7 +1809,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
         pipelineInfo.pColorBlendState = &colourBlending;
 
         //Depth stencil
-        VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthWriteEnable = creation.depthStencil.depthWriteEnable ? VK_TRUE : VK_FALSE;
         depthStencil.stencilTestEnable = creation.depthStencil.stencilEnable ? VK_TRUE : VK_FALSE;
@@ -1843,7 +1824,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
         pipelineInfo.pDepthStencilState = &depthStencil;
 
         //Multisampling
-        VkPipelineMultisampleStateCreateInfo multisampling = {};
+        VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -1854,7 +1835,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
 
         pipelineInfo.pMultisampleState = &multisampling;
 
-        VkPipelineRasterizationStateCreateInfo rasteriser = {};
+        VkPipelineRasterizationStateCreateInfo rasteriser{};
         rasteriser.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasteriser.depthClampEnable = VK_FALSE;
         rasteriser.rasterizerDiscardEnable = VK_FALSE;
@@ -1874,7 +1855,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
         pipelineInfo.pTessellationState = nullptr;
 
         //Viewport
-        VkViewport viewport = {};
+        VkViewport viewport{};
         viewport.x = 0.f;
         viewport.y = 0.f;
         viewport.width = static_cast<float>(swapchainWidth);
@@ -1882,11 +1863,11 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
         viewport.minDepth = 0.f;
         viewport.maxDepth = 1.f;
 
-        VkRect2D scissor = {};
+        VkRect2D scissor{};
         scissor.offset = { 0, 0 };
         scissor.extent = { swapchainWidth, swapchainHeight };
 
-        VkPipelineViewportStateCreateInfo viewportState = {};
+        VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
         viewportState.pViewports = &viewport;
@@ -1900,7 +1881,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
 
         //Dynamic state
         VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        VkPipelineDynamicStateCreateInfo dynamicState{};
         dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dynamicState.dynamicStateCount = ArraySize(dynamicStates);
         dynamicState.pDynamicStates = dynamicStates;
@@ -1913,7 +1894,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
     }
     else
     {
-        VkComputePipelineCreateInfo pipelineInfo = {};
+        VkComputePipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         pipelineInfo.stage = shaderStateData->shaderStateInfo[0];
         pipelineInfo.layout = pipelineLayout;
@@ -1944,7 +1925,7 @@ SamplerHandle GPUDevice::createSampler(const SamplerCreation& creation)
     sampler->mipFilter = creation.mipFilter;
     sampler->name = creation.name;
 
-    VkSamplerCreateInfo createInfo = {};
+    VkSamplerCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     createInfo.addressModeU = creation.addressModeU;
     createInfo.addressModeV = creation.addressModeV;
@@ -2009,7 +1990,7 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
     }
 
     //Create the descriptor set layout
-    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = usedBindings;
     layoutInfo.pBindings = descriptorSetLayout->vkBinding;
@@ -2031,7 +2012,7 @@ DescriptorSetHandle GPUDevice::createDescriptorSet(const DescriptorSetCreation& 
     const DescriptorSetLayout* descriptorSetLayout = accessDescriptorSetLayout(creation.layout);
 
     //Allocate descriptor set
-    VkDescriptorSetAllocateInfo allocInfo = {};
+    VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = vulkanDescriptorPool;
     allocInfo.descriptorSetCount = 1;
@@ -2160,7 +2141,7 @@ ShaderStateHandle GPUDevice::createShaderState(const ShaderStateCreation& creati
             shaderState->graphicsPipeline = false;
         }
 
-        VkShaderModuleCreateInfo shaderCreateInfo = {};
+        VkShaderModuleCreateInfo shaderCreateInfo{};
         shaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 
         if (creation.spvInput)
@@ -2170,7 +2151,7 @@ ShaderStateHandle GPUDevice::createShaderState(const ShaderStateCreation& creati
         }
         else
         {
-            shaderCreateInfo = compileShader(stage.code, stage.codeSize, stage.type, creation.name);
+            VOID_ERROR("We are always using compiled shaders now.");
         }
 
         //Compiler shader module
@@ -2338,9 +2319,8 @@ void GPUDevice::queryTexture(TextureHandle texture, TextureDescription& outDescr
         outDescriptor.depth = textureData->depth;
         outDescriptor.format = textureData->vkFormat;
         outDescriptor.mipmaps = textureData->mipmaps;
-        outDescriptor.type = textureData->type;
-        outDescriptor.renderTarget = (textureData->flags & TextureFlags::Mask::RENDER_TARGET_MASK) == TextureFlags::Mask::RENDER_TARGET_MASK;
-        outDescriptor.computeAccess = (textureData->flags & TextureFlags::Mask::COMPUTE_MASK) == TextureFlags::Mask::COMPUTE_MASK;
+        outDescriptor.imageType = textureData->imageType;
+        outDescriptor.imageViewType = textureData->imageViewType;
         outDescriptor.nativeHandle = reinterpret_cast<void*>(&textureData->vkImage);
         outDescriptor.name = textureData->name;
     }
@@ -2395,11 +2375,6 @@ void GPUDevice::queryDescriptorSet(DescriptorSetHandle set, DescriptorSetDescrip
         const DescriptorSet* descriptorSetData = accessDescriptorSet(set);
 
         outDescriptor.numActiveResources = descriptorSetData->numResources;
-        //TODO: Come back to this and figure out why this commented out
-        //for (uint32_t i = 0; i < outDescriptor.numActiveResources; ++i) 
-        //{
-        //    outDescriptor.resources[i].data = descriptorSetData->resources[i].data;
-        //}
     }
 }
 
@@ -2559,7 +2534,7 @@ void GPUDevice::setPresentMode(PresentMode::Types mode)
 void GPUDevice::frameCountersAdvanced()
 {
     previousFrame = currentFrame;
-    currentFrame = (currentFrame + 1) % MAX_FRAMES;
+    currentFrame = (currentFrame + 1) % vulkanSwapchainImageCount;
 
     ++absoluteFrame;
 }
@@ -2593,80 +2568,6 @@ bool GPUDevice::getFamilyQueue(VkPhysicalDevice physicalDevice)
     return surfaceSupport;
 }
 
-VkShaderModuleCreateInfo GPUDevice::compileShader(const char* code, uint32_t codeSize, VkShaderStageFlagBits stage, const char* name)
-{
-    VkShaderModuleCreateInfo shaderCreateInfo = {};
-    shaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-
-    //Compile from GLSL to SPIRV
-    const char* tempFilename = "temp.shader";
-
-    //Write current shader to file.
-    FILE* tempShaderFile = fopen(tempFilename, "w");
-    fwrite(code, codeSize, 1, tempShaderFile);
-    fclose(tempShaderFile);
-
-    //size_t currentMarker = tempAllocator->getMarker();
-    StringBuffer tempStringBuffer;
-    tempStringBuffer.init(void_kilo(1), tempAllocator);
-
-    //Add uppercase define as STAGE_NAME
-    char* stageDefine = tempStringBuffer.appendUseF("%s_%s", toStageDefines(stage), name);
-    size_t stageDefineLength = strlen(stageDefine);
-    for (uint32_t i = 0; i < stageDefineLength; ++i)
-    {
-        stageDefine[i] = putchar(toupper((int)stageDefine[i]));
-    }
-    //Compile to SPV
-#if defined(_MSC_VER)
-    char* glslCompilerPath = tempStringBuffer.appendUseF("%sglslangValidator.exe", vulkanBinariesPath);
-    char* finalSpivFilename = tempStringBuffer.appendUse("shader_final.spv");
-    //TODO: We need to add optional debug information in shader (option -g)
-    char* arguments = tempStringBuffer.appendUseF("glslangValidator.exe %s -V --target-env vulkan1.3 -o %s -S %s --D %s --D %s",
-        tempFilename, finalSpivFilename, toCompilerExtension(stage), stageDefine, toStageDefines(stage));
-#else
-    char* glslCompilerPath = tempStringBuffer.appendUseF("%sglslangValidator", vulkanBinariesPath);
-    char* finalSpivFilename = tempStringBuffer.appendUse("shader_final.spv");
-    char* arguments = tempStringBuffer.appendUseF("%s -V --target-env vulkan1.3 -o %s -S %s --D %s --D %s",
-        tempFilename, finalSpivFilename, toCompilerExtension(stage), stageDefine, toStageDefines(stage));
-#endif //_MSC_VER
-    processExecute(".", glslCompilerPath, arguments, "");
-
-    bool optimiseShaders = false;
-
-    if (optimiseShaders)
-    {
-        //TODO: Add optional optimisation stage
-        //Spirv -opt -O input output
-        char* spirvOptimiserPath = tempStringBuffer.appendUseF("%sspirv-out.exe", vulkanBinariesPath);
-        char* optimisedSprivFilename = tempStringBuffer.appendUseF("shader_opt.spv");
-        char* spirvOptArgument = tempStringBuffer.appendUseF("spirv-opt.exe -O --preserve-bindings %s -o %s",
-            finalSpivFilename, optimisedSprivFilename);
-
-        processExecute(".", spirvOptimiserPath, spirvOptArgument, "");
-
-        //Read back SPV file.
-        shaderCreateInfo.pCode = reinterpret_cast<const uint32_t*>(fileReadBinary(optimisedSprivFilename, tempAllocator, &shaderCreateInfo.codeSize));
-        fileDelete(optimisedSprivFilename);
-    }
-    else
-    {
-        shaderCreateInfo.pCode = reinterpret_cast<const uint32_t*>(fileReadBinary(finalSpivFilename, tempAllocator, &shaderCreateInfo.codeSize));
-    }
-
-    //Handling compiling error
-    if (shaderCreateInfo.pCode == nullptr)
-    {
-        dumpShaderCode(tempStringBuffer, code, stage, name);
-    }
-
-    //Temporary file cleanup
-    fileDelete(tempFilename);
-    fileDelete(finalSpivFilename);
-
-    return shaderCreateInfo;
-}
-
 //Swapchain
 void GPUDevice::createSwapchain()
 {
@@ -2693,7 +2594,7 @@ void GPUDevice::createSwapchain()
     swapchainWidth = static_cast<uint16_t>(swapchainExtent.width);
     swapchainHeight = static_cast<uint16_t>(swapchainExtent.height);
 
-    VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
+    VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = vulkanWindowSurface;
     swapchainCreateInfo.minImageCount = vulkanSwapchainImageCount;
@@ -2711,6 +2612,7 @@ void GPUDevice::createSwapchain()
 
     //Cache the swapchain image
     vkGetSwapchainImagesKHR(vulkanDevice, vulkanSwapchain, &vulkanSwapchainImageCount, nullptr);
+
     vulkanSwapchainImages.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
     vkGetSwapchainImagesKHR(vulkanDevice, vulkanSwapchain, &vulkanSwapchainImageCount, vulkanSwapchainImages.data);
 
@@ -2720,7 +2622,7 @@ void GPUDevice::createSwapchain()
     for (uint32_t imageCount = 0; imageCount < vulkanSwapchainImageCount; ++imageCount)
     {
         //Create an image view so we can render into it.
-        VkImageViewCreateInfo viewInfo = {};
+        VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = vulkanSurfaceFormat.format;
@@ -2792,7 +2694,7 @@ void GPUDevice::resizeSwapchain()
 
     destroyTexture(textureToDelete);
 
-    RenderPassCreation swapchainPassCreation = {};
+    RenderPassCreation swapchainPassCreation{};
     swapchainPassCreation.setType(RenderPassType::SWAPCHAIN).setName("Swapchain");
     vulkanCreateSwapchainPass(*this, swapchainPassCreation, vkSwapchainPass);
 
@@ -2856,7 +2758,7 @@ void GPUDevice::setBufferGlobalOffset(BufferHandle buffer, uint32_t offset)
 }
 
 //Command buffers
-CommandBuffer* GPUDevice::getCommandBuffer(Queue::QueueType type, bool begin)
+CommandBuffer* GPUDevice::getCommandBuffer(VkQueueFlagBits /*type*/, bool begin)
 {
     CommandBuffer* comBuffer = commandBufferRing.getCommandBuffer(currentFrame, begin);
 
@@ -2890,10 +2792,7 @@ void GPUDevice::newFrame()
     //Fence wait and reset.
     VkFence* renderCompleteFence = &vulkanCommandBufferExecutedFence[currentFrame];
 
-    if (vkGetFenceStatus(vulkanDevice, *renderCompleteFence) != VK_SUCCESS)
-    {
-        vkWaitForFences(vulkanDevice, 1, renderCompleteFence, VK_TRUE, UINT64_MAX);
-    }
+    vkWaitForFences(vulkanDevice, 1, renderCompleteFence, VK_TRUE, UINT64_MAX);
 
     vkResetFences(vulkanDevice, 1, renderCompleteFence);
 
@@ -2926,11 +2825,11 @@ void GPUDevice::newFrame()
 
 void GPUDevice::present()
 {
-    VkFence* renderCompleteFence = &vulkanCommandBufferExecutedFence[currentFrame];
     VkSemaphore* renderCompleteSemaphore = &vulkanRenderCompleteSemaphore[currentFrame];
+    VkFence* renderCompleteFence = &vulkanCommandBufferExecutedFence[currentFrame];
 
     //Copy all commands
-    VkCommandBuffer enqueuedCommandBuffers[4];
+    VkCommandBuffer enqueuedCommandBuffers[4]{};
     for (uint32_t comBuffer = 0; comBuffer < numQueuedCommandBuffers; ++comBuffer)
     {
         CommandBuffer* commandBuffer = queuedCommandBuffers[comBuffer];
@@ -2946,10 +2845,10 @@ void GPUDevice::present()
     }
 
     //Subit command buffer.
-    VkSemaphore waitSemaphores[] = { vulkanImageAcquiredSemaphore[currentFrame]};
+    VkSemaphore waitSemaphores[] = { vulkanImageAcquiredSemaphore[currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
-    VkSubmitInfo submitInfo = {};
+    VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
@@ -2961,7 +2860,7 @@ void GPUDevice::present()
 
     vkQueueSubmit(vulkanQueue, 1, &submitInfo, *renderCompleteFence);
 
-    VkPresentInfoKHR presentInfo = {};
+    VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = renderCompleteSemaphore;
@@ -3157,7 +3056,7 @@ void GPUDevice::setResourceName(VkObjectType objectType, uint64_t handle, const 
         return;
     }
 
-    VkDebugUtilsObjectNameInfoEXT nameInfo = {};
+    VkDebugUtilsObjectNameInfoEXT nameInfo{};
     nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
     nameInfo.objectType = objectType;
     nameInfo.objectHandle = handle;
@@ -3168,7 +3067,7 @@ void GPUDevice::setResourceName(VkObjectType objectType, uint64_t handle, const 
 
 void GPUDevice::pushMarker(VkCommandBuffer commandBuffer, const char* name)
 {
-    VkDebugUtilsLabelEXT label = {};
+    VkDebugUtilsLabelEXT label{};
     label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
     label.pLabelName = name;
     label.color[0] = 1.0f;
@@ -3341,7 +3240,7 @@ void GPUDevice::updateDescriptorSetInstant(const DescriptorSetUpdate& update)
 
     Sampler* vkDefaultSampler = accessSampler(defaultSampler);
 
-    VkDescriptorSetAllocateInfo allocInfo = {};
+    VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = vulkanDescriptorPool;
     allocInfo.descriptorSetCount = 1;

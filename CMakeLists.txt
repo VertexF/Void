@@ -61,6 +61,7 @@ add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
 
 if (WIN32)
     target_compile_definitions(Void PRIVATE
+    CGLM_FORCE_DEPTH_ZERO_TO_ONE
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX
@@ -68,6 +69,7 @@ if (WIN32)
                                VK_USE_PLATFORM_WIN32_KHR)
 else(UNIX)
     target_compile_definitions(Void PRIVATE 
+    CGLM_FORCE_DEPTH_ZERO_TO_ONE
                                #VOID_IMGUI                     
                                VK_USE_PLATFORM_WAYLAND_KHR)
 endif()

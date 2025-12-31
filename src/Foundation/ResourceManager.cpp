@@ -1,9 +1,8 @@
 #include "ResourceManager.hpp"
 
-void ResourceManager::init(Allocator* alloc, ResourceFilenameResolver* resolver)
+void ResourceManager::init(Allocator* alloc)
 {
     allocator = alloc;
-    filenameResolver = resolver;
 
     loaders.init(allocator, 8);
     compilers.init(allocator, 8);

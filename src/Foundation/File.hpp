@@ -32,7 +32,7 @@ struct Directory
 struct FileReadResult 
 {
     char* data = nullptr;
-    size_t size = 0;
+    uint32_t size = 0;
 };
 
 //Read file and allocate memory from. User is responsible for freeing the memory.

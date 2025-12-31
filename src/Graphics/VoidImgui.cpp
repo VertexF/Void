@@ -325,9 +325,9 @@ void ImguiService::init(void* configuration)
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
     TextureCreation textureCreation;
-    textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, TextureType::Type::TEXTURE_2D)
+    textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
         .setData(pixels)
-        .setSize(width, height, 1)
+        .setSize(uint16_t(width), uint16_t(height), 1)
         .setFlags(1, 0)
         .setName("Imgui_Font");
     FONT_TEXTURE = gpu->createTexture(textureCreation);
@@ -365,11 +365,11 @@ void ImguiService::init(void* configuration)
 
     pipelineCreation.blendState.addBlendState().setColour(VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD);
 
-    pipelineCreation.vertexInput.addVertexAttribute({ 0, 0, 0, VertexFormat::VertexComponentFormatType::FLOAT2 })
-        .addVertexAttribute({ 1, 0, 8, VertexFormat::VertexComponentFormatType::FLOAT2 })
-        .addVertexAttribute({ 2, 0, 16, VertexFormat::VertexComponentFormatType::UBYTE4N });
+    pipelineCreation.vertexInput.addVertexAttribute({ 0, 0, 0, VK_FORMAT_R32G32_SFLOAT })
+        .addVertexAttribute({ 1, 0, 8, VK_FORMAT_R32G32_SFLOAT })
+        .addVertexAttribute({ 2, 0, 16, VK_FORMAT_R8G8B8A8_UINT });
 
-    pipelineCreation.vertexInput.addVertexStream({ 0, 20, VertexInput::VertexInputRateType::PER_VERTEX });
+    pipelineCreation.vertexInput.addVertexStream({ 0, 20, VK_VERTEX_INPUT_RATE_VERTEX });
     pipelineCreation.renderPass = gpu->getSwapchainOutput();
 
     DescriptorSetLayoutCreation descriptorSetLayoutCreation{};
@@ -635,7 +635,7 @@ void ImguiService::render(CommandBuffer& commands)
                             if (it.isInvalid())
                             {
                                 //Create new descriptor set
-                                DescriptorSetCreation dsCreation = {};
+                                DescriptorSetCreation dsCreation{};
 
                                 dsCreation.setLayout(DESCRIPTOR_SET_LAYOUT)
                                     .buffer(UI_CB, 0)
@@ -653,7 +653,7 @@ void ImguiService::render(CommandBuffer& commands)
                         }
                     }
 
-                    commands.drawIndexed(Topology::TopologyType::TRIANGLE, drawCmd->ElemCount, 1, indexBufferOffset + drawCmd->IdxOffset,
+                    commands.drawIndexed(drawCmd->ElemCount, 1, indexBufferOffset + drawCmd->IdxOffset,
                         vertexBufferOffset + drawCmd->VtxOffset, newTexture->index);
                 }
             }

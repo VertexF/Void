@@ -18,8 +18,8 @@ struct Window
     void setRefreshRate();
 
     SDL_Window* platformHandle = nullptr;
-    uint32_t width = 0;
-    uint32_t height = 0;
+    uint16_t width = 0;
+    uint16_t height = 0;
     float displayRefresh = 1.f / 60.f;
     bool exitRequested = false;
     bool resizeRequested = false;

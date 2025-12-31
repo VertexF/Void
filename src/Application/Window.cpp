@@ -40,8 +40,8 @@ void Window::init(uint32_t inWidth, uint32_t inHeight, const char* title)
     int windowWidth, windowHeigth;
     SDL_GetWindowSizeInPixels(sdlWindow, &windowWidth, &windowHeigth);
 
-    width = static_cast<uint32_t>(windowWidth);
-    height = static_cast<uint32_t>(windowHeigth);
+    width = static_cast<uint16_t>(windowWidth);
+    height = static_cast<uint16_t>(windowHeigth);
 
     //Assing this os it can be accessed from outside.
     platformHandle = sdlWindow;
@@ -65,7 +65,7 @@ void Window::centerMouse(bool dragging) const
 {
     if (dragging) 
     {
-        SDL_WarpMouseInWindow(sdlWindow, (float)roundU32(width / 2.f), (float)roundU32(height / 2.f));
+        SDL_WarpMouseInWindow(sdlWindow, roundU16(width / 2.f), roundU16(height / 2.f));
         SDL_SetWindowMouseGrab(sdlWindow, true);
         SDL_HideCursor();
     }

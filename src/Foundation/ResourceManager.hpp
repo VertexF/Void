@@ -4,7 +4,7 @@
 #include "Platform.hpp"
 #include "Assert.hpp"
 #include "HashMap.hpp"
-
+#include "File.hpp"
 
 struct ResourceManager;
 
@@ -38,14 +38,9 @@ struct ResourceLoader
     }
 };
 
-struct ResourceFilenameResolver 
-{
-    virtual const char* getBinaryPathFromPath(const char* name) = 0;
-};
-
 struct ResourceManager 
 {
-    void init(Allocator* alloc, ResourceFilenameResolver* resolver);
+    void init(Allocator* alloc);
     void shutdown();
 
     template<typename T>
@@ -63,7 +58,8 @@ struct ResourceManager
         }
 
         //Resource not in cache, create from file.
-        const char* path = filenameResolver->getBinaryPathFromPath(name);
+        char path[maxSize]{ 0 };
+        fileResolveToFullPath(name, path, maxSize);
         return (T*)loader->createFromFile(name, path, this);
     }
 
@@ -101,7 +97,8 @@ struct ResourceManager
                 loader->unload(name);
 
                 //Resource not in cache we need to create it from file.
-                const char* path = filenameResolver->getBinaryPathFromPath(name);
+                char path[maxSize]{ 0 };
+                fileResolveToFullPath(name, path, maxSize);
                 return (T*)loader->createFromFile(name, path, this);
             }
         }
@@ -115,8 +112,9 @@ struct ResourceManager
     FlatHashMap<uint64_t, ResourceLoader*> loaders;
     FlatHashMap<uint64_t, ResourceCompiler*> compilers;
 
+    static constexpr uint32_t maxSize = 512;
+
     Allocator* allocator = nullptr;
-    ResourceFilenameResolver* filenameResolver = nullptr;
 };
 
 

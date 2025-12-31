@@ -3,6 +3,8 @@
 #include "Foundation/Platform.hpp"
 #include "Foundation/Numerics.hpp"
 
+#include "Application/Window.hpp"
+
 #include <cglm/struct/affine.h>
 #include <cglm/struct/cam.h>
 #include <imgui/imgui.h>
@@ -42,7 +44,7 @@ void GameCamera::reset()
     mouseSensitivity = 2.f;
 }
 
-void GameCamera::update(InputHandler* input, uint32_t windowWidth, uint32_t windowHeight, float deltaTime) 
+void GameCamera::update(InputHandler* input, float windowWidth, float windowHeight, float deltaTime) 
 {
     if (enabled == false)
     {
@@ -56,8 +58,8 @@ void GameCamera::update(InputHandler* input, uint32_t windowWidth, uint32_t wind
     {
         if (ignoreDraggingFrames == 0) 
         {
-            targetYaw -= (input->mousePosition.x - (windowWidth / 2.f)) * mouseSensitivity * deltaTime;
-            targetPitch -= (input->mousePosition.y - (windowHeight / 2.f)) * mouseSensitivity * deltaTime;
+            targetYaw -= (input->mousePosition.x - ((float)Window::instance()->width / 2.f)) * mouseSensitivity * deltaTime;
+            targetPitch -= (input->mousePosition.y - ((float)Window::instance()->height / 2.f)) * mouseSensitivity * deltaTime;
         }
         else 
         {

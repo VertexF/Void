@@ -30,7 +30,7 @@ namespace
     constexpr uint32_t SUBMIT_HEADER_SENTINEL = 0xFEFEB7BA;
     constexpr uint32_t MAX_RESOURCE_DELETIONS = 64;
 
-    constexpr uint32_t MAX_SWAPCHAIN_IMAGES = 3;
+    //constexpr uint32_t MAX_SWAPCHAIN_IMAGES = 3;
 }
 
 struct Allocator;
@@ -156,7 +156,7 @@ struct BlendState
     VkBlendFactor destinationAlpha = VK_BLEND_FACTOR_ONE;
     VkBlendOp alphaOperation = VK_BLEND_OP_ADD;
 
-    ColourType::Mask colourWriteMask = ColourType::Mask::ALL_MASK;
+    VkColorComponentFlags colourWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
     bool blendEnabled = false;
     bool separateBlend = false;
@@ -167,7 +167,7 @@ struct BlendState
 
     BlendState& setColour(VkBlendFactor sourceCol, VkBlendFactor destinationCol, VkBlendOp colourOp);
     BlendState& setAlpha(VkBlendFactor sourceCol, VkBlendFactor destinationCol, VkBlendOp colourOp);
-    BlendState& setColourWriteMask(ColourType::Mask mask);
+    BlendState& setColourWriteMask(VkColorComponentFlags mask);
 };
 
 struct BlendStateCreation 
@@ -183,7 +183,7 @@ struct RasterisationCreation
 {
     VkCullModeFlagBits cullMode = VK_CULL_MODE_NONE;
     VkFrontFace front = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    Fill::FillType fill = Fill::FillType::SOLID;
+    VkPolygonMode fill = VK_POLYGON_MODE_FILL;
 };
 
 struct BufferCreation 
@@ -211,13 +211,15 @@ struct TextureCreation
     uint8_t flags = 0;
 
     VkFormat format = VK_FORMAT_UNDEFINED;
-    TextureType::Type type = TextureType::Type::TEXTURE_2D;
+
+    VkImageType imageType = VK_IMAGE_TYPE_2D;
+    VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_2D;
 
     const char* name = nullptr;
 
     TextureCreation& setSize(uint16_t newWidth, uint16_t newHeight, uint16_t newDepth);
     TextureCreation& setFlags(uint8_t newMipmaps, uint8_t newFlags);
-    TextureCreation& setFormatType(VkFormat newFormat, TextureType::Type newType);
+    TextureCreation& setFormatType(VkFormat newFormat, VkImageType newImageType, VkImageViewType newImageViewType);
     TextureCreation& setName(const char* inName);
     TextureCreation& setData(void* data);
 };
@@ -318,14 +320,14 @@ struct VertexAttribute
     uint16_t binding = 0;
     uint32_t offset = 0;
 
-    VertexFormat::VertexComponentFormatType format = VertexFormat::VertexComponentFormatType::COUNT;
+    VkFormat format = VK_FORMAT_MAX_ENUM;
 };
 
 struct VertexStream 
 {
     uint16_t binding = 0;
     uint16_t stride = 0;
-    VertexInput::VertexInputRateType inputRate = VertexInput::VertexInputRateType::COUNT;
+    VkVertexInputRate inputRate = VK_VERTEX_INPUT_RATE_MAX_ENUM;
 };
 
 struct VertexInputCreation 
@@ -450,7 +452,7 @@ struct ResourceData
 
 struct ResourceBinding 
 {
-    uint16_t type = 0;
+    VkDescriptorType type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
     uint16_t start = 0;
     uint16_t count = 0;
     uint16_t set = 0;
@@ -484,11 +486,10 @@ struct TextureDescription
     uint16_t height = 1;
     uint16_t depth = 1;
     uint8_t mipmaps = 1;
-    uint8_t renderTarget = 0;
-    uint8_t computeAccess = 0;
 
     VkFormat format = VK_FORMAT_UNDEFINED;
-    TextureType::Type type = TextureType::Type::TEXTURE_2D;
+    VkImageType imageType = VK_IMAGE_TYPE_2D;
+    VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_2D;
 };
 
 struct SamplerDescription 
@@ -540,19 +541,19 @@ struct MemoryBarrierHandle
 
 struct ExecutionBarrier 
 {
-    PipelineStage::Stage sourcePipelineStage;
-    PipelineStage::Stage destinationPipelineStage;
+    ImageBarrier imageBarriers[8];
+    MemoryBarrierHandle memoryBarriers[8];
+
+    VkPipelineStageFlagBits sourcePipelineStage;
+    VkPipelineStageFlagBits destinationPipelineStage;
 
     uint32_t newBarrierExperimental = UINT32_MAX;
     uint32_t loadOperation = 0;
     uint32_t numImageBarriers;
     uint32_t numMemoryBarriers;
 
-    ImageBarrier imageBarriers[8];
-    MemoryBarrierHandle memoryBarriers[8];
-
     ExecutionBarrier& reset();
-    ExecutionBarrier& set(PipelineStage::Stage source, PipelineStage::Stage destination);
+    ExecutionBarrier& set(VkPipelineStageFlagBits source, VkPipelineStageFlagBits destination);
     ExecutionBarrier& addImageBarrier(const ImageBarrier& imageBarrier);
     ExecutionBarrier& addMemoryBarrier(const MemoryBarrierHandle& memoryBarrier);
 };
@@ -601,21 +602,23 @@ struct Texture
 {
     VkImage vkImage;
     VkImageView vkImageView;
-    VkFormat vkFormat;
-    VkImageLayout vkImageLayout;
     VmaAllocation vmaAllocation;
+
+    Sampler* sampler = nullptr;
+    const char* name = nullptr;
+
+    VkImageLayout vkImageLayout;
+    VkFormat vkFormat;
+
+    TextureHandle handle;
+    VkImageType imageType = VK_IMAGE_TYPE_2D;
+    VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_2D;
 
     uint16_t width = 1;
     uint16_t height = 1;
     uint16_t depth = 1;
     uint8_t mipmaps = 1;
     uint8_t flags = 0;
-
-    TextureHandle handle;
-    TextureType::Type type = TextureType::Type::TEXTURE_2D;
-
-    Sampler* sampler = nullptr;
-    const char* name = nullptr;
 };
 
 struct ShaderState 
@@ -740,52 +743,6 @@ static const char* toStageDefines(VkShaderStageFlagBits value)
     }
 }
 
-static VkImageType toVKImageType(TextureType::Type type) 
-{
-    static VkImageType vkTarget[TextureType::Type::COUNT] = 
-    {
-        VK_IMAGE_TYPE_1D, VK_IMAGE_TYPE_2D, VK_IMAGE_TYPE_3D,
-        VK_IMAGE_TYPE_1D, VK_IMAGE_TYPE_2D, VK_IMAGE_TYPE_3D
-    };
-
-    return vkTarget[type];
-}
-
-static VkImageViewType toVKImageViewType(TextureType::Type type)
-{
-    static VkImageViewType vkData[] = 
-    {
-        VK_IMAGE_VIEW_TYPE_1D, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_VIEW_TYPE_3D,
-        VK_IMAGE_VIEW_TYPE_1D_ARRAY, VK_IMAGE_VIEW_TYPE_2D_ARRAY, VK_IMAGE_VIEW_TYPE_CUBE_ARRAY
-    };
-
-    return vkData[type];
-}
-
-static VkFormat toVKVertexFormat(VertexFormat::VertexComponentFormatType type) 
-{
-    static VkFormat vkVertexFormats[VertexFormat::VertexComponentFormatType::COUNT] = 
-    {
-        VK_FORMAT_R32_SFLOAT, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT,
-        VK_FORMAT_R8_SINT, VK_FORMAT_R8G8B8A8_SNORM, VK_FORMAT_R8_UINT, VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_R16G16_SINT, VK_FORMAT_R16G16_SNORM,
-        VK_FORMAT_R16G16B16A16_SINT, VK_FORMAT_R16G16B16A16_SNORM, VK_FORMAT_R32_UINT, VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32B32A32_UINT
-    };
-
-    return vkVertexFormats[type];
-}
-
-static VkPipelineStageFlags toVKPipelineStage(PipelineStage::Stage type) 
-{
-    static VkPipelineStageFlags vkValues[] =
-    {
-        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT
-    };
-
-    return vkValues[type];
-}
-
 static VkAccessFlags toVKPipelineStage(ResourceState state) 
 {
     VkAccessFlags returnVal = 0;
@@ -900,13 +857,13 @@ static VkImageLayout utilToVKImageLayout(ResourceState usage)
 }
 
 //Determines pipeline stages involved for given accesses.
-static VkPipelineStageFlags utilDeterminePipelineStageFlags(VkAccessFlags accessFlags, Queue::QueueType queueType) 
+static VkPipelineStageFlags utilDeterminePipelineStageFlags(VkAccessFlags accessFlags, VkQueueFlagBits queueFamily)
 {
     VkPipelineStageFlags flags = 0;
 
-    switch (queueType) 
+    switch (queueFamily)
     {
-    case Queue::QueueType::GRAPHICS:
+    case VK_QUEUE_GRAPHICS_BIT:
         if ((accessFlags & (VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) != 0) 
         {
             flags |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
@@ -937,7 +894,7 @@ static VkPipelineStageFlags utilDeterminePipelineStageFlags(VkAccessFlags access
         }
 
         break;
-    case Queue::QueueType::COMPUTE:
+    case VK_QUEUE_COMPUTE_BIT:
         if ((accessFlags & (VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) != 0 ||
             (accessFlags &  VK_ACCESS_INPUT_ATTACHMENT_READ_BIT) != 0 ||
             (accessFlags & (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)) != 0 ||
@@ -951,7 +908,7 @@ static VkPipelineStageFlags utilDeterminePipelineStageFlags(VkAccessFlags access
             flags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
         }
         break;
-    case Queue::QueueType::COPY_TRANSFER:
+    case VK_QUEUE_TRANSFER_BIT:
     default:
         break;
     }

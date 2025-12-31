@@ -26,6 +26,7 @@
 #include "Graphics/VoidImgui.hpp"
 #include "Graphics/GPUProfiler.hpp"
 
+#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include "cglm/struct/mat3.h"
 #include "cglm/struct/mat4.h"
 #include "cglm/struct/quat.h"
@@ -109,10 +110,10 @@ namespace
 
     struct UniformData
     {
-        mat4s cameraModel;
-        mat4s viewPerspective;
-        vec4s eye;
-        vec4s light;
+        alignas(16) mat4s globalModel;
+        alignas(16) mat4s viewPerspective;
+        alignas(16) vec4s eye;
+        alignas(16) vec4s light;
     };
 
     struct Transform
@@ -177,7 +178,7 @@ int main(int argc, char** argv)
 
     Window::instance()->init(1280, 800, "Void Engine");
 
-    InputHandler inputHandler = {};
+    InputHandler inputHandler{};
     inputHandler.init(allocator);
 
     DeviceCreation deviceCreation;
@@ -189,7 +190,7 @@ int main(int argc, char** argv)
     gpu.init(deviceCreation);
 
     ResourceManager resourceManager;
-    resourceManager.init(allocator, nullptr);
+    resourceManager.init(allocator);
 
     GPUProfiler gpuProfiler;
     gpuProfiler.init(allocator, 100);
@@ -204,16 +205,16 @@ int main(int argc, char** argv)
 
     //Window::instance()->setFullscreen(true);
 
-    Directory cwd = {};
+    Directory cwd{};
     directoryCurrent(&cwd);
 
-    char GLTFBasePath[512] = {};
+    char GLTFBasePath[512]{};
     memcpy(GLTFBasePath, argv[1], strlen(argv[1]));
     fileDirectoryFromPath(GLTFBasePath);
 
     directoryChange(GLTFBasePath);
 
-    char GLTFFile[512] = {};
+    char GLTFFile[512]{};
     memcpy(GLTFFile, argv[1], strlen(argv[1]));
     fileNameFromPath(GLTFFile);
 
@@ -232,16 +233,16 @@ int main(int argc, char** argv)
         images.push(*textureResources);
     }
 
-    TextureCreation textureCreation = {};
+    TextureCreation textureCreation{};
     uint32_t zeroValue = 0;
     textureCreation.setName("dummyTexture")
         .setSize(1, 1, 1)
-        .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, TextureType::TEXTURE_2D)
+        .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
         .setFlags(1, 0)
         .setData(&zeroValue);
     TextureHandle dummyTexture = gpu.createTexture(textureCreation);
 
-    SamplerCreation samplerCreation = {};
+    SamplerCreation samplerCreation{};
     samplerCreation.minFilter = VK_FILTER_LINEAR;
     samplerCreation.magFilter = VK_FILTER_LINEAR;
     samplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -316,11 +317,11 @@ int main(int argc, char** argv)
     Array<MeshDraw> meshDraws;
     meshDraws.init(allocator, scene.meshCount);
 
-    Array<BufferHandle> customMeshBuffers = {};
+    Array<BufferHandle> customMeshBuffers{};
     customMeshBuffers.init(allocator, 8);
 
-    vec4s dummyData[3] = {};
-    BufferCreation bufferCreation = {};
+    vec4s dummyData[3]{};
+    BufferCreation bufferCreation{};
     bufferCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(vec4s) * 3)
         .setData(dummyData)
         .setName("Dummy_attribute_buffer");
@@ -334,34 +335,34 @@ int main(int argc, char** argv)
         //Vertex input
         //TODO: Component format should be based on buffer view type.
         //Position
-        pipelineCreation.vertexInput.addVertexAttribute({ 0, 0, 0, VertexFormat::VertexComponentFormatType::FLOAT3 });
-        pipelineCreation.vertexInput.addVertexStream({ 0, 12, VertexInput::VertexInputRateType::PER_VERTEX });
+        pipelineCreation.vertexInput.addVertexAttribute({ 0, 0, 0, VK_FORMAT_R32G32B32_SFLOAT });
+        pipelineCreation.vertexInput.addVertexStream({ 0, 12, VK_VERTEX_INPUT_RATE_VERTEX });
         //Tangents
-        pipelineCreation.vertexInput.addVertexAttribute({ 1, 1, 0, VertexFormat::VertexComponentFormatType::FLOAT4 });
-        pipelineCreation.vertexInput.addVertexStream({ 1, 16, VertexInput::VertexInputRateType::PER_VERTEX });
+        pipelineCreation.vertexInput.addVertexAttribute({ 1, 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT });
+        pipelineCreation.vertexInput.addVertexStream({ 1, 16, VK_VERTEX_INPUT_RATE_VERTEX });
         //Normal
-        pipelineCreation.vertexInput.addVertexAttribute({ 2, 2, 0, VertexFormat::VertexComponentFormatType::FLOAT3 });
-        pipelineCreation.vertexInput.addVertexStream({ 2, 12, VertexInput::VertexInputRateType::PER_VERTEX });
+        pipelineCreation.vertexInput.addVertexAttribute({ 2, 2, 0, VK_FORMAT_R32G32B32_SFLOAT });
+        pipelineCreation.vertexInput.addVertexStream({ 2, 12, VK_VERTEX_INPUT_RATE_VERTEX });
         //texCoord
-        pipelineCreation.vertexInput.addVertexAttribute({ 3, 3, 0, VertexFormat::VertexComponentFormatType::FLOAT2 });
-        pipelineCreation.vertexInput.addVertexStream({ 3, 8, VertexInput::VertexInputRateType::PER_VERTEX });
+        pipelineCreation.vertexInput.addVertexAttribute({ 3, 3, 0, VK_FORMAT_R32G32_SFLOAT });
+        pipelineCreation.vertexInput.addVertexStream({ 3, 8, VK_VERTEX_INPUT_RATE_VERTEX });
 
         //Render pass
         pipelineCreation.renderPass = gpu.getSwapchainOutput();
         //Depth
-        pipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_LESS_OR_EQUAL);
+        pipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
         //Shader state
         FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/coreShader.vert.spv", &MemoryService::instance()->scratchAllocator);
         FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShader.frag.spv", &MemoryService::instance()->scratchAllocator);
 
         pipelineCreation.shaders.setName("Cube")
-            .addStage(vertexShaderCode.data, vertexShaderCode.size, VK_SHADER_STAGE_VERTEX_BIT)
-            .addStage(fragShaderCode.data, fragShaderCode.size, VK_SHADER_STAGE_FRAGMENT_BIT)
+            .addStage(vertexShaderCode.data, uint32_t(vertexShaderCode.size), VK_SHADER_STAGE_VERTEX_BIT)
+            .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
             .setSPVInput(true);
 
         //Descriptor set layout.
-        DescriptorSetLayoutCreation cubeRLLCreation = {};
+        DescriptorSetLayoutCreation cubeRLLCreation{};
         cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, "LocalConstants" });
         cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, 1, "MaterialConstant" });
         cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 1, "diffuseTexture" });
@@ -375,11 +376,11 @@ int main(int argc, char** argv)
         pipelineCreation.addDescriptorSetLayout(cubeDSL);
 
         //Constant buffer
-        BufferCreation bufferCreation;
-        bufferCreation.reset()
+        BufferCreation uniformBufferCreation;
+        uniformBufferCreation.reset()
             .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ResourceType::Type::DYNAMIC, sizeof(UniformData))
             .setName("cubeCB");
-        cubeCB = gpu.createBuffer(bufferCreation);
+        cubeCB = gpu.createBuffer(uniformBufferCreation);
 
         cubePipeline = gpu.createPipeline(pipelineCreation);
         glTF::Scene& rootGLTFScene = scene.scenes[scene.scene];
@@ -406,7 +407,7 @@ int main(int argc, char** argv)
             nodeStack.pop();
             glTF::Node& node = scene.nodes[nodeIndex];
 
-            mat4s localMatrix = {};
+            mat4s localMatrix{};
 
             if (node.matrixCount)
             {
@@ -472,7 +473,7 @@ int main(int argc, char** argv)
             //Final SRT composition
             for (uint32_t primitiveIndex = 0; primitiveIndex < mesh.primitiveCount; ++primitiveIndex)
             {
-                MeshDraw meshDraw = {};
+                MeshDraw meshDraw{};
 
                 meshDraw.materialData.model = finalMatrix;
 
@@ -483,7 +484,6 @@ int main(int argc, char** argv)
                     indicesAccessor.componentType == glTF::Accessor::UNSIGNED_SHORT);
                 meshDraw.indexType = indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
 
-                glTF::BufferView& indicesBufferView = scene.bufferViews[indicesAccessor.bufferView];
                 BufferResource& indicesBufferGPU = buffers[indicesAccessor.bufferView];
                 meshDraw.indexBuffer = indicesBufferGPU.handle;
                 meshDraw.indexOffset = indicesAccessor.byteOffset == glTF::INVALID_INT_VALUE ? 0 : indicesAccessor.byteOffset;
@@ -503,7 +503,6 @@ int main(int argc, char** argv)
                 if (positionAccessorIndex != -1)
                 {
                     glTF::Accessor& positionAccessor = scene.accessors[positionAccessorIndex];
-                    glTF::BufferView& positionBufferView = scene.bufferViews[positionAccessor.bufferView];
                     BufferResource& positionBufferGPU = buffers[positionAccessor.bufferView];
 
                     vertexCount = positionAccessor.count;
@@ -522,7 +521,6 @@ int main(int argc, char** argv)
                 if (normalAccessorIndex != -1)
                 {
                     glTF::Accessor& normalAccessor = scene.accessors[normalAccessorIndex];
-                    glTF::BufferView& normalBufferView = scene.bufferViews[normalAccessor.bufferView];
                     BufferResource& normalBufferGPU = buffers[normalAccessor.bufferView];
 
                     meshDraw.normalBuffer = normalBufferGPU.handle;
@@ -531,7 +529,7 @@ int main(int argc, char** argv)
                 else
                 {
                     //NOTE: Should you try and compte this at run time?
-                    Array<vec3s> normalsArray = {};
+                    Array<vec3s> normalsArray{};
                     normalsArray.init(allocator, vertexCount, vertexCount);
                     memset(normalsArray.data, 0, normalsArray.size * sizeof(vec3s));
 
@@ -561,7 +559,7 @@ int main(int argc, char** argv)
                         normalsArray[vertex] = glms_normalize(normalsArray[vertex]);
                     }
 
-                    BufferCreation normalCreation = {};
+                    BufferCreation normalCreation{};
                     normalCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, normalsArray.size * sizeof(vec3s))
                         .setName("normals")
                         .setData(normalsArray.data);
@@ -577,7 +575,6 @@ int main(int argc, char** argv)
                 if (tangentAccessorIndex != -1)
                 {
                     glTF::Accessor& tangentAccessor = scene.accessors[tangentAccessorIndex];
-                    glTF::BufferView& tangentBufferView = scene.bufferViews[tangentAccessor.bufferView];
                     BufferResource& tangentBufferGPU = buffers[tangentAccessor.bufferView];
 
                     meshDraw.tangentBuffer = tangentBufferGPU.handle;
@@ -589,7 +586,6 @@ int main(int argc, char** argv)
                 if (texcoordAccessorIndex != -1)
                 {
                     glTF::Accessor& texCooordAccessor = scene.accessors[texcoordAccessorIndex];
-                    glTF::BufferView& texCoordBufferView = scene.bufferViews[texCooordAccessor.bufferView];
                     BufferResource& texCoordBufferGPU = buffers[texCooordAccessor.bufferView];
 
                     meshDraw.texcoordBuffer = texCoordBufferGPU.handle;
@@ -602,7 +598,7 @@ int main(int argc, char** argv)
                 glTF::Material& material = scene.materials[meshPrimitive.material];
 
                 //Descriptor set
-                DescriptorSetCreation dsCreation = {};
+                DescriptorSetCreation dsCreation{};
                 dsCreation.setLayout(cubeDSL)
                     .buffer(cubeCB, 0);
 
@@ -796,128 +792,139 @@ int main(int argc, char** argv)
     float yaw = 0.f;
     float pitch = 0.f;
 
+    GameCamera gameCamera;
+    gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
+    gameCamera.init(true, 20.f, 6.0f, 0.1f);
+
     float modelScale = 1.f;
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
 
+        inputHandler.onEvent();
+
         //New Frame
         if (Window::instance()->minimised == false)
         {
             gpu.newFrame();
-        }
 
-        inputHandler.onEvent();
+            if (Window::instance()->resizeRequested)
+            {
+                gpu.resize(Window::instance()->width, Window::instance()->height);
+                gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
+                Window::instance()->resizeRequested = false;
+                continue;
+            }
+            //NOTE: This mused be after the OS messages.
+            imgui->newFrame();
 
-        if (Window::instance()->resizeRequested)
-        {
-            gpu.resize(Window::instance()->width, Window::instance()->height);
-            Window::instance()->resizeRequested = false;
-        }
-        //NOTE: This mused be after the OS messages.
-        imgui->newFrame();
+            const int64_t currentTick = timeNow();
+            float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
+            beginFrameTick = currentTick;
 
-        const int64_t currentTick = timeNow();
-        float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
-        beginFrameTick = currentTick;
+            if (ImGui::Begin("Void ImGui"))
+            {
+                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            }
+            ImGui::End();
 
-        inputHandler.newFrame();
-        inputHandler.update();
+            if (ImGui::Begin("GPU"))
+            {
+                gpuProfiler.imguiDraw();
+            }
+            ImGui::End();
 
-        if (ImGui::Begin("Air ImGui"))
-        {
-            ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-        }
-        ImGui::End();
+            mat4s globalModel{};
 
-        if (ImGui::Begin("GPU"))
-        {
-            gpuProfiler.imguiDraw();
-        }
-        ImGui::End();
-
-        mat4s globalModel = {};
-        {
             //Update rotating cube data.
             MapBufferParameters cbMap = { cubeCB, 0, 0 };
-            float* cbData = static_cast<float*>(gpu.mapBuffer(cbMap));
+            void* cbData = gpu.mapBuffer(cbMap);
             if (cbData)
             {
-                if (inputHandler.isMouseDown(MouseButtons::MOUSE_BUTTON_LEFT) && ImGui::GetIO().WantCaptureMouse == false)
-                {
-                    pitch += (inputHandler.mousePosition.y - inputHandler.previousMousePosition.y) * 0.1f;
-                    yaw += (inputHandler.mousePosition.x - inputHandler.previousMousePosition.x) * 0.3f;
+                //if (inputHandler.isMouseDown(MouseButtons::MOUSE_BUTTON_RIGHT) && ImGui::GetIO().WantCaptureMouse == false)
+                //{
+                //    pitch += (inputHandler.mousePosition.y - (Window::instance()->width / 2.f)) * deltaTime;
+                //    yaw += (inputHandler.mousePosition.x - (Window::instance()->height / 2.f)) * deltaTime;
 
-                    pitch = clamp(pitch, -60.f, 60.f);
+                //    pitch = clamp(pitch, -60.f, 60.f);
 
-                    if (yaw > 360.f)
-                    {
-                        yaw -= 360.f;
-                    }
+                //    if (yaw > 360.f)
+                //    {
+                //        yaw -= 360.f;
+                //    }
 
-                    mat3s rxm = glms_mat4_pick3(glms_rotate_make(glm_rad(-pitch), vec3s{ 1.f, 0.f, 0.f }));
-                    mat3s rym = glms_mat4_pick3(glms_rotate_make(glm_rad(-yaw), vec3s{ 0.f, 1.f, 0.f }));
+                //    mat3s rxm = glms_mat4_pick3(glms_rotate_make(glm_rad(-pitch), vec3s{ 1.f, 0.f, 0.f }));
+                //    mat3s rym = glms_mat4_pick3(glms_rotate_make(glm_rad(-yaw), vec3s{ 0.f, 1.f, 0.f }));
 
-                    look = glms_mat3_mulv(rxm, vec3s{ 0.f, 0.f, -1.f });
-                    look = glms_mat3_mulv(rym, look);
+                //    look = glms_mat3_mulv(rxm, vec3s{ 0.f, 0.f, -1.f });
+                //    look = glms_mat3_mulv(rym, look);
 
-                    right = glms_cross(look, vec3s{ 0.f, 1.f, 0.f });
-                }
+                //    right = glms_cross(look, vec3s{ 0.f, 1.f, 0.f });
+                //}
 
-                if (inputHandler.isKeyDown(KEY_W))
-                {
-                    eye = glms_vec3_add(eye, glms_vec3_scale(look, 5.f * deltaTime));
-                }
-                else if (inputHandler.isKeyDown(KEY_S))
-                {
-                    eye = glms_vec3_sub(eye, glms_vec3_scale(look, 5.f * deltaTime));
-                }
+                //if (inputHandler.isKeyDown(KEY_W))
+                //{
+                //    eye = glms_vec3_add(eye, glms_vec3_scale(look, 5.f * deltaTime));
+                //}
+                //else if (inputHandler.isKeyDown(KEY_S))
+                //{
+                //    eye = glms_vec3_sub(eye, glms_vec3_scale(look, 5.f * deltaTime));
+                //}
 
-                if (inputHandler.isKeyDown(KEY_D))
-                {
-                    eye = glms_vec3_add(eye, glms_vec3_scale(right, 5.f * deltaTime));
-                }
-                else if (inputHandler.isKeyDown(KEY_A))
-                {
-                    eye = glms_vec3_sub(eye, glms_vec3_scale(right, 5.f * deltaTime));
-                }
+                //if (inputHandler.isKeyDown(KEY_D))
+                //{
+                //    eye = glms_vec3_add(eye, glms_vec3_scale(right, 5.f * deltaTime));
+                //}
+                //else if (inputHandler.isKeyDown(KEY_A))
+                //{
+                //    eye = glms_vec3_sub(eye, glms_vec3_scale(right, 5.f * deltaTime));
+                //}
 
-                mat4s view = glms_lookat(eye, glms_vec3_add(eye, look), vec3s{ 0.f, 1.f, 0.f });
-                mat4s projection = glms_perspective(glm_rad(60.f), gpu.swapchainWidth * 1.f / gpu.swapchainHeight, 0.01f, 1000.f);
+                //mat4s view = glms_lookat(eye, glms_vec3_add(eye, look), vec3s{ 0.f, 1.f, 0.f });
+                //mat4s projection = glms_perspective(glm_rad(60.f), gpu.swapchainWidth * 1.f / gpu.swapchainHeight, 1000.f, 0.01f);
 
-                //Calculate view projection matrix
-                mat4s viewPerspective = glms_mat4_mul(projection, view);
+                ////Calculate view projection matrix
+                //mat4s viewPerspective = glms_mat4_mul(projection, view);
 
-                //Rotate cube??
-                rX += 1.f * deltaTime;
-                rY += 2.f * deltaTime;
+                //globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
-                mat4s rxm = glms_rotate_make(rX, vec3s{ 1.f, 0.f, 0.f });
-                mat4s rym = glms_rotate_make(glm_rad(45.f), vec3s{ 0.f, 1.f, 0.f });
+                ////TODO: Match these name with what's in the shader.
+                //UniformData uniformData{};
+                //uniformData.viewPerspective = viewPerspective;
+                //uniformData.globalModel = globalModel;
+                //uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
+                //uniformData.light = vec4s{ 2.f, 2.f, 0.f, 1.f };
 
-                mat4s sm = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
-                globalModel = glms_mat4_mul(rym, sm);
+                //memcpy(cbData, &uniformData, sizeof(UniformData));
+
+                //gpu.unmapBuffer(cbMap);
+                
+                globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
+
+                inputHandler.newFrame();
+                inputHandler.update();
+                gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
 
                 //TODO: Match these name with what's in the shader.
-                UniformData uniformData = {};
-                uniformData.viewPerspective = viewPerspective;
-                uniformData.cameraModel = globalModel;
+                UniformData uniformData{};
+                uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                uniformData.globalModel = globalModel;
+                //eye not used in shader.
                 uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
                 uniformData.light = vec4s{ 2.f, 2.f, 0.f, 1.f };
+
+                //uniformData.viewPerspective.m11 *= -1;
 
                 memcpy(cbData, &uniformData, sizeof(UniformData));
 
                 gpu.unmapBuffer(cbMap);
             }
-        }
 
-        if (Window::instance()->minimised == false)
-        {
-            CommandBuffer* gpuCommands = gpu.getCommandBuffer(Queue::QueueType::GRAPHICS, true);
+            CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
 
             gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
-            gpuCommands->clearDepthStencil(1.f, 0);
+            gpuCommands->clearDepthStencil(0.f, 0);
             gpuCommands->bindPass(gpu.getSwapchainPass());
             gpuCommands->bindPipeline(cubePipeline);
             gpuCommands->setScissor(nullptr);
@@ -959,7 +966,7 @@ int main(int argc, char** argv)
                 gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.indexType);
                 gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0);
 
-                gpuCommands->drawIndexed(Topology::TopologyType::TRIANGLE, meshDraw.count, 1, 0, 0, 0);
+                gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
             }
 
             imgui->render(*gpuCommands);

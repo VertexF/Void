@@ -4,19 +4,38 @@
 
 namespace 
 {
-    ResourceState toResourceState(PipelineStage::Stage stage) 
+    ResourceState toResourceState(VkPipelineStageFlagBits stage) 
     {
-        static ResourceState STATES[] = 
+        switch (stage) 
         {
-            RESOURCE_STATE_INDIRECT_ARGUMENT, RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            RESOURCE_STATE_PIXEL_SHADER_RESOURCE, RESOURCE_STATE_RENDER_TARGET, RESOURCE_STATE_UNORDERED_ACCESS, RESOURCE_STATE_COPY_DEST
-        };
+        case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
+            return RESOURCE_STATE_INDIRECT_ARGUMENT;
 
-        return STATES[stage];
+        case VK_PIPELINE_STAGE_VERTEX_INPUT_BIT:
+            return RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+
+        case VK_PIPELINE_STAGE_VERTEX_SHADER_BIT:
+            return RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
+        case VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT:
+            return RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+
+        case VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT:
+            return RESOURCE_STATE_RENDER_TARGET;
+
+        case VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT:
+            return RESOURCE_STATE_UNORDERED_ACCESS;
+
+        case VK_PIPELINE_STAGE_TRANSFER_BIT:
+            return RESOURCE_STATE_COPY_DEST;
+
+        default:
+            VOID_ERROR("Pipeline stage to resource state is not supported %d", stage);
+        }
     }
 }
 
-void CommandBuffer::init(Queue::QueueType newType, uint32_t newBufferSize, uint32_t newSubmitSize, bool newBaked)
+void CommandBuffer::init(VkQueueFlagBits newType, uint32_t newBufferSize, uint32_t newSubmitSize, bool newBaked)
 {
     type = newType;
     bufferSize = newBufferSize;
@@ -32,11 +51,11 @@ void CommandBuffer::terminate()
 }
 
 //Command buffer interface
-void CommandBuffer::bindPass(RenderPassHandle handle)
+void CommandBuffer::bindPass(RenderPassHandle renderPassHandle)
 {
     isRecording = true;
 
-    RenderPass* renderPass = device->accessRenderPass(handle);
+    RenderPass* renderPass = device->accessRenderPass(renderPassHandle);
 
     if (currentRenderPass && (currentRenderPass->type != RenderPassType::Types::COMPUTE) &&
                                 (renderPass != currentRenderPass))
@@ -46,7 +65,7 @@ void CommandBuffer::bindPass(RenderPassHandle handle)
 
     if (renderPass != currentRenderPass && (renderPass->type != RenderPassType::Types::COMPUTE))
     {
-        VkRenderPassBeginInfo renderPassBegin = {};
+        VkRenderPassBeginInfo renderPassBegin{};
         renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderPassBegin.framebuffer = renderPass->type == RenderPassType::Types::SWAPCHAIN ?
             device->vulkanSwapchainFramebuffers[device->vulkanImageIndex] :
@@ -65,18 +84,18 @@ void CommandBuffer::bindPass(RenderPassHandle handle)
     currentRenderPass = renderPass;
 }
 
-void CommandBuffer::bindPipeline(PipelineHandle handle)
+void CommandBuffer::bindPipeline(PipelineHandle pipelineHandle)
 {
-    Pipeline* pipeline = device->accessPipeline(handle);
+    Pipeline* pipeline = device->accessPipeline(pipelineHandle);
     vkCmdBindPipeline(vkCommandBuffer, pipeline->vkBindPoint, pipeline->vkPipeline);
 
     //Cache the pipeline.
     currentPipeline = pipeline;
 }
 
-void CommandBuffer::bindVertexBuffer(BufferHandle handle, uint32_t binding, uint32_t offset)
+void CommandBuffer::bindVertexBuffer(BufferHandle bufferHandle, uint32_t binding, uint32_t offset)
 {
-    Buffer* buffer = device->accessBuffer(handle);
+    Buffer* buffer = device->accessBuffer(bufferHandle);
     VkDeviceSize offsets[] = { offset };
 
     VkBuffer vkBuffer = buffer->vkBuffer;
@@ -91,9 +110,9 @@ void CommandBuffer::bindVertexBuffer(BufferHandle handle, uint32_t binding, uint
     vkCmdBindVertexBuffers(vkCommandBuffer, binding, 1, &vkBuffer, offsets);
 }
 
-void CommandBuffer::bindIndexBuffer(BufferHandle handle, uint32_t offset, VkIndexType indexType)
+void CommandBuffer::bindIndexBuffer(BufferHandle bufferHandle, uint32_t offset, VkIndexType indexType)
 {
-    Buffer* buffer = device->accessBuffer(handle);
+    Buffer* buffer = device->accessBuffer(bufferHandle);
 
     VkBuffer vkBuffer = buffer->vkBuffer;
     VkDeviceSize deviceOffset = offset;
@@ -108,14 +127,14 @@ void CommandBuffer::bindIndexBuffer(BufferHandle handle, uint32_t offset, VkInde
     vkCmdBindIndexBuffer(vkCommandBuffer, vkBuffer, offset, indexType);
 }
 
-void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* handle, uint32_t numLists, uint32_t* offsets, uint32_t numOffsets)
+void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_t numLists, uint32_t* offsets, uint32_t numOffsets)
 {
     uint32_t offsetsCache[8];
     numOffsets = 0;
 
     for (uint32_t numList = 0; numList < numLists; ++numList) 
     {
-        DescriptorSet* descriptorSet = device->accessDescriptorSet(handle[numList]);
+        DescriptorSet* descriptorSet = device->accessDescriptorSet(bufferHandle[numList]);
         vkDescriptorSets[numList] = descriptorSet->vkDescriptorSet;
 
         //Search for dynamic buffers
@@ -128,8 +147,8 @@ void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* handle, uint32_t numL
             {
                 //Search for the actual buffer offset.
                 const uint32_t resourceIndex = descriptorSet->bindings[i];
-                uint32_t bufferHandle = descriptorSet->resources[resourceIndex];
-                Buffer* buffer = device->accessBuffer({ bufferHandle });
+                uint32_t descriptorSetHandle = descriptorSet->resources[resourceIndex];
+                Buffer* buffer = device->accessBuffer({ descriptorSetHandle });
 
                 offsetsCache[numOffsets++] = buffer->globalOffset;
             }
@@ -215,31 +234,28 @@ void CommandBuffer::clearDepthStencil(float depth, uint8_t stencil)
     clears[1].depthStencil.stencil = stencil;
 }
 
-void CommandBuffer::draw(Topology::TopologyType topology, uint32_t firstVertex, uint32_t vertexCount,
-                                                            uint32_t firstInstance, uint32_t instanceCount)
+void CommandBuffer::draw(uint32_t firstVertex, uint32_t vertexCount, uint32_t firstInstance, uint32_t instanceCount)
 {
     vkCmdDraw(vkCommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
-void CommandBuffer::drawIndexed(Topology::TopologyType topology, uint32_t indexCount, uint32_t instanceCount,
-                                                                    uint32_t firstIndex, int32_t vertexOffset,
-                                                                    uint32_t firstInstance)
+void CommandBuffer::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
 {
     vkCmdDrawIndexed(vkCommandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void CommandBuffer::drawIndirect(BufferHandle handle, uint32_t offset, uint32_t stride)
+void CommandBuffer::drawIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t stride)
 {
-    Buffer* buffer = device->accessBuffer(handle);
+    Buffer* buffer = device->accessBuffer(bufferHandle);
     VkBuffer vkBuffer = buffer->vkBuffer;
     VkDeviceSize vkOffset = offset;
 
     vkCmdDrawIndirect(vkCommandBuffer, vkBuffer, vkOffset, 1, sizeof(VkDrawIndirectCommand));
 }
 
-void CommandBuffer::drawIndexedIndirect(BufferHandle handle, uint32_t offset, uint32_t stride)
+void CommandBuffer::drawIndexedIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t stride)
 {
-    Buffer* buffer = device->accessBuffer(handle);
+    Buffer* buffer = device->accessBuffer(bufferHandle);
     VkBuffer vkBuffer = buffer->vkBuffer;
     VkDeviceSize vkOffset = offset;
 
@@ -251,9 +267,9 @@ void CommandBuffer::dispatch(uint32_t groupX, uint32_t groupY, uint32_t groupZ)
     vkCmdDispatch(vkCommandBuffer, groupX, groupY, groupZ);
 }
 
-void CommandBuffer::dispatchIndirect(BufferHandle handle, uint32_t offset)
+void CommandBuffer::dispatchIndirect(BufferHandle bufferHandle, uint32_t offset)
 {
-    Buffer* buffer = device->accessBuffer(handle);
+    Buffer* buffer = device->accessBuffer(bufferHandle);
     VkBuffer vkBuffer = buffer->vkBuffer;
     VkDeviceSize vkOffset = offset;
 
@@ -289,18 +305,18 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
                 pImageBarrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 pImageBarrier->pNext = nullptr;
 
-                ResourceState currentState = barrier.sourcePipelineStage == PipelineStage::RENDER_TARGET ? 
+                ResourceState currentState = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
                                                                             RESOURCE_STATE_RENDER_TARGET : 
                                                                             RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-                ResourceState nextState = barrier.destinationPipelineStage == PipelineStage::RENDER_TARGET ?
+                ResourceState nextState = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
                                                                                 RESOURCE_STATE_RENDER_TARGET :
                                                                                 RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
                 if (isColour == false) 
                 {
-                    currentState = barrier.sourcePipelineStage == PipelineStage::RENDER_TARGET ? 
+                    currentState = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
                                                                     RESOURCE_STATE_DEPTH_WRITE : 
                                                                     RESOURCE_STATE_DEPTH_READ;
-                    nextState = barrier.destinationPipelineStage == PipelineStage::RENDER_TARGET ?
+                    nextState = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
                                                                     RESOURCE_STATE_DEPTH_WRITE :
                                                                     RESOURCE_STATE_DEPTH_READ;
                 }
@@ -357,13 +373,13 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
         }
 
         sourceStageMask = utilDeterminePipelineStageFlags(sourceAccessFlags, 
-                                                            barrier.sourcePipelineStage == PipelineStage::COMPUTE_SHADER ?
-                                                            Queue::COMPUTE :
-                                                            Queue::GRAPHICS);
+                                                            barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT ?
+                                                            VK_QUEUE_COMPUTE_BIT :
+                                                            VK_QUEUE_GRAPHICS_BIT);
         destinationStageMask = utilDeterminePipelineStageFlags(destinationAccessFlags, 
-                                                                barrier.destinationPipelineStage == PipelineStage::COMPUTE_SHADER ?
-                                                                Queue::COMPUTE :
-                                                                Queue::GRAPHICS);
+                                                                barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT ?
+                                                                VK_QUEUE_COMPUTE_BIT :
+                                                                VK_QUEUE_GRAPHICS_BIT);
 
         vkCmdPipelineBarrier(vkCommandBuffer, sourceStageMask, destinationAccessFlags, 0, 0, nullptr, 
                                 barrier.numMemoryBarriers, bufferMemoryBarriers, barrier.numImageBarriers, imageBarriers);
@@ -384,33 +400,33 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
 
     switch (barrier.destinationPipelineStage) 
     {
-    case PipelineStage::Stage::FRAGEMENT_SHADER:
+    case VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT:
         break;
-    case PipelineStage::Stage::COMPUTE_SHADER:
+    case VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT:
         newLayout = VK_IMAGE_LAYOUT_GENERAL;
         break;
-    case PipelineStage::Stage::RENDER_TARGET:
+    case VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT:
         newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         newDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         destinationAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
         destinationDepthAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         break;
-    case PipelineStage::Stage::DRAW_INDIRECT:
+    case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
         destinationBufferAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
         break;
     }
 
     switch (barrier.sourcePipelineStage) 
     {
-    case PipelineStage::Stage::FRAGEMENT_SHADER:
+    case VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT:
         break;
-    case PipelineStage::Stage::COMPUTE_SHADER:
+    case VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT:
         break;
-    case PipelineStage::Stage::RENDER_TARGET:
+    case VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT:
         sourceAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         sourceDepthAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         break;
-    case PipelineStage::Stage::DRAW_INDIRECT:
+    case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
         sourceBufferAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
         break;
     }
@@ -449,8 +465,8 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
         textureVulkan->vkImageLayout = vkBarrier.newLayout;
     }
 
-    VkPipelineStageFlags sourceStageMask = toVKPipelineStage(static_cast<PipelineStage::Stage>(barrier.sourcePipelineStage));
-    VkPipelineStageFlags destinationStageMask = toVKPipelineStage(static_cast<PipelineStage::Stage>(barrier.destinationPipelineStage));
+    VkPipelineStageFlags sourceStageMask = barrier.sourcePipelineStage;
+    VkPipelineStageFlags destinationStageMask = barrier.destinationPipelineStage;
 
     if (hasDepth) 
     {

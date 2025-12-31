@@ -29,7 +29,7 @@ BlendState& BlendState::setAlpha(VkBlendFactor sourceCol, VkBlendFactor destinat
     return *this;
 }
 
-BlendState& BlendState::setColourWriteMask(ColourType::Mask mask) 
+BlendState& BlendState::setColourWriteMask(VkColorComponentFlags mask)
 {
     colourWriteMask = mask;
 
@@ -96,10 +96,11 @@ TextureCreation& TextureCreation::setFlags(uint8_t newMipmaps, uint8_t newFlags)
     return *this;
 }
 
-TextureCreation& TextureCreation::setFormatType(VkFormat newFormat, TextureType::Type newType) 
+TextureCreation& TextureCreation::setFormatType(VkFormat newFormat, VkImageType newImageType, VkImageViewType newImageViewType)
 {
     format = newFormat;
-    type = newType;
+    imageType = newImageType;
+    imageViewType = newImageViewType;
 
     return *this;
 }
@@ -392,13 +393,13 @@ ExecutionBarrier& ExecutionBarrier::reset()
 {
     numImageBarriers = 0;
     numMemoryBarriers = 0;
-    sourcePipelineStage = PipelineStage::Stage::DRAW_INDIRECT;
-    destinationPipelineStage = PipelineStage::Stage::DRAW_INDIRECT;
+    sourcePipelineStage = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    destinationPipelineStage = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
 
     return *this;
 }
     
-ExecutionBarrier& ExecutionBarrier::set(PipelineStage::Stage source, PipelineStage::Stage destination) 
+ExecutionBarrier& ExecutionBarrier::set(VkPipelineStageFlagBits source, VkPipelineStageFlagBits destination)
 {
     sourcePipelineStage = source;
     destinationPipelineStage = destination;

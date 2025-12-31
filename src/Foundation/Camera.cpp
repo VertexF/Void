@@ -74,17 +74,12 @@ void Camera::setFov(float fov)
 
 void Camera::update() 
 {
-    //mat4s rym = glms_rotate_make(glm_rad(45.0f), vec3s{ 0.0f, 1.0f, 0.0f });
-
-    //mat4s sm = glms_scale_make(vec3s{ model_scale, model_scale, model_scale });
-    //global_model = glms_mat4_mul(rym, sm);
-
     //Quaternion based rotation
     const versors pitchRotation = glms_quat(pitch, 1, 0, 0);
     const versors yawRotation = glms_quat(yaw, 0, 1, 0);
     const versors rotation = glms_quat_normalize(glms_quat_mul(pitchRotation, yawRotation));
 
-    const mat4s translation = glms_translate_make(glms_vec3_scale(position, 1.f));
+    const mat4s translation = glms_translate_make(glms_vec3_scale(position, -1.f));
     view = glms_mat4_mul(glms_quat_mat4(rotation), translation);
 
     //Update the vector for movement
@@ -112,7 +107,7 @@ void Camera::calculateProjectionMatrix()
 {
     if (perspective) 
     {
-        projection = glms_perspective(glm_rad(fieldOfView), aspectRatio, 100.f, 1.f);
+        projection = glms_perspective(glm_rad(fieldOfView), aspectRatio, 1000.f, 0.01f);
     }
     else 
     {

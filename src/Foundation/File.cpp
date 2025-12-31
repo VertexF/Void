@@ -15,9 +15,9 @@
 
 #include <string.h>
 
-static long getFileSize(FileHandle file) 
+static uint32_t getFileSize(FileHandle file) 
 {
-    long fileSizeSigned;
+    uint32_t fileSizeSigned;
 
     fseek(file, 0, SEEK_END);
     fileSizeSigned = ftell(file);
@@ -93,7 +93,7 @@ FileReadResult fileReadBinary(const char* filename, Allocator* alloc)
     if (file) 
     {
         //TODO: Use filesize or read results.
-        size_t filesize = getFileSize(file);
+        uint32_t filesize = getFileSize(file);
 
         result.data = (char*)void_alloca(filesize, alloc);
         fread(result.data, filesize, 1, file);
@@ -177,9 +177,9 @@ bool fileDelete(const char* path)
 #if defined(_WIN64)
 FileTime fileLastWriteTime(const char* filename)
 {
-    FileTime lastWriteTime = {};
+    FileTime lastWriteTime{};
 
-    WIN32_FILE_ATTRIBUTE_DATA data;
+    WIN32_FILE_ATTRIBUTE_DATA data{};
     if (GetFileAttributesExA(filename, GetFileExInfoStandard, &data)) 
     {
         lastWriteTime.dwHighDataTime = data.ftLastWriteTime.dwHighDateTime;
