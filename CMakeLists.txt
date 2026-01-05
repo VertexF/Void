@@ -19,6 +19,8 @@ set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf")
 set(STACK_WALKER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/StackWalker/Main/StackWalker")
 set(RAPID_HASH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/rapidhash")
 set(VENDER_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
+set(IMGUI_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
+set(CGLTF_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/cgltf")
 #Set the location of the engine source.
 set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
@@ -61,7 +63,8 @@ add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
 
 if (WIN32)
     target_compile_definitions(Void PRIVATE
-    CGLM_FORCE_DEPTH_ZERO_TO_ONE
+                               CGLM_FORCE_DEPTH_ZERO_TO_ONE
+                               CGLTF_IMPLEMENTATION
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX
@@ -69,7 +72,8 @@ if (WIN32)
                                VK_USE_PLATFORM_WIN32_KHR)
 else(UNIX)
     target_compile_definitions(Void PRIVATE 
-    CGLM_FORCE_DEPTH_ZERO_TO_ONE
+                               CGLM_FORCE_DEPTH_ZERO_TO_ONE
+                               CGLTF_IMPLEMENTATION
                                #VOID_IMGUI                     
                                VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
@@ -82,7 +86,8 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${TLSF_INCLUDE_DIR}
                                                ${CGLM_INCLUDE_DIR}
                                                ${VENDER_INCLUDE}
-"${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
+                                               ${IMGUI_INCLUDE}
+                                               ${CGLTF_INCLUDE})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
@@ -221,13 +226,13 @@ target_compile_definitions(External PRIVATE
 if (WIN32)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
+                               ${IMGUI_INCLUDE})
 else()
     target_link_libraries(External PRIVATE
                           dl)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
+                               ${IMGUI_INCLUDE})
 endif()
 
 target_link_libraries(Void PRIVATE Foundation External)

@@ -375,15 +375,15 @@ void ImguiService::init(void* configuration)
     DescriptorSetLayoutCreation descriptorSetLayoutCreation{};
     if (gpu->bindlessSupported)
     {
-        descriptorSetLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, "LocalConstants" })
-            .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10, 1, "Texture" })
+        descriptorSetLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, "LocalConstants" })
+            .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "Texture" })
             .setName("RLL_Imgui");
     }
     else
     {
-        descriptorSetLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, "LocalConstants" })
+        descriptorSetLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, "LocalConstants" })
             .setName("RLL_Imgui");
-        descriptorSetLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, 1, "LocalConstants" })
+        descriptorSetLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "Texture" })
             .setName("RLL_Imgui");
     }
 

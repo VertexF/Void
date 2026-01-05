@@ -19,3 +19,6 @@
 [submodule "vender/imgui"]
 	path = vender/imgui
 	url = https://github.com/ocornut/imgui.git
+[submodule "vender/cgltf"]
+	path = vender/cgltf
+	url = https://github.com/jkuhlmann/cgltf.git

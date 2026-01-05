@@ -9,7 +9,6 @@
 #include <csignal>
 #endif
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/struct/affine.h>
 #include <cglm/struct/cam.h>
 

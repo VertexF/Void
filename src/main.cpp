@@ -26,12 +26,10 @@
 #include "Graphics/VoidImgui.hpp"
 #include "Graphics/GPUProfiler.hpp"
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include "cglm/struct/mat3.h"
 #include "cglm/struct/mat4.h"
 #include "cglm/struct/quat.h"
 #include "cglm/struct/affine.h"
-#include "cglm/struct/cam.h"
 
 #include "vender/imgui/imgui.h"
 //#include "vender/tracy/tracy/Tracy.hpp"
@@ -41,6 +39,8 @@
 #include "Foundation/Numerics.hpp"
 #include "Foundation/ResourceManager.hpp"
 #include "Foundation/Time.hpp"
+
+#include <cgltf.h>
 
 #include <stdlib.h>
 
@@ -52,8 +52,8 @@ namespace
     BufferHandle cubeIB;
     PipelineHandle cubePipeline;
     BufferHandle cubeCB;
-    DescriptorSetHandle cubeRL;
     DescriptorSetLayoutHandle cubeDSL;
+    DescriptorSetLayoutHandle vertexDSL;
 
     float rX;
     float rY;
@@ -82,6 +82,14 @@ namespace
         float roughnessFactor;
         float occlusionFactor;
         uint32_t flags;
+    };
+
+    struct alignas(16) Vertices
+    {
+        vec3 position;
+        vec4 tangent;
+        vec3 normal;
+        vec2 texCoord0;
     };
 
     struct MeshDraw
@@ -122,7 +130,13 @@ namespace
         versors rotation;
         vec3s translation;
 
-        void reset();
+        void reset() 
+        {
+            scale = vec3s{ 1.f, 1.f, 1.f };
+            rotation = glms_quat_identity();
+            translation = vec3s{ 1.f, 1.f, 1.f };
+        }
+
         mat4s calculateMatrix() const
         {
             const mat4s translationMatrix = glms_translate_make(translation);
@@ -158,6 +172,20 @@ namespace
         uint8_t* data = reinterpret_cast<uint8_t*>(buffersData[buffer.buffer]) + offset;
 
         return data;
+    }
+
+    int32_t gltfAccessorIndex(cgltf_attribute* attributes, uint32_t atributeCount, const char* attributeName)
+    {
+        for (uint32_t index = 0; index < atributeCount; ++index)
+        {
+            cgltf_attribute attribute = attributes[index];
+            if (strcmp(attribute.name, attributeName) == 0)
+            {
+                return attribute.index;
+            }
+        }
+
+        return -1;
     }
 }
 
@@ -218,19 +246,38 @@ int main(int argc, char** argv)
     memcpy(GLTFFile, argv[1], strlen(argv[1]));
     fileNameFromPath(GLTFFile);
 
-    glTF::glTF scene = gltfLoadFile(GLTFFile);
+    cgltf_data* cgltfData = nullptr;
 
-    Array<TextureResource> images;
-    images.init(allocator, scene.imagesCount);
-
-    for (uint32_t imageIndex = 0; imageIndex < scene.imagesCount; ++imageIndex)
+    cgltf_options options{};
+    cgltf_result result = cgltf_parse_file(&options, GLTFFile, &cgltfData);
+    if (result != cgltf_result_success)
     {
-        glTF::Image& image = scene.images[imageIndex];
-        TextureResource* textureResources = renderer.createTexture(image.uri.data, image.uri.data);
+        VOID_ERROR("File could not be found or loaded.");
+    }
+
+    result = cgltf_load_buffers(&options, cgltfData, GLTFFile);
+    if (result != cgltf_result_success)
+    {
+        VOID_ERROR("Could not load buffers from the gltf mdoel");
+    }
+
+    result = cgltf_validate(cgltfData);
+    if (result != cgltf_result_success)
+    {
+        VOID_ERROR("The gltf model is invalid");
+    }
+
+    Array<TextureResource> images2;
+    images2.init(allocator, cgltfData->images_count);
+
+    for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
+    {
+        cgltf_image image = cgltfData->images[imageIndex];
+        TextureResource* textureResources = renderer.createTexture(image.uri, image.uri);
 
         VOID_ASSERT(textureResources != nullptr);
 
-        images.push(*textureResources);
+        images2.push(*textureResources);
     }
 
     TextureCreation textureCreation{};
@@ -252,73 +299,35 @@ int main(int argc, char** argv)
     StringBuffer resourceNameBuffer;
     resourceNameBuffer.init(void_kilo(64), allocator);
 
-    Array<SamplerResource> samplers;
-    samplers.init(allocator, scene.samplersCount);
+    Array<SamplerResource> samplers2;
+    samplers2.init(allocator, cgltfData->samplers_count);
 
-    for (uint32_t samplerIndex = 0; samplerIndex < scene.samplersCount; ++samplerIndex)
+    for (uint32_t samplerIndex = 0; samplerIndex < cgltfData->samplers_count; ++samplerIndex)
     {
-        glTF::Sampler& sampler = scene.samplers[samplerIndex];
+        cgltf_sampler sampler = cgltfData->samplers[samplerIndex];
 
         char* samplerName = resourceNameBuffer.appendUseF("Sampler_%u", samplerIndex);
 
         SamplerCreation creation;
-        creation.minFilter = sampler.minFilter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-        creation.magFilter = sampler.magFilter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        creation.minFilter = sampler.min_filter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        creation.magFilter = sampler.mag_filter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
         creation.name = samplerName;
 
         SamplerResource* samplerResource = renderer.createSampler(creation);
         VOID_ASSERT(samplerResource != nullptr);
 
-        samplers.push(*samplerResource);
-    }
-
-    Array<void*> buffersData;
-    buffersData.init(allocator, scene.buffersCount);
-
-    for (uint32_t bufferIndex = 0; bufferIndex < scene.buffersCount; ++bufferIndex)
-    {
-        glTF::Buffer& buffer = scene.buffers[bufferIndex];
-
-        FileReadResult bufferData = fileReadBinary(buffer.uri.data, allocator);
-        buffersData.push(bufferData.data);
-    }
-
-    Array<BufferResource> buffers;
-    buffers.init(allocator, scene.bufferViewCount);
-
-    for (uint32_t bufferIndex = 0; bufferIndex < scene.bufferViewCount; ++bufferIndex)
-    {
-        char* bufferName = nullptr;
-        uint32_t bufferSize = 0;
-        uint8_t* data = getBufferData(scene.bufferViews, bufferIndex, buffersData, &bufferSize, &bufferName);
-
-        //NOTE: The target attribute of a BufferView is not mandatory, so we prepare for both uses.
-        VkBufferUsageFlags flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-
-        if (bufferName == nullptr)
-        {
-            bufferName = resourceNameBuffer.appendUseF("buffer_%u", bufferIndex);
-        }
-        else
-        {
-            //NOTE: Some buffers might have the same name, which causes issues in the renderer cache
-            bufferName = resourceNameBuffer.appendUseF("%s_%u", bufferName, bufferIndex);
-        }
-
-        BufferResource* bufferResource = renderer.createBuffer(flags, ResourceType::Type::IMMUTABLE, bufferSize, data, bufferName);
-        VOID_ASSERT(bufferResource != nullptr);
-
-        buffers.push(*bufferResource);
+        samplers2.push(*samplerResource);
     }
 
     //NOTE: resource working directory
     directoryChange(cwd.path);
 
     Array<MeshDraw> meshDraws;
-    meshDraws.init(allocator, scene.meshCount);
+    meshDraws.init(allocator, cgltfData->meshes_count);
 
-    Array<BufferHandle> customMeshBuffers{};
-    customMeshBuffers.init(allocator, 8);
+    //We have no idea if it's 
+    Array<void*> meshIndices;
+    meshIndices.init(allocator, 256);
 
     vec4s dummyData[3]{};
     BufferCreation bufferCreation{};
@@ -328,24 +337,13 @@ int main(int argc, char** argv)
 
     BufferHandle dummyAttributeBuffer = gpu.createBuffer(bufferCreation);
 
+    cgltf_component_type componentType = cgltf_component_type_max_enum;
+    Array<Vertices> vertices;
+    vertices.init(allocator, 256);
+
     {
         //Create pipeline state
         PipelineCreation pipelineCreation;
-
-        //Vertex input
-        //TODO: Component format should be based on buffer view type.
-        //Position
-        pipelineCreation.vertexInput.addVertexAttribute({ 0, 0, 0, VK_FORMAT_R32G32B32_SFLOAT });
-        pipelineCreation.vertexInput.addVertexStream({ 0, 12, VK_VERTEX_INPUT_RATE_VERTEX });
-        //Tangents
-        pipelineCreation.vertexInput.addVertexAttribute({ 1, 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT });
-        pipelineCreation.vertexInput.addVertexStream({ 1, 16, VK_VERTEX_INPUT_RATE_VERTEX });
-        //Normal
-        pipelineCreation.vertexInput.addVertexAttribute({ 2, 2, 0, VK_FORMAT_R32G32B32_SFLOAT });
-        pipelineCreation.vertexInput.addVertexStream({ 2, 12, VK_VERTEX_INPUT_RATE_VERTEX });
-        //texCoord
-        pipelineCreation.vertexInput.addVertexAttribute({ 3, 3, 0, VK_FORMAT_R32G32_SFLOAT });
-        pipelineCreation.vertexInput.addVertexStream({ 3, 8, VK_VERTEX_INPUT_RATE_VERTEX });
 
         //Render pass
         pipelineCreation.renderPass = gpu.getSwapchainOutput();
@@ -363,17 +361,19 @@ int main(int argc, char** argv)
 
         //Descriptor set layout.
         DescriptorSetLayoutCreation cubeRLLCreation{};
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, "LocalConstants" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, 1, "MaterialConstant" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 1, "diffuseTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, 1, "roughnessMetalnessTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, 1, "occlusionTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, 1, "emissiveTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, 1, "normalTexture" });
-
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, VK_SHADER_STAGE_ALL_GRAPHICS, "LocalConstants" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, 1, VK_SHADER_STAGE_ALL_GRAPHICS, "MaterialConstant" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "diffuseTexture" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "roughnessMetalnessTexture" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "occlusionTexture" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "emissiveTexture" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "normalTexture" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7, 1, VK_SHADER_STAGE_VERTEX_BIT, "Vertices" });
         //Setting it into pipeline.
         cubeDSL = gpu.createDescriptorSetLayout(cubeRLLCreation);
         pipelineCreation.addDescriptorSetLayout(cubeDSL);
+
+        cubePipeline = gpu.createPipeline(pipelineCreation);
 
         //Constant buffer
         BufferCreation uniformBufferCreation;
@@ -382,415 +382,422 @@ int main(int argc, char** argv)
             .setName("cubeCB");
         cubeCB = gpu.createBuffer(uniformBufferCreation);
 
-        cubePipeline = gpu.createPipeline(pipelineCreation);
-        glTF::Scene& rootGLTFScene = scene.scenes[scene.scene];
-
-        Array<int32_t> nodeParents;
-        nodeParents.init(allocator, scene.nodesCount, scene.nodesCount);
-
         Array<uint32_t> nodeStack;
         nodeStack.init(allocator, 8);
 
-        Array<mat4s> nodeMatrix;
-        nodeMatrix.init(allocator, scene.nodesCount, scene.nodesCount);
+        //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
+        Array<int32_t> nodeParents2;
+        nodeParents2.init(allocator, cgltfData->nodes_count);
+        Array<cgltf_node> nodeStack2;
+        nodeStack2.init(allocator, cgltfData->nodes_count);
 
-        for (uint32_t nodeIndex = 0; nodeIndex < rootGLTFScene.nodesCount; ++nodeIndex)
+        Array<mat4s> nodeMatrix2;
+        nodeMatrix2.init(allocator, cgltfData->nodes_count, cgltfData->nodes_count);
+
+        //Adding all the root nodes to the array.
+        for (uint32_t sceneIndex = 0; sceneIndex < cgltfData->scenes_count; ++sceneIndex)
         {
-            uint32_t rootNode = rootGLTFScene.nodes[nodeIndex];
-            nodeParents[rootNode] = -1;
-            nodeStack.push(rootNode);
+            cgltf_scene scene = cgltfData->scenes[sceneIndex];
+            for (uint32_t parentIndex = 0; parentIndex < scene.nodes_count; ++parentIndex)
+            {
+                cgltf_node* parentNode = scene.nodes[parentIndex];
+                nodeParents2.push(-1);
+                nodeStack2.push(*parentNode);
+            }
         }
 
-        while (nodeStack.size)
+        for (uint32_t sceneIndex = 0; sceneIndex < cgltfData->scenes_count; ++sceneIndex)
         {
-            uint32_t nodeIndex = nodeStack.back();
-            nodeStack.pop();
-            glTF::Node& node = scene.nodes[nodeIndex];
-
-            mat4s localMatrix{};
-
-            if (node.matrixCount)
+            for (uint32_t nodeIndex = 0; nodeIndex < nodeStack2.size; ++nodeIndex)
             {
-                //CGLM and glTF have the same matrix layout, just memcpy it.
-                memcpy(&localMatrix, node.matrix, sizeof(mat4s));
-            }
-            else
-            {
-                vec3s nodeScale = { 1.f, 1.f, 1.f };
-                if (node.scaleCount != 0)
+                cgltf_node currentNode = nodeStack2[nodeIndex];
+
+                mat4s localMatrix = glms_mat4_identity();
+
+                if (currentNode.has_matrix)
                 {
-                    VOID_ASSERT(node.scaleCount == 3);
-                    nodeScale = vec3s{ node.scale[0], node.scale[1], node.scale[2] };
-                }
-
-                vec3s nodeTranslation = { 0.f, 0.f, 0.f };
-                if (node.translationCount)
-                {
-                    VOID_ASSERT(node.translationCount == 3);
-                    nodeTranslation = vec3s{ node.translation[0], node.translation[1], node.translation[2] };
-                }
-
-                //Rotation is written as a plain quaterion.
-                versors nodeRotation = glms_quat_identity();
-                if (node.rotationCount)
-                {
-                    VOID_ASSERT(node.translationCount == 4);
-                    nodeRotation = glms_quat_init(node.rotation[0], node.rotation[1], node.rotation[2], node.rotation[3]);
-                }
-
-                Transform transform;
-                transform.translation = nodeTranslation;
-                transform.scale = nodeScale;
-                transform.rotation = nodeRotation;
-
-                localMatrix = transform.calculateMatrix();
-            }
-
-            nodeMatrix[nodeIndex] = localMatrix;
-
-            for (uint32_t childIndex = 0; childIndex < node.childrenCount; ++childIndex)
-            {
-                uint32_t childNodeIndex = node.children[childIndex];
-                nodeParents[childNodeIndex] = nodeIndex;
-                nodeStack.push(childNodeIndex);
-            }
-
-            if (node.mesh == glTF::INVALID_INT_VALUE)
-            {
-                continue;
-            }
-
-            glTF::Mesh& mesh = scene.meshes[node.mesh];
-
-            mat4s finalMatrix = localMatrix;
-            int32_t nodeParent = nodeParents[nodeIndex];
-            while (nodeParent != -1)
-            {
-                finalMatrix = glms_mat4_mul(nodeMatrix[nodeParent], finalMatrix);
-                nodeParent = nodeParents[nodeParent];
-            }
-
-            //Final SRT composition
-            for (uint32_t primitiveIndex = 0; primitiveIndex < mesh.primitiveCount; ++primitiveIndex)
-            {
-                MeshDraw meshDraw{};
-
-                meshDraw.materialData.model = finalMatrix;
-
-                glTF::MeshPrimitive& meshPrimitive = mesh.primitives[primitiveIndex];
-
-                glTF::Accessor& indicesAccessor = scene.accessors[meshPrimitive.indices];
-                VOID_ASSERT(indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ||
-                    indicesAccessor.componentType == glTF::Accessor::UNSIGNED_SHORT);
-                meshDraw.indexType = indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
-
-                BufferResource& indicesBufferGPU = buffers[indicesAccessor.bufferView];
-                meshDraw.indexBuffer = indicesBufferGPU.handle;
-                meshDraw.indexOffset = indicesAccessor.byteOffset == glTF::INVALID_INT_VALUE ? 0 : indicesAccessor.byteOffset;
-                meshDraw.count = indicesAccessor.count;
-                VOID_ASSERT((meshDraw.count % 3) == 0);
-
-                int32_t positionAccessorIndex = gltfGetAttributeAccessorIndex(meshPrimitive.attributes, meshPrimitive.attributeCount, "POSITION");
-                int32_t tangentAccessorIndex = gltfGetAttributeAccessorIndex(meshPrimitive.attributes, meshPrimitive.attributeCount, "TANGENT");
-                int32_t normalAccessorIndex = gltfGetAttributeAccessorIndex(meshPrimitive.attributes, meshPrimitive.attributeCount, "NORMAL");
-                int32_t texcoordAccessorIndex = gltfGetAttributeAccessorIndex(meshPrimitive.attributes, meshPrimitive.attributeCount, "TEXCOORD_0");
-
-                vec3s* positionData = nullptr;
-                uint32_t* indexData32 = reinterpret_cast<uint32_t*>(getBufferData(scene.bufferViews, indicesAccessor.bufferView, buffersData));
-                uint16_t* indexData16 = reinterpret_cast<uint16_t*>(indexData32);
-                uint32_t vertexCount = 0;
-
-                if (positionAccessorIndex != -1)
-                {
-                    glTF::Accessor& positionAccessor = scene.accessors[positionAccessorIndex];
-                    BufferResource& positionBufferGPU = buffers[positionAccessor.bufferView];
-
-                    vertexCount = positionAccessor.count;
-
-                    meshDraw.positionBuffer = positionBufferGPU.handle;
-                    meshDraw.positionOffset = positionAccessor.byteOffset == glTF::INVALID_INT_VALUE ? 0 : positionAccessor.byteOffset;
-
-                    positionData = reinterpret_cast<vec3s*>(getBufferData(scene.bufferViews, positionAccessor.bufferView, buffersData));
+                    //CGLM and glTF have the same matrix layout, just memcpy it.
+                    memcpy(&localMatrix, currentNode.matrix, sizeof(mat4s));
                 }
                 else
                 {
-                    VOID_ERROR("No position data found.");
-                    continue;
-                }
-
-                if (normalAccessorIndex != -1)
-                {
-                    glTF::Accessor& normalAccessor = scene.accessors[normalAccessorIndex];
-                    BufferResource& normalBufferGPU = buffers[normalAccessor.bufferView];
-
-                    meshDraw.normalBuffer = normalBufferGPU.handle;
-                    meshDraw.normalOffset = normalAccessor.byteOffset == glTF::INVALID_INT_VALUE ? 0 : normalAccessor.byteOffset;
-                }
-                else
-                {
-                    //NOTE: Should you try and compte this at run time?
-                    Array<vec3s> normalsArray{};
-                    normalsArray.init(allocator, vertexCount, vertexCount);
-                    memset(normalsArray.data, 0, normalsArray.size * sizeof(vec3s));
-
-                    uint32_t indexCount = meshDraw.count;
-                    for (uint32_t index = 0; index < indexCount; index += 3)
+                    vec3s nodeScale = { 1.f, 1.f, 1.f };
+                    if (currentNode.has_scale)
                     {
-                        uint32_t i0 = indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ? indexData32[index] : indexData16[index];
-                        uint32_t i1 = indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ? indexData32[index + 1] : indexData16[index + 1];
-                        uint32_t i2 = indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ? indexData32[index + 2] : indexData16[index + 2];
-
-                        vec3s p0 = positionData[i0];
-                        vec3s p1 = positionData[i1];
-                        vec3s p2 = positionData[i2];
-
-                        vec3s a = glms_vec3_sub(p1, p0);
-                        vec3s b = glms_vec3_sub(p2, p0);
-
-                        vec3s normal = glms_cross(a, b);
-
-                        normalsArray[i0] = glms_vec3_add(normalsArray[i0], normal);
-                        normalsArray[i1] = glms_vec3_add(normalsArray[i1], normal);
-                        normalsArray[i2] = glms_vec3_add(normalsArray[i2], normal);
+                        nodeScale = vec3s{ currentNode.scale[0], currentNode.scale[1], currentNode.scale[2] };
                     }
 
-                    for (uint32_t vertex = 0; vertex < vertexCount; ++vertex)
+                    vec3s nodeTranslation = { 0.f, 0.f, 0.f };
+                    if (currentNode.has_translation)
                     {
-                        normalsArray[vertex] = glms_normalize(normalsArray[vertex]);
+                        nodeTranslation = vec3s{ currentNode.translation[0], currentNode.translation[1], currentNode.translation[2] };
                     }
 
-                    BufferCreation normalCreation{};
-                    normalCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, normalsArray.size * sizeof(vec3s))
-                        .setName("normals")
-                        .setData(normalsArray.data);
-
-                    meshDraw.normalBuffer = gpu.createBuffer(normalCreation);
-                    meshDraw.normalOffset = 0;
-
-                    customMeshBuffers.push(meshDraw.normalBuffer);
-
-                    normalsArray.shutdown();
-                }
-
-                if (tangentAccessorIndex != -1)
-                {
-                    glTF::Accessor& tangentAccessor = scene.accessors[tangentAccessorIndex];
-                    BufferResource& tangentBufferGPU = buffers[tangentAccessor.bufferView];
-
-                    meshDraw.tangentBuffer = tangentBufferGPU.handle;
-                    meshDraw.tangentOffset = tangentAccessor.byteOffset == glTF::INVALID_INT_VALUE ? 0 : tangentAccessor.byteOffset;
-
-                    meshDraw.materialData.flags |= MaterialFeatures_TangentVertexAttribute;
-                }
-
-                if (texcoordAccessorIndex != -1)
-                {
-                    glTF::Accessor& texCooordAccessor = scene.accessors[texcoordAccessorIndex];
-                    BufferResource& texCoordBufferGPU = buffers[texCooordAccessor.bufferView];
-
-                    meshDraw.texcoordBuffer = texCoordBufferGPU.handle;
-                    meshDraw.texcoordOffset = texCooordAccessor.byteOffset == glTF::INVALID_INT_VALUE ? 0 : texCooordAccessor.byteOffset;
-
-                    meshDraw.materialData.flags |= MaterialFeatures_TexcoordVertexAttribute;
-                }
-
-                VOID_ASSERTM(meshPrimitive.material != glTF::INVALID_INT_VALUE, "Mesh with no material is not supported.");
-                glTF::Material& material = scene.materials[meshPrimitive.material];
-
-                //Descriptor set
-                DescriptorSetCreation dsCreation{};
-                dsCreation.setLayout(cubeDSL)
-                    .buffer(cubeCB, 0);
-
-                bufferCreation.reset()
-                    .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ResourceType::Type::DYNAMIC, sizeof(MaterialData))
-                    .setName("material");
-                meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
-                dsCreation.buffer(meshDraw.materialBuffer, 1);
-                if (material.pbrMetallicRoughness != nullptr)
-                {
-                    if (material.pbrMetallicRoughness->baseColourFactorCount != 0)
+                    //Rotation is written as a plain quaterion.
+                    versors nodeRotation = glms_quat_identity();
+                    if (currentNode.has_rotation)
                     {
-                        VOID_ASSERT(material.pbrMetallicRoughness->baseColourFactorCount == 4);
+                        nodeRotation = glms_quat_init(currentNode.rotation[0], currentNode.rotation[1], currentNode.rotation[2], currentNode.rotation[3]);
+                    }
 
-                        meshDraw.materialData.baseColourFactor =
+                    Transform transform;
+                    transform.reset();
+                    transform.translation = nodeTranslation;
+                    transform.scale = nodeScale;
+                    transform.rotation = nodeRotation;
+
+                    localMatrix = transform.calculateMatrix();
+                }
+
+                nodeMatrix2[nodeIndex] = localMatrix;
+
+                for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
+                {
+                    cgltf_node childNode = *currentNode.children[nodeIndex];
+                    nodeStack2.push(childNode);
+                    nodeParents2.push(nodeIndex);
+                }
+
+                mat4s finalMatrix = localMatrix;
+                int32_t parentNodeIndex = nodeParents2[nodeIndex];
+                while (parentNodeIndex != -1)
+                {
+                    finalMatrix = glms_mat4_mul(nodeMatrix2[parentNodeIndex], finalMatrix);
+                    parentNodeIndex = nodeParents2[parentNodeIndex];
+                }
+
+                cgltf_mesh* mesh2 = nodeStack2[nodeIndex].mesh;
+
+                //Final SRT composition
+                for (uint32_t primitiveIndex = 0; primitiveIndex < mesh2->primitives_count; ++primitiveIndex)
+                {
+                    MeshDraw meshDraw{};
+
+                    meshDraw.materialData.model = finalMatrix;
+
+                    cgltf_primitive meshPrimitive = mesh2->primitives[primitiveIndex];
+                    uint32_t attributeCount = meshPrimitive.attributes_count;
+
+                    const cgltf_accessor* possitionAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_position, 0);
+                    const cgltf_accessor* normalAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_normal, 0);
+                    const cgltf_accessor* tangentAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_tangent, 0);
+                    const cgltf_accessor* textureAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_texcoord, 0);
+
+                    vec3s* positionData = nullptr;
+                    uint32_t vertexCount = meshPrimitive.attributes[0].data->count;
+
+                    //NOTE: We need to correctly handle uint16_t type indices 
+                    uint32_t stackPrimitveMarker = scratchAllocator.getMarker();
+                    Array<void*> indexes;
+                    indexes.init(&scratchAllocator, meshPrimitive.indices->count, meshPrimitive.indices->count);
+                    cgltf_accessor_unpack_indices(meshPrimitive.indices, indexes.data, 4, indexes.size);
+                    componentType = meshPrimitive.indices->component_type;
+                    meshIndices.appendArray(indexes);
+
+                    Array<float> scratch;
+                    scratch.init(&scratchAllocator, vertexCount * 4, vertexCount * 4);
+
+                    Array<Vertices> vertex;
+                    vertex.init(&scratchAllocator, vertexCount, vertexCount);
+                    if (possitionAccessor)
+                    {
+                        VOID_ASSERT(cgltf_num_components(possitionAccessor->type) == 3);
+                        cgltf_accessor_unpack_floats(possitionAccessor, scratch.data, vertexCount * 3);
+
+                        for (size_t j = 0; j < vertexCount; ++j)
                         {
-                            material.pbrMetallicRoughness->baseColourFactor[0],
-                            material.pbrMetallicRoughness->baseColourFactor[1],
-                            material.pbrMetallicRoughness->baseColourFactor[2],
-                            material.pbrMetallicRoughness->baseColourFactor[3]
+                            vertex[j].position[0] = scratch[j * 3 + 0];
+                            vertex[j].position[1] = scratch[j * 3 + 1];
+                            vertex[j].position[2] = scratch[j * 3 + 2];
+                        }
+                    }
+                    else
+                    {
+                        VOID_ERROR("No position data found.");
+                        continue;
+                    }
+
+                    if (normalAccessor)
+                    {
+                        VOID_ASSERT(cgltf_num_components(normalAccessor->type) == 3);
+                        cgltf_accessor_unpack_floats(normalAccessor, scratch.data, vertexCount * 3);
+
+                        for (size_t j = 0; j < vertexCount; ++j)
+                        {
+                            vertex[j].normal[0] = scratch[j * 3 + 0];
+                            vertex[j].normal[1] = scratch[j * 3 + 1];
+                            vertex[j].normal[2] = scratch[j * 3 + 2];
+                        }
+                    }
+                    else
+                    {
+                        VOID_ERROR("The model needs normals.");
+                    }
+
+                    if (tangentAccessor)
+                    {
+                        VOID_ASSERT(cgltf_num_components(tangentAccessor->type) == 4);
+                        cgltf_accessor_unpack_floats(tangentAccessor, scratch.data, vertexCount * 4);
+
+                        for (size_t j = 0; j < vertexCount; ++j)
+                        {
+                            vertex[j].tangent[0] = scratch[j * 3 + 0];
+                            vertex[j].tangent[1] = scratch[j * 3 + 1];
+                            vertex[j].tangent[2] = scratch[j * 3 + 2];
+                            vertex[j].tangent[3] = scratch[j * 3 + 3];
+                        }
+
+                        meshDraw.materialData.flags |= MaterialFeatures_TangentVertexAttribute;
+                    }
+
+                    if (textureAccessor)
+                    {
+                        VOID_ASSERT(cgltf_num_components(textureAccessor->type) == 2);
+                        cgltf_accessor_unpack_floats(textureAccessor, scratch.data, vertexCount * 2);
+
+                        for (size_t j = 0; j < vertexCount; ++j)
+                        {
+                            vertex[j].texCoord0[0] = scratch[j * 2 + 0];
+                            vertex[j].texCoord0[1] = scratch[j * 2 + 1];
+                        };
+
+                        meshDraw.materialData.flags |= MaterialFeatures_TexcoordVertexAttribute;
+                    }
+
+                    bufferCreation.reset()
+                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(vertex)* vertex.size)
+                        .setName("Vertices")
+                        .setData(vertex.data);
+                    BufferHandle verticesStorageBuffer = gpu.createBuffer(bufferCreation);
+
+                    DescriptorSetCreation dsCreation{};
+                    dsCreation.buffer(verticesStorageBuffer, 7)
+                        .setLayout(cubeDSL);
+
+                    scratchAllocator.freeMarker(stackPrimitveMarker);
+
+                    //cgltf_primitive meshPrimitive = mesh2->primitives[primitiveIndex];
+                    cgltf_material* material = meshPrimitive.material;
+                    VOID_ASSERTM(material != nullptr, "The model mesh materials can't be null.\n");
+
+                    //Descriptor set
+                    dsCreation.setLayout(cubeDSL)
+                              .buffer(cubeCB, 0);
+
+                    bufferCreation.reset()
+                                  .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ResourceType::Type::DYNAMIC, sizeof(MaterialData))
+                                  .setName("material");
+                    meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
+                    dsCreation.buffer(meshDraw.materialBuffer, 1);
+
+                    if (material->has_pbr_metallic_roughness)
+                    {
+                        if (material->pbr_metallic_roughness.base_color_factor[0] != 0)
+                        {
+                            meshDraw.materialData.baseColourFactor =
+                            {
+                                material->pbr_metallic_roughness.base_color_factor[0],
+                                material->pbr_metallic_roughness.base_color_factor[1],
+                                material->pbr_metallic_roughness.base_color_factor[2],
+                                material->pbr_metallic_roughness.base_color_factor[3]
+                            };
+                        }
+                        else
+                        {
+                            meshDraw.materialData.baseColourFactor = { 1.f, 1.f, 1.f, 1.f };
+                        }
+
+                        if (material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
+                        {
+                            cgltf_texture* textureInfo = material->pbr_metallic_roughness.base_color_texture.texture;
+                            SamplerHandle samplerHandle = dummySampler;
+
+                            uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                            TextureResource& textureGPU = images2[imageIndex];
+
+                            if (textureInfo->sampler)
+                            {
+                                uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
+                                SamplerResource& samplerGPU = samplers2[sampleIndex];
+                                gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                                samplerHandle = samplerGPU.handle;
+                            }
+
+                            dsCreation.textureSampler(textureGPU.handle, samplerHandle, 2);
+
+                            meshDraw.materialData.flags |= MaterialFeatures_ColourTexture;
+                        }
+                        else
+                        {
+                            dsCreation.textureSampler(dummyTexture, dummySampler, 2);
+                        }
+
+                        if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
+                        {
+                            cgltf_texture* textureInfo = material->pbr_metallic_roughness.metallic_roughness_texture.texture;
+                            SamplerHandle samplerHandle = dummySampler;
+
+                            uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                            TextureResource& textureGPU = images2[imageIndex];
+
+                            if (textureInfo->sampler)
+                            {
+                                uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
+                                SamplerResource& samplerGPU = samplers2[sampleIndex];
+                                gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                                samplerHandle = samplerGPU.handle;
+                            }
+
+                            dsCreation.textureSampler(textureGPU.handle, samplerHandle, 3);
+
+                            meshDraw.materialData.flags |= MaterialFeatures_RoughnessTexture;
+                        }
+                        else
+                        {
+                            dsCreation.textureSampler(dummyTexture, dummySampler, 3);
+                        }
+
+                        if (material->has_pbr_metallic_roughness)
+                        {
+                            meshDraw.materialData.metallicFactor = material->pbr_metallic_roughness.metallic_factor;
+                        }
+                        else
+                        {
+                            meshDraw.materialData.metallicFactor = 1.0f;
+                        }
+
+                        if (material->has_pbr_metallic_roughness)
+                        {
+                            meshDraw.materialData.roughnessFactor = material->pbr_metallic_roughness.roughness_factor;
+                        }
+                        else
+                        {
+                            meshDraw.materialData.roughnessFactor = 1.0f;
+                        }
+                    }
+
+                    if (material->occlusion_texture.texture != nullptr)
+                    {
+                        cgltf_texture* textureInfo = material->occlusion_texture.texture;
+                        SamplerHandle samplerHandle = dummySampler;
+
+                        uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                        TextureResource& textureGPU = images2[imageIndex];
+
+                        if (textureInfo->sampler)
+                        {
+                            uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
+                            SamplerResource& samplerGPU = samplers2[sampleIndex];
+                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                            samplerHandle = samplerGPU.handle;
+                        }
+
+                        dsCreation.textureSampler(textureGPU.handle, samplerHandle, 4);
+
+                        meshDraw.materialData.occlusionFactor = material->occlusion_texture.scale !=
+                            glTF::INVALID_FLOAT_VALUE ?
+                            material->occlusion_texture.scale :
+                            1.f;
+
+                        meshDraw.materialData.flags |= MaterialFeatures_OcclusionTexture;
+                    }
+                    else
+                    {
+                        meshDraw.materialData.occlusionFactor = 1.f;
+                        dsCreation.textureSampler(dummyTexture, dummySampler, 4);
+                    }
+
+                    if (material->emissive_texture.texture != nullptr)
+                    {
+                        cgltf_texture* textureInfo = material->emissive_texture.texture;
+                        SamplerHandle samplerHandle = dummySampler;
+
+                        uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                        TextureResource& textureGPU = images2[imageIndex];
+
+                        if (textureInfo->sampler)
+                        {
+                            uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
+                            SamplerResource& samplerGPU = samplers2[sampleIndex];
+                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                            samplerHandle = samplerGPU.handle;
+                        }
+
+                        dsCreation.textureSampler(textureGPU.handle, samplerHandle, 5);
+
+                        meshDraw.materialData.flags |= MaterialFeatures_EmissiveTexture;
+
+                        //TODO: Is this always tide to the emissive texture?
+                        meshDraw.materialData.emissiveFactor = vec3s
+                        {
+                            material->emissive_factor[0],
+                            material->emissive_factor[1],
+                            material->emissive_factor[2]
                         };
                     }
                     else
                     {
-                        meshDraw.materialData.baseColourFactor = { 1.f, 1.f, 1.f, 1.f };
+                        dsCreation.textureSampler(dummyTexture, dummySampler, 5);
                     }
 
-                    if (material.pbrMetallicRoughness->baseColourTexture != nullptr)
+                    if (material->normal_texture.texture != nullptr)
                     {
-                        glTF::Texture& diffuseTexture = scene.textures[material.pbrMetallicRoughness->baseColourTexture->index];
-                        TextureResource& diffuseTextureGPU = images[diffuseTexture.source];
-
+                        cgltf_texture* textureInfo = material->normal_texture.texture;
                         SamplerHandle samplerHandle = dummySampler;
-                        if (diffuseTexture.sampler != glTF::INVALID_INT_VALUE)
+
+                        uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                        TextureResource& textureGPU = images2[imageIndex];
+
+                        if (textureInfo->sampler)
                         {
-                            samplerHandle = samplers[diffuseTexture.sampler].handle;
+                            uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
+                            SamplerResource& samplerGPU = samplers2[sampleIndex];
+                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                            samplerHandle = samplerGPU.handle;
                         }
 
-                        dsCreation.textureSampler(diffuseTextureGPU.handle, samplerHandle, 2);
+                        dsCreation.textureSampler(textureGPU.handle, samplerHandle, 6);
 
-                        meshDraw.materialData.flags |= MaterialFeatures_ColourTexture;
+                        meshDraw.materialData.flags |= MaterialFeatures_NormalTexture;
                     }
                     else
                     {
-                        dsCreation.textureSampler(dummyTexture, dummySampler, 2);
+                        dsCreation.textureSampler(dummyTexture, dummySampler, 6);
                     }
 
-                    if (material.pbrMetallicRoughness->metallicRoughnessTexture != nullptr)
-                    {
-                        glTF::Texture& roughnessTexture = scene.textures[material.pbrMetallicRoughness->metallicRoughnessTexture->index];
-                        TextureResource& roughnessTextureGPU = images[roughnessTexture.source];
-
-                        SamplerHandle samplerHandle = dummySampler;
-                        if (roughnessTexture.sampler != glTF::INVALID_INT_VALUE)
-                        {
-                            samplerHandle = samplers[roughnessTexture.sampler].handle;
-                        }
-
-                        dsCreation.textureSampler(roughnessTextureGPU.handle, samplerHandle, 3);
-
-                        meshDraw.materialData.flags |= MaterialFeatures_RoughnessTexture;
-                    }
-                    else
-                    {
-                        dsCreation.textureSampler(dummyTexture, dummySampler, 3);
-                    }
-
-                    if (material.pbrMetallicRoughness->metallicFactor != glTF::INVALID_FLOAT_VALUE)
-                    {
-                        meshDraw.materialData.metallicFactor = material.pbrMetallicRoughness->metallicFactor;
-                    }
-                    else
-                    {
-                        meshDraw.materialData.metallicFactor = 1.0f;
-                    }
-
-                    if (material.pbrMetallicRoughness->roughnessFactor != glTF::INVALID_FLOAT_VALUE)
-                    {
-                        meshDraw.materialData.roughnessFactor = material.pbrMetallicRoughness->roughnessFactor;
-                    }
-                    else
-                    {
-                        meshDraw.materialData.roughnessFactor = 1.0f;
-                    }
+                    meshDraw.descriptorSet = gpu.createDescriptorSet(dsCreation);
+                    meshDraws.push(meshDraw);
                 }
-
-                if (material.occlusionTexture != nullptr)
-                {
-                    glTF::Texture& occlusionTexture = scene.textures[material.occlusionTexture->index];
-
-                    //NOTE: This could be the same as the roughness texture but for now we treat it as a seperate texture.
-                    TextureResource& occlusionTextureGPU = images[occlusionTexture.source];
-
-                    SamplerHandle samplerHandle = dummySampler;
-                    if (occlusionTexture.sampler != glTF::INVALID_INT_VALUE)
-                    {
-                        samplerHandle = samplers[occlusionTexture.sampler].handle;
-                    }
-
-                    dsCreation.textureSampler(occlusionTextureGPU.handle, samplerHandle, 4);
-
-                    meshDraw.materialData.occlusionFactor = material.occlusionTexture->strength !=
-                        glTF::INVALID_FLOAT_VALUE ?
-                        material.occlusionTexture->strength :
-                        1.f;
-                    meshDraw.materialData.flags |= MaterialFeatures_OcclusionTexture;
-                }
-                else
-                {
-                    meshDraw.materialData.occlusionFactor = 1.f;
-                    dsCreation.textureSampler(dummyTexture, dummySampler, 4);
-                }
-
-                if (material.emissiveFactorCount != 0)
-                {
-                    meshDraw.materialData.emissiveFactor = vec3s
-                    {
-                        material.emissiveFactor[0],
-                        material.emissiveFactor[1],
-                        material.emissiveFactor[2]
-                    };
-                }
-
-                if (material.emissiveTexture != nullptr)
-                {
-                    glTF::Texture& emissiveTexture = scene.textures[material.emissiveTexture->index];
-                    //NOTE: This could be the same as the roughness texture but for now we treat it as a seperate texture.
-                    TextureResource& emissiveTextureGPU = images[emissiveTexture.source];
-
-                    SamplerHandle samplerHandle = dummySampler;
-                    if (emissiveTexture.sampler != glTF::INVALID_INT_VALUE)
-                    {
-                        samplerHandle = samplers[emissiveTexture.sampler].handle;
-                    }
-
-                    dsCreation.textureSampler(emissiveTextureGPU.handle, samplerHandle, 5);
-
-                    meshDraw.materialData.flags |= MaterialFeatures_EmissiveTexture;
-                }
-                else
-                {
-                    dsCreation.textureSampler(dummyTexture, dummySampler, 5);
-                }
-
-                if (material.normalTexture != nullptr)
-                {
-                    glTF::Texture& normalTexture = scene.textures[material.normalTexture->index];
-                    TextureResource& normalTextureGPU = images[normalTexture.source];
-
-                    SamplerHandle samplerHandle = dummySampler;
-                    if (normalTexture.sampler != glTF::INVALID_INT_VALUE)
-                    {
-                        samplerHandle = samplers[normalTexture.sampler].handle;
-                    }
-
-                    dsCreation.textureSampler(normalTextureGPU.handle, samplerHandle, 6);
-
-                    meshDraw.materialData.flags |= MaterialFeatures_NormalTexture;
-                }
-                else
-                {
-                    dsCreation.textureSampler(dummyTexture, dummySampler, 6);
-                }
-
-                meshDraw.descriptorSet = gpu.createDescriptorSet(dsCreation);
-                meshDraws.push(meshDraw);
             }
         }
 
-        nodeParents.shutdown();
-        nodeStack.shutdown();
-        nodeMatrix.shutdown();
-
-        rX = 0.f;
-        rY = 0.f;
+        nodeParents2.shutdown();
+        nodeStack2.shutdown();
+        nodeMatrix2.shutdown();
     }
 
-    for (uint32_t bufferIndex = 0; bufferIndex < scene.buffersCount; ++bufferIndex)
-    {
-        void* buffer = buffersData[bufferIndex];
-        allocator->deallocate(buffer);
-    }
-    buffersData.shutdown();
+    DescriptorSetCreation dsCreation{};
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(meshIndices)* meshIndices.size)
+        .setData(meshIndices.data)
+        .setName("Indices");
+
+    //if (componentType == cgltf_component_type_r_16u)
+    //{
+    //    bufferCreation.setData(reinterpret_cast<uint16_t*>(meshIndices.data));
+    //}
+    //else
+    //{
+    //    bufferCreation.setData(reinterpret_cast<uint32_t*>(meshIndices.data));
+    //}
+
+    BufferHandle indexBufferHandle = gpu.createBuffer(bufferCreation);
 
     int64_t beginFrameTick = timeNow();
 
     vec3s eye = vec3s{ 0.f, 2.5f, 2.f };
     vec3s look = vec3s{ 0.f, 0.f, -1.f };
     vec3s right = vec3s{ 1.f, 0.f, 0.f };
-
-    float yaw = 0.f;
-    float pitch = 0.f;
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
@@ -841,64 +848,6 @@ int main(int argc, char** argv)
             void* cbData = gpu.mapBuffer(cbMap);
             if (cbData)
             {
-                //if (inputHandler.isMouseDown(MouseButtons::MOUSE_BUTTON_RIGHT) && ImGui::GetIO().WantCaptureMouse == false)
-                //{
-                //    pitch += (inputHandler.mousePosition.y - (Window::instance()->width / 2.f)) * deltaTime;
-                //    yaw += (inputHandler.mousePosition.x - (Window::instance()->height / 2.f)) * deltaTime;
-
-                //    pitch = clamp(pitch, -60.f, 60.f);
-
-                //    if (yaw > 360.f)
-                //    {
-                //        yaw -= 360.f;
-                //    }
-
-                //    mat3s rxm = glms_mat4_pick3(glms_rotate_make(glm_rad(-pitch), vec3s{ 1.f, 0.f, 0.f }));
-                //    mat3s rym = glms_mat4_pick3(glms_rotate_make(glm_rad(-yaw), vec3s{ 0.f, 1.f, 0.f }));
-
-                //    look = glms_mat3_mulv(rxm, vec3s{ 0.f, 0.f, -1.f });
-                //    look = glms_mat3_mulv(rym, look);
-
-                //    right = glms_cross(look, vec3s{ 0.f, 1.f, 0.f });
-                //}
-
-                //if (inputHandler.isKeyDown(KEY_W))
-                //{
-                //    eye = glms_vec3_add(eye, glms_vec3_scale(look, 5.f * deltaTime));
-                //}
-                //else if (inputHandler.isKeyDown(KEY_S))
-                //{
-                //    eye = glms_vec3_sub(eye, glms_vec3_scale(look, 5.f * deltaTime));
-                //}
-
-                //if (inputHandler.isKeyDown(KEY_D))
-                //{
-                //    eye = glms_vec3_add(eye, glms_vec3_scale(right, 5.f * deltaTime));
-                //}
-                //else if (inputHandler.isKeyDown(KEY_A))
-                //{
-                //    eye = glms_vec3_sub(eye, glms_vec3_scale(right, 5.f * deltaTime));
-                //}
-
-                //mat4s view = glms_lookat(eye, glms_vec3_add(eye, look), vec3s{ 0.f, 1.f, 0.f });
-                //mat4s projection = glms_perspective(glm_rad(60.f), gpu.swapchainWidth * 1.f / gpu.swapchainHeight, 1000.f, 0.01f);
-
-                ////Calculate view projection matrix
-                //mat4s viewPerspective = glms_mat4_mul(projection, view);
-
-                //globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
-
-                ////TODO: Match these name with what's in the shader.
-                //UniformData uniformData{};
-                //uniformData.viewPerspective = viewPerspective;
-                //uniformData.globalModel = globalModel;
-                //uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
-                //uniformData.light = vec4s{ 2.f, 2.f, 0.f, 1.f };
-
-                //memcpy(cbData, &uniformData, sizeof(UniformData));
-
-                //gpu.unmapBuffer(cbMap);
-                
                 globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
                 inputHandler.newFrame();
@@ -913,8 +862,6 @@ int main(int argc, char** argv)
                 //eye not used in shader.
                 uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
                 uniformData.light = vec4s{ 2.f, 2.f, 0.f, 1.f };
-
-                //uniformData.viewPerspective.m11 *= -1;
 
                 memcpy(cbData, &uniformData, sizeof(UniformData));
 
@@ -943,28 +890,7 @@ int main(int argc, char** argv)
 
                 gpu.unmapBuffer(materialMap);
 
-                gpuCommands->bindVertexBuffer(meshDraw.positionBuffer, 0, meshDraw.positionOffset);
-                gpuCommands->bindVertexBuffer(meshDraw.normalBuffer, 2, meshDraw.normalOffset);
-
-                if (meshDraw.materialData.flags & MaterialFeatures_TangentVertexAttribute)
-                {
-                    gpuCommands->bindVertexBuffer(meshDraw.tangentBuffer, 1, meshDraw.tangentOffset);
-                }
-                else
-                {
-                    gpuCommands->bindVertexBuffer(dummyAttributeBuffer, 1, 0);
-                }
-
-                if (meshDraw.materialData.flags & MaterialFeatures_TexcoordVertexAttribute)
-                {
-                    gpuCommands->bindVertexBuffer(meshDraw.texcoordBuffer, 3, meshDraw.texcoordOffset);
-                }
-                else
-                {
-                    gpuCommands->bindVertexBuffer(dummyAttributeBuffer, 3, 0);
-                }
-
-                gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.indexType);
+                gpuCommands->bindIndexBuffer(indexBufferHandle, 0, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
                 gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0);
 
                 gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
@@ -994,12 +920,6 @@ int main(int argc, char** argv)
         gpu.destroyBuffer(meshDraw.materialBuffer);
     }
 
-    for (uint32_t meshIndex = 0; customMeshBuffers.size; ++meshIndex)
-    {
-        gpu.destroyBuffer(customMeshBuffers[meshIndex]);
-    }
-    customMeshBuffers.shutdown();
-
     gpu.destroyBuffer(dummyAttributeBuffer);
 
     gpu.destroyTexture(dummyTexture);
@@ -1018,14 +938,12 @@ int main(int argc, char** argv)
 
     renderer.shutdown();
 
-    samplers.shutdown();
-    images.shutdown();
-    buffers.shutdown();
+    //vertices.shutdown();
+    meshIndices.shutdown();
+    samplers2.shutdown();
+    images2.shutdown();
 
     resourceNameBuffer.shutdown();
-
-    //NOTE: we can't destroy this sooner as textures and buffer hold a pointers to the names stored here.
-    gltfFree(scene);
 
     inputHandler.shutdown();
     Window::instance()->shutdown();
