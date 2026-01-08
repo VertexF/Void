@@ -9,10 +9,10 @@ uint MaterialFeatures_TexcoordVertexAttribute = 1 << 6;
 
 struct Vertices
 {
-    vec3 position;
-    vec4 tangent;
-    vec3 normal;
-    vec2 texCoord0;
+    float tx, ty, tz, tw;
+    float px, py, pz;
+    float nx, ny, nz;
+    float tu, tv;
 };
 
 layout(std140, binding = 0) uniform LocalConstants
@@ -37,7 +37,7 @@ layout(std140, binding = 1) uniform MaterialConstant
     uint flags;
 };
 
-layout(std140, binding = 7) readonly buffer VertexData
+layout(binding = 7) readonly buffer VertexData
 {
     Vertices vertexData[];
 };
@@ -49,17 +49,22 @@ layout(location = 3) out vec4 vPosition;
 
 void main()
 {
-    gl_Position = viewPerspective * globalModel * model * vec4(vertexData[gl_VertexIndex].position, 1);
-    vPosition = globalModel * model * vec4(vertexData[gl_VertexIndex].position, 1.0);
+    vec3 position = vec3(vertexData[gl_VertexIndex].px, vertexData[gl_VertexIndex].py, vertexData[gl_VertexIndex].pz);
+    vec4 tagent = vec4(vertexData[gl_VertexIndex].tx, vertexData[gl_VertexIndex].ty, vertexData[gl_VertexIndex].tz, vertexData[gl_VertexIndex].tw);
+    vec3 normal = vec3(vertexData[gl_VertexIndex].nx, vertexData[gl_VertexIndex].ny, vertexData[gl_VertexIndex].nz);
+    vec2 texcoord = vec2(vertexData[gl_VertexIndex].tu, vertexData[gl_VertexIndex].tv);
+
+    gl_Position = viewPerspective * globalModel * vec4(position, 1.0);
+    vPosition =  globalModel * vec4(position, 1.0);
 
     if ((flags & MaterialFeatures_TexcoordVertexAttribute) != 0)
     {
-        vTexcoord0 = vertexData[gl_VertexIndex].texCoord0;
+        vTexcoord0 = texcoord;
     }
-    vNormal = mat3(modelInv) * vertexData[gl_VertexIndex].normal;
+    vNormal = mat3(modelInv) * normal;
 
     if ((flags & MaterialFeatures_TangentVertexAttribute) != 0) 
     {
-        vTangent = vertexData[gl_VertexIndex].tangent;
+        vTangent = tagent;
     }
 }

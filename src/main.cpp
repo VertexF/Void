@@ -86,28 +86,20 @@ namespace
 
     struct alignas(16) Vertices
     {
-        vec3 position;
-        vec4 tangent;
-        vec3 normal;
-        vec2 texCoord0;
+        float tangent[4];
+        float position[3];
+        float normals[3];
+        float texCoord0[2];
     };
 
     struct MeshDraw
     {
         BufferHandle indexBuffer;
-        BufferHandle positionBuffer;
-        BufferHandle tangentBuffer;
-        BufferHandle normalBuffer;
-        BufferHandle texcoordBuffer;
 
         BufferHandle materialBuffer;
         MaterialData materialData;
 
         uint32_t indexOffset;
-        uint32_t positionOffset;
-        uint32_t tangentOffset;
-        uint32_t normalOffset;
-        uint32_t texcoordOffset;
 
         uint32_t count;
 
@@ -246,6 +238,161 @@ int main(int argc, char** argv)
     memcpy(GLTFFile, argv[1], strlen(argv[1]));
     fileNameFromPath(GLTFFile);
 
+    glTF::glTF scene = gltfLoadFile(GLTFFile);
+
+    StringBuffer resourceNameBufferIndex;
+    resourceNameBufferIndex.init(void_kilo(64), allocator);
+
+    Array<SamplerResource> samplers;
+    samplers.init(allocator, scene.samplersCount);
+
+    for (uint32_t samplerIndex = 0; samplerIndex < scene.samplersCount; ++samplerIndex)
+    {
+        glTF::Sampler& sampler = scene.samplers[samplerIndex];
+
+        char* samplerName = resourceNameBufferIndex.appendUseF("Sampler_%u", samplerIndex);
+
+        SamplerCreation creation;
+        creation.minFilter = sampler.minFilter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        creation.magFilter = sampler.magFilter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        creation.name = samplerName;
+
+        SamplerResource* samplerResource = renderer.createSampler(creation);
+        VOID_ASSERT(samplerResource != nullptr);
+
+        samplers.push(*samplerResource);
+    }
+
+    Array<void*> buffersData;
+    buffersData.init(allocator, scene.buffersCount);
+
+    for (uint32_t bufferIndex = 0; bufferIndex < scene.buffersCount; ++bufferIndex)
+    {
+        glTF::Buffer& buffer = scene.buffers[bufferIndex];
+
+        FileReadResult bufferData = fileReadBinary(buffer.uri.data, allocator);
+        buffersData.push(bufferData.data);
+    }
+
+    Array<BufferResource> buffers;
+    buffers.init(allocator, scene.bufferViewCount);
+
+    for (uint32_t bufferIndex = 0; bufferIndex < scene.bufferViewCount; ++bufferIndex)
+    {
+        char* bufferName = nullptr;
+        uint32_t bufferSize = 0;
+        uint8_t* data = getBufferData(scene.bufferViews, bufferIndex, buffersData, &bufferSize, &bufferName);
+
+        //NOTE: The target attribute of a BufferView is not mandatory, so we prepare for both uses.
+        VkBufferUsageFlags flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+
+        if (bufferName == nullptr)
+        {
+            bufferName = resourceNameBufferIndex.appendUseF("buffer_%u", bufferIndex);
+        }
+        else
+        {
+            //NOTE: Some buffers might have the same name, which causes issues in the renderer cache
+            bufferName = resourceNameBufferIndex.appendUseF("%s_%u", bufferName, bufferIndex);
+        }
+
+        BufferResource* bufferResource = renderer.createBuffer(flags, ResourceType::Type::IMMUTABLE, bufferSize, data, bufferName);
+        VOID_ASSERT(bufferResource != nullptr);
+
+        buffers.push(*bufferResource);
+    }
+
+    Array<MeshDraw> meshDraws;
+    meshDraws.init(allocator, scene.meshCount);
+
+    Array<BufferHandle> customMeshBuffers{};
+    customMeshBuffers.init(allocator, 8);
+
+    uint32_t vertexCountActual = 0;
+
+    {
+        glTF::Scene& rootGLTFScene = scene.scenes[scene.scene];
+
+        Array<int32_t> nodeParents;
+        nodeParents.init(allocator, scene.nodesCount, scene.nodesCount);
+
+        Array<uint32_t> nodeStack;
+        nodeStack.init(allocator, 8);
+
+        Array<mat4s> nodeMatrix;
+        nodeMatrix.init(allocator, scene.nodesCount, scene.nodesCount);
+
+        for (uint32_t nodeIndex = 0; nodeIndex < rootGLTFScene.nodesCount; ++nodeIndex)
+        {
+            uint32_t rootNode = rootGLTFScene.nodes[nodeIndex];
+            nodeParents[rootNode] = -1;
+            nodeStack.push(rootNode);
+        }
+
+        while (nodeStack.size)
+        {
+            uint32_t nodeIndex = nodeStack.back();
+            nodeStack.pop();
+            glTF::Node& node = scene.nodes[nodeIndex];
+
+            for (uint32_t childIndex = 0; childIndex < node.childrenCount; ++childIndex)
+            {
+                uint32_t childNodeIndex = node.children[childIndex];
+                nodeParents[childNodeIndex] = nodeIndex;
+                nodeStack.push(childNodeIndex);
+            }
+
+            if (node.mesh == glTF::INVALID_INT_VALUE)
+            {
+                continue;
+            }
+
+            glTF::Mesh& mesh = scene.meshes[node.mesh];
+
+            //Final SRT composition
+            for (uint32_t primitiveIndex = 0; primitiveIndex < mesh.primitiveCount; ++primitiveIndex)
+            {
+                MeshDraw meshDraw{};
+
+                glTF::MeshPrimitive& meshPrimitive = mesh.primitives[primitiveIndex];
+
+                glTF::Accessor& indicesAccessor = scene.accessors[meshPrimitive.indices];
+                VOID_ASSERT(indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ||
+                    indicesAccessor.componentType == glTF::Accessor::UNSIGNED_SHORT);
+                meshDraw.indexType = indicesAccessor.componentType == glTF::Accessor::UNSIGNED_INT ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+
+                BufferResource& indicesBufferGPU = buffers[indicesAccessor.bufferView];
+                meshDraw.indexBuffer = indicesBufferGPU.handle;
+                meshDraw.indexOffset = indicesAccessor.byteOffset == glTF::INVALID_INT_VALUE ? 0 : indicesAccessor.byteOffset;
+                meshDraw.count = indicesAccessor.count;
+
+                VOID_ASSERT((meshDraw.count % 3) == 0);
+
+                int32_t positionAccessorIndex = gltfGetAttributeAccessorIndex(meshPrimitive.attributes, meshPrimitive.attributeCount, "POSITION");
+
+                vec3s* positionData = nullptr;
+                uint32_t* indexData32 = reinterpret_cast<uint32_t*>(getBufferData(scene.bufferViews, indicesAccessor.bufferView, buffersData));
+                uint16_t* indexData16 = reinterpret_cast<uint16_t*>(indexData32);
+
+                if (positionAccessorIndex != -1)
+                {
+                    glTF::Accessor& positionAccessor = scene.accessors[positionAccessorIndex];
+                    BufferResource& positionBufferGPU = buffers[positionAccessor.bufferView];
+
+                    vertexCountActual++;
+
+                    positionData = reinterpret_cast<vec3s*>(getBufferData(scene.bufferViews, positionAccessor.bufferView, buffersData));
+                }
+
+                meshDraws.push(meshDraw);
+            }
+        }
+
+        nodeParents.shutdown();
+        nodeStack.shutdown();
+        nodeMatrix.shutdown();
+    }
+
     cgltf_data* cgltfData = nullptr;
 
     cgltf_options options{};
@@ -279,6 +426,9 @@ int main(int argc, char** argv)
 
         images2.push(*textureResources);
     }
+
+    //NOTE: resource working directory
+    directoryChange(cwd.path);
 
     TextureCreation textureCreation{};
     uint32_t zeroValue = 0;
@@ -322,8 +472,8 @@ int main(int argc, char** argv)
     //NOTE: resource working directory
     directoryChange(cwd.path);
 
-    Array<MeshDraw> meshDraws;
-    meshDraws.init(allocator, cgltfData->meshes_count);
+    //Array<MeshDraw> meshDraws;
+    //meshDraws.init(allocator, cgltfData->meshes_count);
 
     //We have no idea if it's 
     Array<void*> meshIndices;
@@ -397,15 +547,16 @@ int main(int argc, char** argv)
         //Adding all the root nodes to the array.
         for (uint32_t sceneIndex = 0; sceneIndex < cgltfData->scenes_count; ++sceneIndex)
         {
-            cgltf_scene scene = cgltfData->scenes[sceneIndex];
-            for (uint32_t parentIndex = 0; parentIndex < scene.nodes_count; ++parentIndex)
+            cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
+            for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
             {
-                cgltf_node* parentNode = scene.nodes[parentIndex];
+                cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
                 nodeParents2.push(-1);
                 nodeStack2.push(*parentNode);
             }
         }
 
+        mat4s finalMatrix = glms_mat4_identity();
         for (uint32_t sceneIndex = 0; sceneIndex < cgltfData->scenes_count; ++sceneIndex)
         {
             for (uint32_t nodeIndex = 0; nodeIndex < nodeStack2.size; ++nodeIndex)
@@ -465,15 +616,21 @@ int main(int argc, char** argv)
                     finalMatrix = glms_mat4_mul(nodeMatrix2[parentNodeIndex], finalMatrix);
                     parentNodeIndex = nodeParents2[parentNodeIndex];
                 }
+            }
+        }
 
+        for (uint32_t sceneIndex = 0; sceneIndex < cgltfData->scenes_count; ++sceneIndex)
+        {
+            for (uint32_t nodeIndex = 0; nodeIndex < nodeStack2.size; ++nodeIndex)
+            {
                 cgltf_mesh* mesh2 = nodeStack2[nodeIndex].mesh;
 
                 //Final SRT composition
                 for (uint32_t primitiveIndex = 0; primitiveIndex < mesh2->primitives_count; ++primitiveIndex)
                 {
-                    MeshDraw meshDraw{};
+                    //MeshDraw meshDraw{};
 
-                    meshDraw.materialData.model = finalMatrix;
+                    meshDraws[primitiveIndex].materialData.model = finalMatrix;
 
                     cgltf_primitive meshPrimitive = mesh2->primitives[primitiveIndex];
                     uint32_t attributeCount = meshPrimitive.attributes_count;
@@ -483,26 +640,29 @@ int main(int argc, char** argv)
                     const cgltf_accessor* tangentAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_tangent, 0);
                     const cgltf_accessor* textureAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_texcoord, 0);
 
-                    vec3s* positionData = nullptr;
-                    uint32_t vertexCount = meshPrimitive.attributes[0].data->count;
+                    uint32_t vertexCount = possitionAccessor->count;
 
                     //NOTE: We need to correctly handle uint16_t type indices 
                     uint32_t stackPrimitveMarker = scratchAllocator.getMarker();
                     Array<void*> indexes;
                     indexes.init(&scratchAllocator, meshPrimitive.indices->count, meshPrimitive.indices->count);
-                    cgltf_accessor_unpack_indices(meshPrimitive.indices, indexes.data, 4, indexes.size);
-                    componentType = meshPrimitive.indices->component_type;
-                    meshIndices.appendArray(indexes);
 
-                    Array<float> scratch;
-                    scratch.init(&scratchAllocator, vertexCount * 4, vertexCount * 4);
+                    meshDraws[primitiveIndex].indexOffset = meshPrimitive.indices->offset == INT32_MAX ? 0 : meshPrimitive.indices->offset;
+                    meshDraws[primitiveIndex].count = meshPrimitive.indices->count;
+
+                    componentType = meshPrimitive.indices->component_type;
+                    cgltf_accessor_unpack_indices(meshPrimitive.indices, indexes.data, 4, indexes.size);
+                    meshIndices.appendArray(indexes);
 
                     Array<Vertices> vertex;
                     vertex.init(&scratchAllocator, vertexCount, vertexCount);
                     if (possitionAccessor)
                     {
+                        Array<float> scratch;
+                        cgltf_size accessFloatSize = cgltf_num_components(normalAccessor->type);
+                        scratch.init(&scratchAllocator, possitionAccessor->count * accessFloatSize, possitionAccessor->count * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(possitionAccessor->type) == 3);
-                        cgltf_accessor_unpack_floats(possitionAccessor, scratch.data, vertexCount * 3);
+                        cgltf_accessor_unpack_floats(possitionAccessor, scratch.data, possitionAccessor->count * accessFloatSize);
 
                         for (size_t j = 0; j < vertexCount; ++j)
                         {
@@ -519,14 +679,17 @@ int main(int argc, char** argv)
 
                     if (normalAccessor)
                     {
+                        Array<float> scratch;
+                        cgltf_size accessFloatSize = cgltf_num_components(normalAccessor->type);
+                        scratch.init(&scratchAllocator, normalAccessor->count * accessFloatSize, normalAccessor->count * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(normalAccessor->type) == 3);
-                        cgltf_accessor_unpack_floats(normalAccessor, scratch.data, vertexCount * 3);
+                        cgltf_accessor_unpack_floats(normalAccessor, scratch.data, normalAccessor->count * accessFloatSize);
 
                         for (size_t j = 0; j < vertexCount; ++j)
                         {
-                            vertex[j].normal[0] = scratch[j * 3 + 0];
-                            vertex[j].normal[1] = scratch[j * 3 + 1];
-                            vertex[j].normal[2] = scratch[j * 3 + 2];
+                            vertex[j].normals[0] = scratch[j * 3 + 0];
+                            vertex[j].normals[1] = scratch[j * 3 + 1];
+                            vertex[j].normals[2] = scratch[j * 3 + 2];
                         }
                     }
                     else
@@ -536,8 +699,11 @@ int main(int argc, char** argv)
 
                     if (tangentAccessor)
                     {
+                        Array<float> scratch;
+                        cgltf_size accessFloatSize = cgltf_num_components(tangentAccessor->type);
+                        scratch.init(&scratchAllocator, tangentAccessor->count * accessFloatSize, tangentAccessor->count * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(tangentAccessor->type) == 4);
-                        cgltf_accessor_unpack_floats(tangentAccessor, scratch.data, vertexCount * 4);
+                        cgltf_accessor_unpack_floats(tangentAccessor, scratch.data, tangentAccessor->count * accessFloatSize);
 
                         for (size_t j = 0; j < vertexCount; ++j)
                         {
@@ -547,13 +713,16 @@ int main(int argc, char** argv)
                             vertex[j].tangent[3] = scratch[j * 3 + 3];
                         }
 
-                        meshDraw.materialData.flags |= MaterialFeatures_TangentVertexAttribute;
+                        meshDraws[primitiveIndex].materialData.flags |= MaterialFeatures_TangentVertexAttribute;
                     }
 
                     if (textureAccessor)
                     {
+                        Array<float> scratch;
+                        cgltf_size accessFloatSize = cgltf_num_components(textureAccessor->type);
+                        scratch.init(&scratchAllocator, textureAccessor->count * accessFloatSize, textureAccessor->count * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(textureAccessor->type) == 2);
-                        cgltf_accessor_unpack_floats(textureAccessor, scratch.data, vertexCount * 2);
+                        cgltf_accessor_unpack_floats(textureAccessor, scratch.data, textureAccessor->count * accessFloatSize);
 
                         for (size_t j = 0; j < vertexCount; ++j)
                         {
@@ -561,16 +730,16 @@ int main(int argc, char** argv)
                             vertex[j].texCoord0[1] = scratch[j * 2 + 1];
                         };
 
-                        meshDraw.materialData.flags |= MaterialFeatures_TexcoordVertexAttribute;
+                        meshDraws[primitiveIndex].materialData.flags |= MaterialFeatures_TexcoordVertexAttribute;
                     }
 
+                    DescriptorSetCreation dsCreation{};
                     bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(vertex)* vertex.size)
+                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(Vertices) * vertex.size)
                         .setName("Vertices")
                         .setData(vertex.data);
                     BufferHandle verticesStorageBuffer = gpu.createBuffer(bufferCreation);
 
-                    DescriptorSetCreation dsCreation{};
                     dsCreation.buffer(verticesStorageBuffer, 7)
                         .setLayout(cubeDSL);
 
@@ -581,20 +750,19 @@ int main(int argc, char** argv)
                     VOID_ASSERTM(material != nullptr, "The model mesh materials can't be null.\n");
 
                     //Descriptor set
-                    dsCreation.setLayout(cubeDSL)
-                              .buffer(cubeCB, 0);
+                    dsCreation.buffer(cubeCB, 0);
 
                     bufferCreation.reset()
                                   .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ResourceType::Type::DYNAMIC, sizeof(MaterialData))
                                   .setName("material");
-                    meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
-                    dsCreation.buffer(meshDraw.materialBuffer, 1);
+                    meshDraws[primitiveIndex].materialBuffer = gpu.createBuffer(bufferCreation);
+                    dsCreation.buffer(meshDraws[primitiveIndex].materialBuffer, 1);
 
                     if (material->has_pbr_metallic_roughness)
                     {
                         if (material->pbr_metallic_roughness.base_color_factor[0] != 0)
                         {
-                            meshDraw.materialData.baseColourFactor =
+                            meshDraws[primitiveIndex].materialData.baseColourFactor =
                             {
                                 material->pbr_metallic_roughness.base_color_factor[0],
                                 material->pbr_metallic_roughness.base_color_factor[1],
@@ -604,7 +772,7 @@ int main(int argc, char** argv)
                         }
                         else
                         {
-                            meshDraw.materialData.baseColourFactor = { 1.f, 1.f, 1.f, 1.f };
+                            meshDraws[primitiveIndex].materialData.baseColourFactor = { 1.f, 1.f, 1.f, 1.f };
                         }
 
                         if (material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
@@ -619,13 +787,13 @@ int main(int argc, char** argv)
                             {
                                 uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
                                 SamplerResource& samplerGPU = samplers2[sampleIndex];
-                                gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                                //gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                                 samplerHandle = samplerGPU.handle;
                             }
 
                             dsCreation.textureSampler(textureGPU.handle, samplerHandle, 2);
 
-                            meshDraw.materialData.flags |= MaterialFeatures_ColourTexture;
+                            meshDraws[primitiveIndex].materialData.flags |= MaterialFeatures_ColourTexture;
                         }
                         else
                         {
@@ -644,13 +812,13 @@ int main(int argc, char** argv)
                             {
                                 uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
                                 SamplerResource& samplerGPU = samplers2[sampleIndex];
-                                gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                                //gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                                 samplerHandle = samplerGPU.handle;
                             }
 
                             dsCreation.textureSampler(textureGPU.handle, samplerHandle, 3);
 
-                            meshDraw.materialData.flags |= MaterialFeatures_RoughnessTexture;
+                            meshDraws[primitiveIndex].materialData.flags |= MaterialFeatures_RoughnessTexture;
                         }
                         else
                         {
@@ -659,20 +827,20 @@ int main(int argc, char** argv)
 
                         if (material->has_pbr_metallic_roughness)
                         {
-                            meshDraw.materialData.metallicFactor = material->pbr_metallic_roughness.metallic_factor;
+                            meshDraws[primitiveIndex].materialData.metallicFactor = material->pbr_metallic_roughness.metallic_factor;
                         }
                         else
                         {
-                            meshDraw.materialData.metallicFactor = 1.0f;
+                            meshDraws[primitiveIndex].materialData.metallicFactor = 1.0f;
                         }
 
                         if (material->has_pbr_metallic_roughness)
                         {
-                            meshDraw.materialData.roughnessFactor = material->pbr_metallic_roughness.roughness_factor;
+                            meshDraws[primitiveIndex].materialData.roughnessFactor = material->pbr_metallic_roughness.roughness_factor;
                         }
                         else
                         {
-                            meshDraw.materialData.roughnessFactor = 1.0f;
+                            meshDraws[primitiveIndex].materialData.roughnessFactor = 1.0f;
                         }
                     }
 
@@ -688,22 +856,22 @@ int main(int argc, char** argv)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
                             SamplerResource& samplerGPU = samplers2[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                            //gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                             samplerHandle = samplerGPU.handle;
                         }
 
                         dsCreation.textureSampler(textureGPU.handle, samplerHandle, 4);
 
-                        meshDraw.materialData.occlusionFactor = material->occlusion_texture.scale !=
+                        meshDraws[primitiveIndex].materialData.occlusionFactor = material->occlusion_texture.scale !=
                             glTF::INVALID_FLOAT_VALUE ?
                             material->occlusion_texture.scale :
                             1.f;
 
-                        meshDraw.materialData.flags |= MaterialFeatures_OcclusionTexture;
+                        meshDraws[primitiveIndex].materialData.flags |= MaterialFeatures_OcclusionTexture;
                     }
                     else
                     {
-                        meshDraw.materialData.occlusionFactor = 1.f;
+                        meshDraws[primitiveIndex].materialData.occlusionFactor = 1.f;
                         dsCreation.textureSampler(dummyTexture, dummySampler, 4);
                     }
 
@@ -719,16 +887,16 @@ int main(int argc, char** argv)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
                             SamplerResource& samplerGPU = samplers2[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                            //gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                             samplerHandle = samplerGPU.handle;
                         }
 
                         dsCreation.textureSampler(textureGPU.handle, samplerHandle, 5);
 
-                        meshDraw.materialData.flags |= MaterialFeatures_EmissiveTexture;
+                        meshDraws[primitiveIndex].materialData.flags |= MaterialFeatures_EmissiveTexture;
 
                         //TODO: Is this always tide to the emissive texture?
-                        meshDraw.materialData.emissiveFactor = vec3s
+                        meshDraws[primitiveIndex].materialData.emissiveFactor = vec3s
                         {
                             material->emissive_factor[0],
                             material->emissive_factor[1],
@@ -752,21 +920,21 @@ int main(int argc, char** argv)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
                             SamplerResource& samplerGPU = samplers2[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
+                            //gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                             samplerHandle = samplerGPU.handle;
                         }
 
                         dsCreation.textureSampler(textureGPU.handle, samplerHandle, 6);
 
-                        meshDraw.materialData.flags |= MaterialFeatures_NormalTexture;
+                        meshDraws[primitiveIndex].materialData.flags |= MaterialFeatures_NormalTexture;
                     }
                     else
                     {
                         dsCreation.textureSampler(dummyTexture, dummySampler, 6);
                     }
 
-                    meshDraw.descriptorSet = gpu.createDescriptorSet(dsCreation);
-                    meshDraws.push(meshDraw);
+                    meshDraws[primitiveIndex].descriptorSet = gpu.createDescriptorSet(dsCreation);
+                    //meshDraws.push(meshDraw);
                 }
             }
         }
@@ -779,17 +947,17 @@ int main(int argc, char** argv)
     DescriptorSetCreation dsCreation{};
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(meshIndices)* meshIndices.size)
-        .setData(meshIndices.data)
+        //.setData(meshIndices.data)
         .setName("Indices");
 
-    //if (componentType == cgltf_component_type_r_16u)
-    //{
-    //    bufferCreation.setData(reinterpret_cast<uint16_t*>(meshIndices.data));
-    //}
-    //else
-    //{
-    //    bufferCreation.setData(reinterpret_cast<uint32_t*>(meshIndices.data));
-    //}
+    if (componentType == cgltf_component_type_r_16u)
+    {
+        bufferCreation.setData(reinterpret_cast<uint16_t*>(meshIndices.data));
+    }
+    else
+    {
+        bufferCreation.setData(reinterpret_cast<uint32_t*>(meshIndices.data));
+    }
 
     BufferHandle indexBufferHandle = gpu.createBuffer(bufferCreation);
 
@@ -890,7 +1058,8 @@ int main(int argc, char** argv)
 
                 gpu.unmapBuffer(materialMap);
 
-                gpuCommands->bindIndexBuffer(indexBufferHandle, 0, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+                gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.indexType);
+                //gpuCommands->bindIndexBuffer(indexBufferHandle, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
                 gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0);
 
                 gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
@@ -938,7 +1107,7 @@ int main(int argc, char** argv)
 
     renderer.shutdown();
 
-    //vertices.shutdown();
+    vertices.shutdown();
     meshIndices.shutdown();
     samplers2.shutdown();
     images2.shutdown();
