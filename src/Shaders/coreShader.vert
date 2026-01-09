@@ -37,7 +37,7 @@ layout(std140, binding = 1) uniform MaterialConstant
     uint flags;
 };
 
-layout(binding = 7) readonly buffer VertexData
+layout(std140, binding = 7) readonly buffer VertexData
 {
     Vertices vertexData[];
 };
