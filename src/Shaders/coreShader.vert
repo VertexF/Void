@@ -54,8 +54,8 @@ void main()
     vec3 normal = vec3(vertexData[gl_VertexIndex].nx, vertexData[gl_VertexIndex].ny, vertexData[gl_VertexIndex].nz);
     vec2 texcoord = vec2(vertexData[gl_VertexIndex].tu, vertexData[gl_VertexIndex].tv);
 
-    gl_Position = viewPerspective * globalModel * vec4(position, 1.0);
-    vPosition =  globalModel * vec4(position, 1.0);
+    gl_Position = viewPerspective * globalModel * model * vec4(position, 1.0);
+    vPosition =  globalModel * model * vec4(position, 1.0);
 
     if ((flags & MaterialFeatures_TexcoordVertexAttribute) != 0)
     {

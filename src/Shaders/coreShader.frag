@@ -113,7 +113,7 @@ vec3 encodeSRGB(vec3 colour)
 
 float heaviside(float value)
 {
-    if (value > 0.0) 
+    if (value > 0.0)
     {
         return 1.0;
     }
@@ -184,8 +184,7 @@ void main()
     if ((flags & MaterialFeatures_ColourTexture) != 0) 
     {
         vec4 albedo = texture(diffuseTexture, vTexcoord0);
-        baseColour.rgb *= decodeSRGB(albedo.rgb);
-        baseColour.a *= albedo.a;
+        baseColour *= vec4(decodeSRGB(albedo.rgb), albedo.a);
     }
 
     vec3 emissive = vec3(0);
@@ -233,6 +232,6 @@ void main()
     }
     else
     {
-        fragColour = vec4(baseColour.rgb, baseColour.a);
+        fragColour = baseColour;
     }
 }
