@@ -39,8 +39,6 @@ struct ImguiService
     void setStyle(ImguiStyles style);
 
     GPUDevice* gpu;
-
-    static constexpr const char* NAME = "Air_Imgui_Service";
 };
 
 //Application log

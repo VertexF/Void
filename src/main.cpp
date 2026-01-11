@@ -46,17 +46,11 @@
 
 namespace
 {
-
     //TODO: Figure out if you need this stuff.
-    BufferHandle cubeVB;
-    BufferHandle cubeIB;
     PipelineHandle cubePipeline;
     BufferHandle cubeCB;
     DescriptorSetLayoutHandle cubeDSL;
     //DescriptorSetLayoutHandle vertexDSL;
-
-    float rX;
-    float rY;
 
     enum MaterialFeatures
     {
@@ -138,47 +132,6 @@ namespace
             return localMatrix;
         }
     };
-
-    uint8_t* getBufferData(glTF::BufferView* bufferViews, uint32_t bufferIndex,
-                           Array<void*>& buffersData, uint32_t* bufferSize = nullptr,
-                           char** bufferName = nullptr)
-    {
-        glTF::BufferView& buffer = bufferViews[bufferIndex];
-
-        int32_t offset = buffer.byteOffset;
-        if (offset == glTF::INVALID_INT_VALUE)
-        {
-            offset = 0;
-        }
-
-        if (bufferName != nullptr)
-        {
-            *bufferName = buffer.name.data;
-        }
-
-        if (bufferSize != nullptr)
-        {
-            *bufferSize = buffer.byteLength;
-        }
-
-        uint8_t* data = reinterpret_cast<uint8_t*>(buffersData[buffer.buffer]) + offset;
-
-        return data;
-    }
-
-    int32_t gltfAccessorIndex(cgltf_attribute* attributes, uint32_t atributeCount, const char* attributeName)
-    {
-        for (uint32_t index = 0; index < atributeCount; ++index)
-        {
-            cgltf_attribute attribute = attributes[index];
-            if (strcmp(attribute.name, attributeName) == 0)
-            {
-                return attribute.index;
-            }
-        }
-
-        return -1;
-    }
 }
 
 int main(int argc, char** argv)
@@ -304,8 +257,8 @@ int main(int argc, char** argv)
         char* samplerName = resourceNameBuffer.appendUseF("Sampler_%u", samplerIndex);
 
         SamplerCreation creation;
-        creation.minFilter = sampler.min_filter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-        creation.magFilter = sampler.mag_filter == glTF::Sampler::Filter::LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        creation.minFilter = sampler.min_filter == cgltf_filter_type_linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        creation.magFilter = sampler.mag_filter == cgltf_filter_type_linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
         creation.name = samplerName;
 
         SamplerResource* samplerResource = renderer.createSampler(creation);
@@ -469,7 +422,6 @@ int main(int argc, char** argv)
                     meshDraw.materialData.model = finalMatrix;
 
                     cgltf_primitive meshPrimitive = mesh2->primitives[primitiveIndex];
-                    uint32_t attributeCount = meshPrimitive.attributes_count;
 
                     //Array<void*> indexes;
                     //indexes.init(&scratchAllocator, meshPrimitive.indices->count, meshPrimitive.indices->count);

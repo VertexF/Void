@@ -270,7 +270,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             uint32_t i = usedResources;
             ++usedResources;
 
-            descriptorWrite[i] = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            descriptorWrite[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite[i].pNext = nullptr;
             descriptorWrite[i].dstSet = vkDescriptorSet;
             //Use binding array to get final binding point.
             //const uint32_t bindingPoint = binding.start;
@@ -2083,7 +2084,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation, Descr
         if (creation.depthStencil.stencilEnable)
         {
             //TODO: add stencil
-            VOID_ASSERTM(false, "The stencil part of the depth stencil pipeline creation is set to true.");
+            VOID_ERROR("The stencil part of the depth stencil pipeline creation is set to true.");
         }
 
         pipelineInfo.pDepthStencilState = &depthStencil;

@@ -109,7 +109,7 @@ namespace PresentMode
     };
 }//PresentMode
 
-typedef enum ResourceState : uint8_t
+typedef enum ResourceState
 {
     RESOURCE_STATE_UNDEFINED = 0,
     RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER = 0x1,

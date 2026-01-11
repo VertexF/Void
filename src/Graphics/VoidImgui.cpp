@@ -27,64 +27,6 @@ namespace
 
     FlatHashMap<uint32_t, uint32_t> TEXTURE_TO_DESCRIPTOR_SET;
 
-    const char* VERTEX_SHADER_CODE =
-        "#version 450\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 UV;\n"
-        "layout(location = 2) in uvec4 colour;\n"
-        "layout(location = 0) out vec2 fragUV;\n"
-        "layout(location = 1) out vec4 fragColour;\n"
-        "layout(std140, binding = 0) uniform LocalConstants { mat4 projectionMatrix; };\n"
-        "void main()\n"
-        "{\n"
-        "   fragUV = UV;\n"
-        "   fragColour = colour / 255.0f;\n"
-        "   gl_Position = projectionMatrix * vec4(position.xy, 0, 1);\n"
-        "}\n";
-
-    const char* VERTEX_SHADER_CODE_BINDLESS =
-        "#version 450\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 UV;\n"
-        "layout(location = 2) in uvec4 colour;\n"
-        "layout(location = 0) out vec2 fragUV;\n"
-        "layout(location = 1) out vec4 fragColour;\n"
-        "layout(location = 2) flat out uint textureID;\n"
-        "layout(std140, binding = 0) uniform LocalConstants { mat4 projectionMatrix; };\n"
-        "void main()\n"
-        "{\n"
-        "   fragUV = UV;\n"
-        "   fragColour = colour / 255.0f;\n"
-        "   textureID = gl_InstanceIndex;\n"
-        "   gl_Position = projectionMatrix * vec4(position.xy, 0, 1);\n"
-        "}\n";
-
-    const char* FRAGMENT_SHADER_CODE =
-        "#version 450\n"
-        "#extension GL_EXT_nonuniform_qualifier : enable\n"
-        "layout(location = 0) in vec2 fragUV;\n"
-        "layout(location = 1) in vec4 fragColour;\n"
-        "layout(location = 0) out vec4 outColour;\n"
-        "layout(binding = 1) uniform sampler2D Texture;\n"
-        "void main()\n"
-        "{\n"
-        "   outColour = fragColour * texture(Texture, fragUV.st);\n"
-        "}\n";
-
-    const char* FRAGMENT_SHADER_CODE_BINDLESS =
-        "#version 450\n"
-        "#extension GL_EXT_nonuniform_qualifier : enable\n"
-        "layout(location = 0) in vec2 fragUV;\n"
-        "layout(location = 1) in vec4 fragColour;\n"
-        "layout(location = 2) flat in uint textureID;\n"
-        "layout(location = 0) out vec4 outColour;\n"
-        "#extension GL_EXT_nonuniform_qualifier : enable\n"
-        "layout(set = 1, binding = 10) uniform sampler2D textures[];\n"
-        "void main()\n"
-        "{\n"
-        "   outColour = fragColour * texture(textures[nonuniformEXT(textureID)], fragUV.st);\n"
-        "}\n";
-
     void setStyleDarkGold()
     {
         ImGuiStyle* style = &ImGui::GetStyle();
@@ -432,17 +374,18 @@ void ImguiService::init(void* configuration)
 
 void ImguiService::shutdown()
 {
+    vprint("The size is %d very late.\n", TEXTURE_TO_DESCRIPTOR_SET.size);
     FlatHashMapIterator it = TEXTURE_TO_DESCRIPTOR_SET.iteratorBegin();
     while (it.isValid())
     {
-        uint32_t resourceHandle = TEXTURE_TO_DESCRIPTOR_SET.get(it);
-        gpu->destroyDescriptorSet({ resourceHandle });
-
+        DescriptorSetHandle resourceHandle;
+        resourceHandle.index = TEXTURE_TO_DESCRIPTOR_SET.get(it);
+        gpu->destroyDescriptorSet(resourceHandle);
         TEXTURE_TO_DESCRIPTOR_SET.iteratorAdvance(it);
     }
-
+    
     TEXTURE_TO_DESCRIPTOR_SET.shutdown();
-
+    
     gpu->destroyBuffer(VB);
     gpu->destroyBuffer(IB);
     gpu->destroyBuffer(UI_CB);
