@@ -795,7 +795,7 @@ int main(int argc, char** argv)
             //Meaning that when we restart the event loop for rendering after an Window event the currentFrame mis-matches with what the actual currentFrame is.
             //This happens when submitting the main queue for some work. The only fix I could find is idling the main queue at the beginning of every frame.
             //For some reason this causes everything to remain in sync when an Window even happens.
-            //vkQueueWaitIdle(gpu.vulkanQueue);
+            vkQueueWaitIdle(gpu.vulkanQueue);
             gpu.newFrame();
 
             if (Window::instance()->resizeRequested)

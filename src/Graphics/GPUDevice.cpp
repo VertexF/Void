@@ -3144,7 +3144,7 @@ void GPUDevice::present()
 
     VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
 
-    if ((result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) && Window::instance()->resizeRequested)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || Window::instance()->resizeRequested)
     {
         //resized = false;
         resizeSwapchain();
