@@ -172,14 +172,14 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
             int newHeight{0};
             SDL_GetWindowSizeInPixels(Window::instance()->platformHandle, &newWidth, &newHeight);
 
-                //Update only if needed.
+            //Update only if needed.
             if (uint32_t(newWidth) != Window::instance()->width || uint32_t(newHeight) != Window::instance()->height)
             {
                 Window::instance()->resizeRequested = true;
                 Window::instance()->width = uint16_t(newWidth);
                 Window::instance()->height = uint16_t(newHeight);
 
-                    vprint("Resize to %u, %u\n", Window::instance()->width, Window::instance()->height);
+                vprint("Resize to %u, %u\n", Window::instance()->width, Window::instance()->height);
             }
             break;
             }

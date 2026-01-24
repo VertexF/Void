@@ -14,6 +14,7 @@
 #include "Foundation/String.hpp"
 #include "Foundation/Array.hpp"
 
+#include <vector>
 
 struct Allocator;
 struct CommandBuffer;
@@ -289,9 +290,12 @@ struct GPUDevice
 
     VkQueryPool vulkanTimestampQueryPool;
     //Per frame synchronisation
-    Array<VkSemaphore> vulkanRenderCompleteSemaphore;
-    Array<VkSemaphore> vulkanImageAcquiredSemaphore;
-    Array<VkFence> vulkanCommandBufferExecutedFence;
+    //Array<VkSemaphore> imageAvailableSemaphore;
+    //Array<VkSemaphore> renderFinishSemaphore;
+    //Array<VkFence> framesInFlight;
+    Array<VkSemaphore> imageAvailableSemaphore;
+    Array<VkSemaphore> renderFinishSemaphore;
+    Array<VkFence> framesInFlight;
 
     TextureHandle depthTexture;
 
@@ -300,7 +304,7 @@ struct GPUDevice
     VkSurfaceFormatKHR vulkanSurfaceFormat;
     VkPresentModeKHR vulkanPresentMode;
     VkSwapchainKHR vulkanSwapchain;
-    uint32_t vulkanSwapchainImageCount;
+    uint32_t swapchainImageCount;
 
     VkDebugReportCallbackEXT vulkanDebugCallback;
     VkDebugUtilsMessengerEXT vulkanDebugUtilsMessenger;

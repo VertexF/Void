@@ -8,6 +8,8 @@
 #include "Foundation/File.hpp"
 #include "Foundation/Numerics.hpp"
 
+#include "Application/Window.hpp"
+
 #define VMA_IMPLEMENTATION
 #include "vender/vk_mem_alloc.h"
 
@@ -69,7 +71,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 #endif // _WIN32
 
 #if defined(_MSC_VER)
-        //__debugbreak();
+        __debugbreak();
 #elif defined(__LINUX__)
         std::raise(SIGINT);
 #endif
@@ -449,7 +451,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         VkImageView framebufferAttachments[2];
         framebufferAttachments[1] = depthTextureVK->vkImageView;
 
-        for (size_t i = 0; i < gpu.vulkanSwapchainImageCount; ++i)
+        for (size_t i = 0; i < gpu.swapchainImageCount; ++i)
         {
             framebufferAttachments[0] = gpu.vulkanSwapchainImageViews[i];
             framebufferInfo.pAttachments = framebufferAttachments;
@@ -483,7 +485,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         region.imageExtent = { gpu.swapchainWidth, gpu.swapchainHeight };
 
         //Transition
-        for (size_t i = 0; i < gpu.vulkanSwapchainImageCount; ++i)
+        for (size_t i = 0; i < gpu.swapchainImageCount; ++i)
         {
             transitionImageLayout(commandBuffer->vkCommandBuffer, gpu.vulkanSwapchainImages[i], gpu.vulkanSurfaceFormat.format,
                 VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, false);
@@ -754,7 +756,7 @@ void CommandBufferRing::init(GPUDevice* newGPU)
 {
     gpu = newGPU;
 
-    imageThreadCount = MAX_THREADS * gpu->vulkanSwapchainImageCount;
+    imageThreadCount = MAX_THREADS * gpu->swapchainImageCount;
     commandBufferCount = imageThreadCount * BUFFER_PER_POOL;
     
     vulkanCommandPools.init(gpu->allocator, imageThreadCount, imageThreadCount);
@@ -1231,7 +1233,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     vkQueryPoolInfo.pNext = nullptr;
     vkQueryPoolInfo.flags = 0;
     vkQueryPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    vkQueryPoolInfo.queryCount = creation.GPUTimeQueriesPerFrame * 2u * vulkanSwapchainImageCount;
+    vkQueryPoolInfo.queryCount = creation.GPUTimeQueriesPerFrame * 2u * swapchainImageCount;
     vkQueryPoolInfo.pipelineStatistics = 0;
     result = vkCreateQueryPool(vulkanDevice, &vkQueryPoolInfo, vulkanAllocationCallbacks, &vulkanTimestampQueryPool);
 
@@ -1251,24 +1253,25 @@ void GPUDevice::init(const DeviceCreation& creation)
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    vulkanImageAcquiredSemaphore.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
-    vulkanRenderCompleteSemaphore.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
-    vulkanCommandBufferExecutedFence.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.pNext = nullptr;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (uint32_t i = 0; i < vulkanSwapchainImageCount; ++i)
+    imageAvailableSemaphore.init(allocator, swapchainImageCount, swapchainImageCount);
+    renderFinishSemaphore.init(allocator, swapchainImageCount, swapchainImageCount);
+    framesInFlight.init(allocator, swapchainImageCount, swapchainImageCount);
+
+    for (uint32_t i = 0; i < swapchainImageCount; ++i)
     {
-        vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &vulkanImageAcquiredSemaphore[i]);
-        vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &vulkanRenderCompleteSemaphore[i]);
+        vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &imageAvailableSemaphore[i]);
+        vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &renderFinishSemaphore[i]);
 
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.pNext = nullptr;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        vkCreateFence(vulkanDevice, &fenceInfo, vulkanAllocationCallbacks, &vulkanCommandBufferExecutedFence[i]);
+        vkCreateFence(vulkanDevice, &fenceInfo, vulkanAllocationCallbacks, &framesInFlight[i]);
     }
 
     gpuTimestampManager = reinterpret_cast<GPUTimestampManager*>(memory);
-    gpuTimestampManager->init(allocator, creation.GPUTimeQueriesPerFrame, vulkanSwapchainImageCount);
+    gpuTimestampManager->init(allocator, creation.GPUTimeQueriesPerFrame, swapchainImageCount);
 
     commandBufferRing.init(this);
 
@@ -1363,7 +1366,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     dynamicPerFrameSize = 1024 * 1024 * 10;
     BufferCreation buffCreation{};
     buffCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        ResourceType::Type::IMMUTABLE, dynamicPerFrameSize * vulkanSwapchainImageCount).setName("Dynamic_Persistent_Buffer");
+        ResourceType::Type::IMMUTABLE, dynamicPerFrameSize * swapchainImageCount).setName("Dynamic_Persistent_Buffer");
     dynamicBuffer = createBuffer(buffCreation);
 
     MapBufferParameters cbMap{};
@@ -1383,16 +1386,16 @@ void GPUDevice::shutdown()
     vkDeviceWaitIdle(vulkanDevice);
     commandBufferRing.shutdown();
 
-    for (uint32_t i = 0; i < vulkanSwapchainImageCount; ++i)
+    for (uint32_t i = 0; i < swapchainImageCount; ++i)
     {
-        vkDestroySemaphore(vulkanDevice, vulkanImageAcquiredSemaphore[i], vulkanAllocationCallbacks);
-        vkDestroySemaphore(vulkanDevice, vulkanRenderCompleteSemaphore[i], vulkanAllocationCallbacks);
-        vkDestroyFence(vulkanDevice, vulkanCommandBufferExecutedFence[i], vulkanAllocationCallbacks);
+        vkDestroySemaphore(vulkanDevice, imageAvailableSemaphore[i], vulkanAllocationCallbacks);
+        vkDestroySemaphore(vulkanDevice, renderFinishSemaphore[i], vulkanAllocationCallbacks);
+        vkDestroyFence(vulkanDevice, framesInFlight[i], vulkanAllocationCallbacks);
     }
 
-    vulkanRenderCompleteSemaphore.shutdown();
-    vulkanImageAcquiredSemaphore.shutdown();
-    vulkanCommandBufferExecutedFence.shutdown();
+    renderFinishSemaphore.shutdown();
+    imageAvailableSemaphore.shutdown();
+    framesInFlight.shutdown();
 
     gpuTimestampManager->shutdown();
 
@@ -2799,7 +2802,7 @@ void GPUDevice::setPresentMode(PresentMode::Types mode)
 void GPUDevice::frameCountersAdvanced()
 {
     previousFrame = currentFrame;
-    currentFrame = (currentFrame + 1) % vulkanSwapchainImageCount;
+    currentFrame = (currentFrame + 1) % swapchainImageCount;
 
     ++absoluteFrame;
 }
@@ -2851,7 +2854,12 @@ void GPUDevice::createSwapchain()
         swapchainExtent.height = clamp(swapchainExtent.height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
     }
 
-    vulkanSwapchainImageCount = surfaceCapabilities.minImageCount + 1;
+    swapchainImageCount = surfaceCapabilities.minImageCount + 1;
+
+    if (surfaceCapabilities.maxImageCount > 0 && swapchainImageCount > surfaceCapabilities.maxImageCount)
+    {
+        swapchainImageCount = surfaceCapabilities.maxImageCount;
+    }
 
     vprint("Create swapchain %u %u - saved %u %u, min image %u\n", swapchainExtent.width, swapchainExtent.height,
         swapchainWidth, swapchainHeight, surfaceCapabilities.minImageCount);
@@ -2862,7 +2870,7 @@ void GPUDevice::createSwapchain()
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = vulkanWindowSurface;
-    swapchainCreateInfo.minImageCount = vulkanSwapchainImageCount;
+    swapchainCreateInfo.minImageCount = swapchainImageCount;
     swapchainCreateInfo.imageFormat = vulkanSurfaceFormat.format;
     swapchainCreateInfo.imageExtent = swapchainExtent;
     swapchainCreateInfo.clipped = VK_TRUE;
@@ -2876,15 +2884,15 @@ void GPUDevice::createSwapchain()
     check(vkCreateSwapchainKHR(vulkanDevice, &swapchainCreateInfo, nullptr, &vulkanSwapchain));
 
     //Cache the swapchain image
-    vkGetSwapchainImagesKHR(vulkanDevice, vulkanSwapchain, &vulkanSwapchainImageCount, nullptr);
+    vkGetSwapchainImagesKHR(vulkanDevice, vulkanSwapchain, &swapchainImageCount, nullptr);
 
-    vulkanSwapchainImages.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
-    vkGetSwapchainImagesKHR(vulkanDevice, vulkanSwapchain, &vulkanSwapchainImageCount, vulkanSwapchainImages.data);
+    vulkanSwapchainImages.init(allocator, swapchainImageCount, swapchainImageCount);
+    vkGetSwapchainImagesKHR(vulkanDevice, vulkanSwapchain, &swapchainImageCount, vulkanSwapchainImages.data);
 
-    vulkanSwapchainImageViews.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
+    vulkanSwapchainImageViews.init(allocator, swapchainImageCount, swapchainImageCount);
 
-    vulkanSwapchainFramebuffers.init(allocator, vulkanSwapchainImageCount, vulkanSwapchainImageCount);
-    for (uint32_t imageCount = 0; imageCount < vulkanSwapchainImageCount; ++imageCount)
+    vulkanSwapchainFramebuffers.init(allocator, swapchainImageCount, swapchainImageCount);
+    for (uint32_t imageCount = 0; imageCount < swapchainImageCount; ++imageCount)
     {
         //Create an image view so we can render into it.
         VkImageViewCreateInfo viewInfo{};
@@ -2906,7 +2914,7 @@ void GPUDevice::createSwapchain()
 
 void GPUDevice::destroySwapchain()
 {
-    for (uint32_t imageCount = 0; imageCount < vulkanSwapchainImageCount; ++imageCount)
+    for (uint32_t imageCount = 0; imageCount < swapchainImageCount; ++imageCount)
     {
         vkDestroyImageView(vulkanDevice, vulkanSwapchainImageViews[imageCount], vulkanAllocationCallbacks);
         vkDestroyFramebuffer(vulkanDevice, vulkanSwapchainFramebuffers[imageCount], vulkanAllocationCallbacks);
@@ -2921,7 +2929,7 @@ void GPUDevice::destroySwapchain()
 
 void GPUDevice::resizeSwapchain()
 {
-    vkDeviceWaitIdle(vulkanDevice);
+    check(vkDeviceWaitIdle(vulkanDevice));
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanPhysicalDevice, vulkanWindowSurface, &surfaceCapabilities);
@@ -2962,8 +2970,6 @@ void GPUDevice::resizeSwapchain()
     RenderPassCreation swapchainPassCreation{};
     swapchainPassCreation.setType(RenderPassType::SWAPCHAIN).setName("Swapchain");
     vulkanCreateSwapchainPass(*this, swapchainPassCreation, vkSwapchainPass);
-
-    vkDeviceWaitIdle(vulkanDevice);
 }
 
 //Map/Unmap
@@ -3055,17 +3061,19 @@ void GPUDevice::queueCommandBuffer(CommandBuffer* commandBuffer)
 void GPUDevice::newFrame()
 {
     //Fence wait and reset.
-    VkFence* renderCompleteFence = &vulkanCommandBufferExecutedFence[currentFrame];
-
-    vkWaitForFences(vulkanDevice, 1, renderCompleteFence, VK_TRUE, UINT64_MAX);
-
-    vkResetFences(vulkanDevice, 1, renderCompleteFence);
-
-    VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, vulkanImageAcquiredSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
+    vkWaitForFences(vulkanDevice, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
+    vulkanImageIndex = UINT32_MAX;
+    VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         resizeSwapchain();
     }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+    {
+        VOID_ERROR("Failed to acquire swapchain image at image index %d", vulkanImageIndex);
+    }
+
+    vkResetFences(vulkanDevice, 1, &framesInFlight[currentFrame]);
 
     //Command pool rest.
     commandBufferRing.resetPools(currentFrame);
@@ -3090,9 +3098,6 @@ void GPUDevice::newFrame()
 
 void GPUDevice::present()
 {
-    VkSemaphore* renderCompleteSemaphore = &vulkanRenderCompleteSemaphore[currentFrame];
-    VkFence* renderCompleteFence = &vulkanCommandBufferExecutedFence[currentFrame];
-
     //Copy all commands
     VkCommandBuffer enqueuedCommandBuffers[4]{};
     for (uint32_t comBuffer = 0; comBuffer < numQueuedCommandBuffers; ++comBuffer)
@@ -3110,7 +3115,7 @@ void GPUDevice::present()
     }
 
     //Subit command buffer.
-    VkSemaphore waitSemaphores[] = { vulkanImageAcquiredSemaphore[currentFrame] };
+    VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
     VkSubmitInfo submitInfo{};
@@ -3120,22 +3125,35 @@ void GPUDevice::present()
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = numQueuedCommandBuffers;
     submitInfo.pCommandBuffers = enqueuedCommandBuffers;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = renderCompleteSemaphore;
 
-    vkQueueSubmit(vulkanQueue, 1, &submitInfo, *renderCompleteFence);
+    VkSemaphore signalSemaphores[] = { renderFinishSemaphore[currentFrame] };
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    check(vkQueueSubmit(vulkanQueue, 1, &submitInfo, framesInFlight[currentFrame]));
 
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = renderCompleteSemaphore;
+    presentInfo.pWaitSemaphores = signalSemaphores;
 
     VkSwapchainKHR swapchains[] = { vulkanSwapchain };
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapchains;
     presentInfo.pImageIndices = &vulkanImageIndex;
-    presentInfo.pResults = nullptr;
+
     VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
+
+    if ((result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) && Window::instance()->resizeRequested)
+    {
+        //resized = false;
+        resizeSwapchain();
+        Window::instance()->resizeRequested = false;
+    }
+    else if (result != VK_SUCCESS)
+    {
+        VOID_ERROR("Failed or present swapchain image!");
+    }
 
     numQueuedCommandBuffers = 0;
 
@@ -3180,20 +3198,7 @@ void GPUDevice::present()
         gpuTimestampReset = false;
     }
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resized)
-    {
-        resized = false;
-        resizeSwapchain();
-
-        //Advanced frame counters that are skipped during this frame.
-        frameCountersAdvanced();
-
-        return;
-    }
-
-    //This is called inside resizedSwapchain as well to work correctly.
     frameCountersAdvanced();
-
 
     //Resource deletion  using reverse iteration and swap with last element.
     if (resourceDeletionQueue.size > 0)

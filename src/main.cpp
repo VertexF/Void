@@ -43,6 +43,7 @@
 #include <cgltf.h>
 
 #include <stdlib.h>
+#include <SDL3/SDL.h>
 
 namespace
 {
@@ -215,6 +216,7 @@ int main(int argc, char** argv)
     Array<TextureResource> images2;
     images2.init(allocator, cgltfData->images_count);
 
+    //TODO: Do something different for .glb files.
     for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
     {
         cgltf_image image = cgltfData->images[imageIndex];
@@ -289,6 +291,7 @@ int main(int argc, char** argv)
     Array<Vertices> vertices;
     vertices.init(allocator, 256);
 
+    BufferHandle currentIndexBuffer = INVALID_BUFFER;
     {
         //Create pipeline state
         PipelineCreation pipelineCreation;
@@ -432,11 +435,14 @@ int main(int argc, char** argv)
 
                     componentType = meshPrimitive.indices->component_type;
 
-                    bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, meshPrimitive.indices->buffer_view->buffer->size)
-                        .setName("indices")
-                        .setData((uint8_t*)meshPrimitive.indices->buffer_view->buffer->data);
-                    BufferHandle currentIndexBuffer = gpu.createBuffer(bufferCreation);
+                    if (currentIndexBuffer.index == INVALID_BUFFER.index)
+                    {
+                        bufferCreation.reset()
+                            .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, meshPrimitive.indices->buffer_view->buffer->size)
+                            .setName("indices")
+                            .setData(meshPrimitive.indices->buffer_view->buffer->data);
+                        currentIndexBuffer = gpu.createBuffer(bufferCreation);
+                    }
 
                     meshDraw.indexBuffer = currentIndexBuffer;
 
@@ -763,33 +769,42 @@ int main(int argc, char** argv)
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
-    gameCamera.init(true, 10.f, 6.0f, 0.1f);
+    gameCamera.init(true, 7.f, 3.0f, 0.1f);
 
     float modelScale = 1.f;
+    bool fullscreen = false;
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
-
         inputHandler.onEvent();
-
+        if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
+        {
+            Window::instance()->exitRequested = true;
+        }
+        else if (inputHandler.isKeyJustReleased(Keys::KEY_F))
+        {
+            fullscreen = !fullscreen;
+            Window::instance()->setFullscreen(fullscreen);
+        }
+ 
         //New Frame
         if (Window::instance()->minimised == false)
         {
+            //On Windows with an Nvidia graphics card and using SDL3 the synchronisation drifts when a window events when I'm using synchronisation1. 
+            //This seem to be happening because the presentation engine or something internal driver thing is causing the frame to continue to push frames to the screen.
+            //Meaning that when we restart the event loop for rendering after an Window event the currentFrame mis-matches with what the actual currentFrame is.
+            //This happens when submitting the main queue for some work. The only fix I could find is idling the main queue at the beginning of every frame.
+            //For some reason this causes everything to remain in sync when an Window even happens.
+            //vkQueueWaitIdle(gpu.vulkanQueue);
             gpu.newFrame();
 
             if (Window::instance()->resizeRequested)
             {
                 gpu.resize(Window::instance()->width, Window::instance()->height);
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
-                Window::instance()->resizeRequested = false;
-                continue;
             }
-            //NOTE: This mused be after the OS messages.
+            //NOTE: This must be after the OS messages.
             imgui->newFrame();
-
-            const int64_t currentTick = timeNow();
-            float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
-            beginFrameTick = currentTick;
 
             if (ImGui::Begin("Void ImGui"))
             {
@@ -804,6 +819,16 @@ int main(int argc, char** argv)
             ImGui::End();
 
             mat4s globalModel{};
+
+            //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
+            inputHandler.newFrame();
+            //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
+            inputHandler.update();
+
+            //I want the physics delta outside of the loop for now.
+            const int64_t currentTick = timeNow();
+            float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
+            beginFrameTick = currentTick;
 
             //Update rotating cube data.
             MapBufferParameters cbMap = { cubeCB, 0, 0 };
@@ -876,12 +901,16 @@ int main(int argc, char** argv)
         //FrameMark;
     }
 
+
+    vkDeviceWaitIdle(gpu.vulkanDevice);
+
+    //Every index buffer is the same every meshDraw
+    gpu.destroyBuffer(meshDraws[0].indexBuffer);
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
         MeshDraw& meshDraw = meshDraws[meshIndex];
         gpu.destroyDescriptorSet(meshDraw.descriptorSet);
         gpu.destroyBuffer(meshDraw.materialBuffer);
-        gpu.destroyBuffer(meshDraw.indexBuffer);
         gpu.destroyBuffer(meshDraw.vertexBuffer);
     }
 

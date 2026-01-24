@@ -1044,8 +1044,8 @@ int runGame(VulkanRenderer* renderer)
     dynamicState.dynamicStateCount = ArraySize(dynamicStates);
     dynamicState.pDynamicStates = dynamicStates;
 
-    auto bindingDescription = Vertex::getBindingDescriptions();
-    auto attributeDescriptions = Vertex::getAttributeDescriptions(renderer->stackAllocator);
+    VkVertexInputBindingDescription bindingDescription = Vertex::getBindingDescriptions();
+    Array<VkVertexInputAttributeDescription> attributeDescriptions = Vertex::getAttributeDescriptions(renderer->stackAllocator);
 
     VkPipelineVertexInputStateCreateInfo vertexInputState{};
     vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -1393,7 +1393,7 @@ int runGame(VulkanRenderer* renderer)
             }
 
             ModelData modelData{};
-            modelData.model = glms_rotate(glms_mat4_identity(), timePassed * glm_rad(90.f), { 0.f, 0.f, 1.f });
+            modelData.model = glms_rotate(glms_mat4_identity(), timePassed * glm_rad(90.f) * 1000, { 0.f, 0.f, 1.f });
             modelData.proj = gameCamera.internal3DCamera.viewProjection;
             modelData.proj.m11 *= -1;
 

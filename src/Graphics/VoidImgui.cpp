@@ -374,7 +374,6 @@ void ImguiService::init(void* configuration)
 
 void ImguiService::shutdown()
 {
-    vprint("The size is %d very late.\n", TEXTURE_TO_DESCRIPTOR_SET.size);
     FlatHashMapIterator it = TEXTURE_TO_DESCRIPTOR_SET.iteratorBegin();
     while (it.isValid())
     {
