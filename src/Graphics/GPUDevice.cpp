@@ -3058,15 +3058,15 @@ void GPUDevice::queueCommandBuffer(CommandBuffer* commandBuffer)
 }
 
 //Rendering
-void GPUDevice::newFrame()
+bool GPUDevice::newFrame()
 {
     //Fence wait and reset.
     vkWaitForFences(vulkanDevice, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
-    vulkanImageIndex = UINT32_MAX;
     VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         resizeSwapchain();
+        return false;
     }
     else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
@@ -3094,6 +3094,8 @@ void GPUDevice::newFrame()
             descriptorSetUpdates.deleteSwap(i);
         }
     }
+
+    return true;
 }
 
 void GPUDevice::present()

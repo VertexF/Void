@@ -154,7 +154,7 @@ struct GPUDevice
     void queueCommandBuffer(CommandBuffer* commandBuffer);
 
     //Rendering
-    void newFrame();
+    bool newFrame();
     void present();
     void resize(uint16_t width, uint16_t height);
 

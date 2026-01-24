@@ -1,5 +1,5 @@
 
-//###########-TO BE RESTORED LATER-###########################
+////###########-TO BE RESTORED LATER-###########################
 //#include "Foundation/Memory.hpp"
 //#include "Graphics/VulkanRenderer.hpp"
 //
@@ -796,7 +796,13 @@ int main(int argc, char** argv)
             //This happens when submitting the main queue for some work. The only fix I could find is idling the main queue at the beginning of every frame.
             //For some reason this causes everything to remain in sync when an Window even happens.
             vkQueueWaitIdle(gpu.vulkanQueue);
-            gpu.newFrame();
+
+            //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
+            //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
+            if (gpu.newFrame() == false) 
+            {
+                continue;
+            }
 
             if (Window::instance()->resizeRequested)
             {

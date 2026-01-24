@@ -142,7 +142,7 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
     SDL_Event events;
     while (SDL_PollEvent(&events))
     {
-        ImGui_ImplSDL3_ProcessEvent(&events);
+        //ImGui_ImplSDL3_ProcessEvent(&events);
         switch (events.type)
         {
         case SDL_EVENT_QUIT:
