@@ -776,7 +776,7 @@ int main(int argc, char** argv)
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
-        inputHandler.onEvent();
+        inputHandler.onEvent(&gpu);
         if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
         {
             Window::instance()->exitRequested = true;
@@ -806,6 +806,8 @@ int main(int argc, char** argv)
 
             if (Window::instance()->resizeRequested)
             {
+                Window::instance()->resizeRequested = false;
+
                 gpu.resize(Window::instance()->width, Window::instance()->height);
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }

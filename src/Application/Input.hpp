@@ -6,9 +6,11 @@
 
 #include "Application/Keys.hpp"
 
+
 static constexpr uint32_t MAX_GAMEPADS = 4;
 
 struct SDL_Gamepad;
+struct GPUDevice;
 struct Allocator;
 
 enum GamepadAxis : uint8_t 
@@ -182,7 +184,7 @@ struct InputHandler
 #endif //VOID_IMGUI
 
     void newFrame();
-    void onEvent();
+    void onEvent(GPUDevice* gpu);
 
     bool isTriggered(uint32_t action) const;
     float isReadValue1D(uint32_t action) const;

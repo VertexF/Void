@@ -2840,19 +2840,19 @@ bool GPUDevice::getFamilyQueue(VkPhysicalDevice physicalDevice)
 void GPUDevice::createSwapchain()
 {
     //Check if the surface is supported
-    VkBool32 surfaceSupport;
-    vkGetPhysicalDeviceSurfaceSupportKHR(vulkanPhysicalDevice, vulkanQueueFamily, vulkanWindowSurface, &surfaceSupport);
-    VOID_ASSERTM(surfaceSupport == VK_TRUE, "Error no WSI support on that physical device. \n");
+    //VkBool32 surfaceSupport;
+    //vkGetPhysicalDeviceSurfaceSupportKHR(vulkanPhysicalDevice, vulkanQueueFamily, vulkanWindowSurface, &surfaceSupport);
+    //VOID_ASSERTM(surfaceSupport == VK_TRUE, "Error no WSI support on that physical device. \n");
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanPhysicalDevice, vulkanWindowSurface, &surfaceCapabilities);
 
-    VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
-    if (swapchainExtent.width == UINT32_MAX)
-    {
-        swapchainExtent.width = clamp(swapchainExtent.width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
-        swapchainExtent.height = clamp(swapchainExtent.height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
-    }
+    //VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
+    //if (swapchainExtent.width == UINT32_MAX)
+    //{
+    //    swapchainExtent.width = clamp(swapchainExtent.width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
+    //    swapchainExtent.height = clamp(swapchainExtent.height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
+    //}
 
     swapchainImageCount = surfaceCapabilities.minImageCount + 1;
 
@@ -2861,18 +2861,18 @@ void GPUDevice::createSwapchain()
         swapchainImageCount = surfaceCapabilities.maxImageCount;
     }
 
-    vprint("Create swapchain %u %u - saved %u %u, min image %u\n", swapchainExtent.width, swapchainExtent.height,
-        swapchainWidth, swapchainHeight, surfaceCapabilities.minImageCount);
+    //vprint("Create swapchain %u %u - saved %u %u, min image %u\n", swapchainExtent.width, swapchainExtent.height,
+    //    swapchainWidth, swapchainHeight, surfaceCapabilities.minImageCount);
 
-    swapchainWidth = static_cast<uint16_t>(swapchainExtent.width);
-    swapchainHeight = static_cast<uint16_t>(swapchainExtent.height);
+    swapchainWidth = static_cast<uint16_t>(Window::instance()->width);
+    swapchainHeight = static_cast<uint16_t>(Window::instance()->height);
 
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = vulkanWindowSurface;
     swapchainCreateInfo.minImageCount = swapchainImageCount;
     swapchainCreateInfo.imageFormat = vulkanSurfaceFormat.format;
-    swapchainCreateInfo.imageExtent = swapchainExtent;
+    swapchainCreateInfo.imageExtent = { swapchainWidth, swapchainHeight };
     swapchainCreateInfo.clipped = VK_TRUE;
     swapchainCreateInfo.imageArrayLayers = 1;
     swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -2910,6 +2910,8 @@ void GPUDevice::createSwapchain()
 
         check(vkCreateImageView(vulkanDevice, &viewInfo, vulkanAllocationCallbacks, &vulkanSwapchainImageViews[imageCount]));
     }
+
+    swapchainIsValid = true;
 }
 
 void GPUDevice::destroySwapchain()
@@ -2931,15 +2933,15 @@ void GPUDevice::resizeSwapchain()
 {
     check(vkDeviceWaitIdle(vulkanDevice));
 
-    VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanPhysicalDevice, vulkanWindowSurface, &surfaceCapabilities);
-    VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
+    //VkSurfaceCapabilitiesKHR surfaceCapabilities;
+    //vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanPhysicalDevice, vulkanWindowSurface, &surfaceCapabilities);
+    //VkExtent2D swapchainExtent = surfaceCapabilities.currentExtent;
 
-    //Skip zero-sized swapchain
-    if (swapchainExtent.width == 0 || swapchainExtent.height == 0)
-    {
-        return;
-    }
+    ////Skip zero-sized swapchain
+    //if (swapchainExtent.width == 0 || swapchainExtent.height == 0)
+    //{
+    //    return;
+    //}
 
     //Internal destroy of swapchain pass to retain the same handle.
     RenderPass* vkSwapchainPass = accessRenderPass(swapchainPass);
@@ -3061,19 +3063,28 @@ void GPUDevice::queueCommandBuffer(CommandBuffer* commandBuffer)
 bool GPUDevice::newFrame()
 {
     //Fence wait and reset.
-    vkWaitForFences(vulkanDevice, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
-    VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (swapchainIsValid)
     {
-        resizeSwapchain();
-        return false;
-    }
-    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-    {
-        VOID_ERROR("Failed to acquire swapchain image at image index %d", vulkanImageIndex);
+        vkWaitForFences(vulkanDevice, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
+
+        VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR)
+        {
+            //resizeSwapchain();
+            swapchainIsValid = false;
+        }
+        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        {
+            VOID_ERROR("Failed to acquire swapchain image at image index %d", vulkanImageIndex);
+        }
+
+        vkResetFences(vulkanDevice, 1, &framesInFlight[currentFrame]);
     }
 
-    vkResetFences(vulkanDevice, 1, &framesInFlight[currentFrame]);
+    if (swapchainIsValid == false)
+    {
+        return swapchainIsValid;
+    }
 
     //Command pool rest.
     commandBufferRing.resetPools(currentFrame);
@@ -3146,11 +3157,11 @@ void GPUDevice::present()
 
     VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || Window::instance()->resizeRequested)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
         //resized = false;
-        resizeSwapchain();
-        Window::instance()->resizeRequested = false;
+        //resizeSwapchain();
+        swapchainIsValid = false;
     }
     else if (result != VK_SUCCESS)
     {

@@ -320,6 +320,7 @@ struct GPUDevice
     float gpuTimestampFrequency;
     bool gpuTimestampReset = true;
     bool debugUtilsExtensionPresent = false;
+    bool swapchainIsValid = false;
 
     char vulkanBinariesPath[512];
 };

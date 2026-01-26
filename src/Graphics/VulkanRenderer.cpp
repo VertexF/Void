@@ -1341,7 +1341,7 @@ int runGame(VulkanRenderer* renderer)
     while (Window::instance()->exitRequested == false)
     {
         //Actually does the SDL event pooling
-        inputHandler.onEvent();
+        //inputHandler.onEvent();
 
         if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
         {

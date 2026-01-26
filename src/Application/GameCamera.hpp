@@ -7,6 +7,8 @@
 
 #include <cglm/types-struct.h>
 
+struct InputHandler;
+
 struct GameCamera 
 {
     void init(bool enabled = true, float rotation = 10.f, float movementSpeed = 10.f, float movementDelta = 0.f);
