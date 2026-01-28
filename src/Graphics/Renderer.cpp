@@ -407,7 +407,12 @@ void Renderer::destroyTexture(TextureResource* texture)
         return;
     }
 
-    resourceCache.textures.remove(hashCalculate(texture->textureDescription.name));
+    //TODO: We likely need another way of access these texture other than by name. 
+    if (texture->textureDescription.name)
+    {
+        resourceCache.textures.remove(hashCalculate(texture->textureDescription.name));
+    }
+
     gpu->destroyTexture(texture->handle);
     textures.release(texture);
 }

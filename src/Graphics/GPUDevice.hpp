@@ -130,7 +130,7 @@ struct GPUDevice
     //Misc
     //TODO: For now specify a sampler for a texture or use the default one.
     void linkTextureSampler(TextureHandle texture, SamplerHandle sampler);
-    void setPresentMode(PresentMode::Types type);
+    void setPresentMode(VkPresentModeKHR type);
     void frameCountersAdvanced();
     bool getFamilyQueue(VkPhysicalDevice physicalDevice);
 
@@ -256,7 +256,7 @@ struct GPUDevice
     uint32_t numAllocatedCommandBuffers = 0;
     uint32_t numQueuedCommandBuffers = 0;
 
-    PresentMode::Types presentMode = PresentMode::Types::VSYNC;
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
     uint32_t currentFrame;
     uint32_t previousFrame;
 
@@ -266,11 +266,6 @@ struct GPUDevice
     uint16_t swapchainHeight = 1;
 
     GPUTimestampManager* gpuTimestampManager = nullptr;
-
-    bool bindlessSupported = false;
-    bool timestampsEnabled = false;
-    bool resized = false;
-    bool verticalSync = false;
 
     static constexpr const char* NAME = "AIR_GPU_SERVICE";
 
@@ -321,6 +316,10 @@ struct GPUDevice
     bool gpuTimestampReset = true;
     bool debugUtilsExtensionPresent = false;
     bool swapchainIsValid = false;
+
+    bool bindlessSupported = false;
+    bool timestampsEnabled = false;
+    bool verticalSync = false;
 
     char vulkanBinariesPath[512];
 };

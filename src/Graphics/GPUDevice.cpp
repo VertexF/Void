@@ -709,23 +709,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                        .setSize(width, height, depth);
         vulkanCreateTexture(gpu, textureCreation, texture->handle, texture);
     }
-
-    VkPresentModeKHR toVkPresentMode(PresentMode::Types mode)
-    {
-        switch (mode)
-        {
-        case PresentMode::Types::VSYNC_FAST:
-            return VK_PRESENT_MODE_MAILBOX_KHR;
-        case PresentMode::Types::VSYNC_RELAXED:
-            return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-        case PresentMode::Types::IMMEDIATE:
-            return VK_PRESENT_MODE_IMMEDIATE_KHR;
-        case PresentMode::Types::VSYNC:
-        default:
-            return VK_PRESENT_MODE_FIFO_KHR;
-        }
-    }
-
 }//Anon
 
 struct CommandBufferRing
@@ -2770,7 +2753,7 @@ void GPUDevice::linkTextureSampler(TextureHandle texture, SamplerHandle sampler)
     textureVK->sampler = samplerVK;
 }
 
-void GPUDevice::setPresentMode(PresentMode::Types mode)
+void GPUDevice::setPresentMode(VkPresentModeKHR mode)
 {
     //Requested a certain mode and confirm that it is available.
     //If not use the VK_PRESENT_MODE_FIFO_KHR which is mandatory.
@@ -2782,7 +2765,7 @@ void GPUDevice::setPresentMode(PresentMode::Types mode)
     vkGetPhysicalDeviceSurfacePresentModesKHR(vulkanPhysicalDevice, vulkanWindowSurface, &supportCount, supportedModeAllocated);
 
     bool modeFound = false;
-    VkPresentModeKHR requestedMode = toVkPresentMode(mode);
+    VkPresentModeKHR requestedMode = mode;
     for (uint32_t i = 0; i < supportCount; ++i)
     {
         if (requestedMode == supportedModeAllocated[i])
@@ -2796,7 +2779,7 @@ void GPUDevice::setPresentMode(PresentMode::Types mode)
     vulkanPresentMode = modeFound ? requestedMode : VK_PRESENT_MODE_FIFO_KHR;
     //TODO: Figure out if we need to have (vulkanPresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR ? 2 : 3;)
 
-    presentMode = modeFound ? mode : PresentMode::Types::VSYNC;
+    presentMode = modeFound ? mode : VK_PRESENT_MODE_FIFO_KHR;
 }
 
 void GPUDevice::frameCountersAdvanced()
@@ -3070,7 +3053,6 @@ bool GPUDevice::newFrame()
         VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
-            //resizeSwapchain();
             swapchainIsValid = false;
         }
         else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -3159,8 +3141,6 @@ void GPUDevice::present()
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
-        //resized = false;
-        //resizeSwapchain();
         swapchainIsValid = false;
     }
     else if (result != VK_SUCCESS)
@@ -3263,8 +3243,6 @@ void GPUDevice::resize(uint16_t width, uint16_t height)
 {
     swapchainWidth = width;
     swapchainHeight = height;
-
-    resized = true;
 }
 
 void GPUDevice::fillBarrier(RenderPassHandle renderPass, ExecutionBarrier& outBarrier)

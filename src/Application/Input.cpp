@@ -189,7 +189,6 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
                 gpu->resizeSwapchain();
                 
                 vprint("Resize to %u, %u\n", Window::instance()->width, Window::instance()->height);
-                
             }
             break;
             }

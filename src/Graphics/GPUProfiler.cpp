@@ -8,6 +8,8 @@
 
 #include "vender/imgui/imgui.h"
 
+#include "Application/Window.hpp"
+
 #include <cmath>
 #include <stdio.h>
 
@@ -56,7 +58,7 @@ void GPUProfiler::update(GPUDevice& gpu)
         return;
     }
 
-    if (paused && gpu.resized == false) 
+    if (paused && Window::instance()->resizeRequested)
     {
         return;
     }

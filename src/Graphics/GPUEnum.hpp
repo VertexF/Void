@@ -97,18 +97,6 @@ namespace ResourceDeletion
     };
 }//ResourceDeletion
 
-namespace PresentMode 
-{
-    enum Types : uint8_t
-    {
-        IMMEDIATE,
-        VSYNC,
-        VSYNC_FAST,
-        VSYNC_RELAXED,
-        COUNT
-    };
-}//PresentMode
-
 typedef enum ResourceState
 {
     RESOURCE_STATE_UNDEFINED = 0,

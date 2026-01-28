@@ -8,7 +8,8 @@
 
 namespace 
 {
-    const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
+    //const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
+    const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
 }
 
 //I might try to remove this later.

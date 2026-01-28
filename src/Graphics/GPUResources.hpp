@@ -29,8 +29,6 @@ namespace
 
     constexpr uint32_t SUBMIT_HEADER_SENTINEL = 0xFEFEB7BA;
     constexpr uint32_t MAX_RESOURCE_DELETIONS = 64;
-
-    //constexpr uint32_t MAX_SWAPCHAIN_IMAGES = 3;
 }
 
 struct Allocator;

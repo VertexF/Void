@@ -44,6 +44,7 @@
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
+#include <stb_image.h>
 
 namespace
 {
@@ -103,12 +104,12 @@ namespace
         DescriptorSetHandle descriptorSet;
     };
 
-    struct UniformData
+    struct alignas(16) UniformData
     {
-        alignas(16) mat4s globalModel;
-        alignas(16) mat4s viewPerspective;
-        alignas(16) vec4s eye;
-        alignas(16) vec4s light;
+        mat4s globalModel;
+        mat4s viewPerspective;
+        vec4s eye;
+        vec4s light;
     };
 
     struct Transform
@@ -216,15 +217,58 @@ int main(int argc, char** argv)
     Array<TextureResource> images2;
     images2.init(allocator, cgltfData->images_count);
 
-    //TODO: Do something different for .glb files.
+    //GLB version.
     for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
     {
         cgltf_image image = cgltfData->images[imageIndex];
-        TextureResource* textureResources = renderer.createTexture(image.uri, image.uri);
 
-        VOID_ASSERT(textureResources != nullptr);
+        if (image.uri != nullptr)
+        {
+            TextureResource* textureResource = renderer.createTexture(image.uri, image.uri);
 
-        images2.push(*textureResources);
+            VOID_ASSERT(textureResource != nullptr);
+
+            images2.push(*textureResource);
+        }
+        else 
+        {
+            int comp = 0;
+            int width = 0;
+            int height = 0;
+            uint8_t mipLevels = 1;
+
+            uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
+            stbi_info_from_memory(rawBufferData, image.buffer_view->size, &width, &height, &comp);
+
+            //TODO: Add mipmap support later.
+            //uint32_t w = width;
+            //uint32_t h = height;
+
+            //while (w > 1 && h > 1)
+            //{
+            //    w /= 2;
+            //    h /= 2;
+
+            //    ++mipLevels;
+            //}
+
+            int x;
+            int y;
+            uint8_t* textureData = stbi_load_from_memory(rawBufferData, image.buffer_view->size, &x, &y, &comp, 4);
+
+            TextureCreation textureCreation{};
+            textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+                .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
+                .setData(textureData)
+                .setName(nullptr);
+
+            TextureResource* textureResource = renderer.createTexture(textureCreation);
+            VOID_ASSERT(textureResource != nullptr);
+
+            images2.push(*textureResource);
+
+            stbi_image_free(textureData);
+        }
     }
 
     //NOTE: resource working directory
@@ -426,28 +470,25 @@ int main(int argc, char** argv)
 
                     cgltf_primitive meshPrimitive = mesh2->primitives[primitiveIndex];
 
-                    //Array<void*> indexes;
-                    //indexes.init(&scratchAllocator, meshPrimitive.indices->count, meshPrimitive.indices->count);
-                    //indexes.data = meshPrimitive.indices->buffer_view->buffer->data;
-
-                    meshDraw.indexOffset = meshPrimitive.indices->offset;
+                    //We are now correctly parsing indices. We always expect with the cgltf_accessor_unpack_indices that the index offset to 0.
+                    meshDraw.indexOffset = 0;
                     meshDraw.count = meshPrimitive.indices->count;
-
                     componentType = meshPrimitive.indices->component_type;
 
-                    if (currentIndexBuffer.index == INVALID_BUFFER.index)
-                    {
-                        bufferCreation.reset()
-                            .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, meshPrimitive.indices->buffer_view->buffer->size)
-                            .setName("indices")
-                            .setData(meshPrimitive.indices->buffer_view->buffer->data);
-                        currentIndexBuffer = gpu.createBuffer(bufferCreation);
-                    }
+                    uint32_t stackPrimitveMarker = scratchAllocator.getMarker();
+
+                    uint32_t indexCompenentSize = cgltf_component_size(meshPrimitive.indices->component_type);
+                    Array<uint32_t> indices;
+                    indices.init(&scratchAllocator, (uint32_t)meshPrimitive.indices->count, (uint32_t)meshPrimitive.indices->count);
+                    cgltf_accessor_unpack_indices(meshPrimitive.indices, indices.data, indexCompenentSize, indices.size);
+
+                    bufferCreation.reset()
+                        .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, indices.size * meshPrimitive.indices->stride)
+                        .setName("indices")
+                        .setData(indices.data);
+                    currentIndexBuffer = gpu.createBuffer(bufferCreation);
 
                     meshDraw.indexBuffer = currentIndexBuffer;
-
-                    //cgltf_accessor_unpack_indices(meshPrimitive.indices, indexes.data, 4, indexes.size);
-                    //meshIndices.appendArray(indexes);
 
                     cgltf_material* material = meshPrimitive.material;
                     VOID_ASSERTM(material != nullptr, "The model mesh materials can't be null.\n");
@@ -638,9 +679,6 @@ int main(int argc, char** argv)
                     const cgltf_accessor* normalAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_normal, 0);
                     const cgltf_accessor* tangentAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_tangent, 0);
                     const cgltf_accessor* textureAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_texcoord, 0);
-
-                    uint32_t stackPrimitveMarker = scratchAllocator.getMarker();
-
 
                     uint32_t vertexCount = positionAccessor->count;
                     Array<Vertices> vertex;
@@ -909,17 +947,15 @@ int main(int argc, char** argv)
         //FrameMark;
     }
 
-
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    //Every index buffer is the same every meshDraw
-    gpu.destroyBuffer(meshDraws[0].indexBuffer);
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
         MeshDraw& meshDraw = meshDraws[meshIndex];
         gpu.destroyDescriptorSet(meshDraw.descriptorSet);
         gpu.destroyBuffer(meshDraw.materialBuffer);
         gpu.destroyBuffer(meshDraw.vertexBuffer);
+        gpu.destroyBuffer(meshDraw.indexBuffer);
     }
 
     gpu.destroyBuffer(dummyAttributeBuffer);
@@ -937,6 +973,12 @@ int main(int argc, char** argv)
 
     gpuProfiler.shutdown();
     resourceManager.shutdown();
+
+    //This is here to solve a bug that happens when allocating image from a .glb file. 
+    for (uint32_t i = 0; i < images2.size; ++i) 
+    {
+        renderer.destroyTexture(&images2[i]);
+    }
 
     renderer.shutdown();
 
