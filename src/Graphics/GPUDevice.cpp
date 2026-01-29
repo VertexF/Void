@@ -187,13 +187,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         texture->name = creation.name;
         texture->vkFormat = creation.format;
         texture->sampler = nullptr;
-        texture->flags = creation.flags;
+        texture->usage = creation.usage;
         texture->handle = handle;
 
         //Create the image
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.format = texture->vkFormat;
+        imageInfo.usage = texture->usage;
         imageInfo.flags = 0;
         imageInfo.imageType = texture->imageType;
         imageInfo.extent.width = creation.width;
@@ -203,24 +204,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         imageInfo.arrayLayers = 1;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-
-        const bool isRenderTarget = (creation.flags & TextureFlags::Mask::RENDER_TARGET_MASK) == TextureFlags::Mask::RENDER_TARGET_MASK;
-        const bool isComputeUsed = (creation.flags & TextureFlags::Mask::COMPUTE_MASK) == TextureFlags::Mask::COMPUTE_MASK;
-
-        //Default to always readable from shaders.
-        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
-
-        if (TextureFormat::hasDepthOrStencil(creation.format))
-        {
-            //Depth/Stencil textures are normally textures you render into.
-            imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        }
-        else
-        {
-            imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            imageInfo.usage |= isRenderTarget ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT : 0;
-        }
-
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -328,15 +311,36 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                 break;
             }
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            {
+                BufferHandle bufferHandle = { resources[res] };
+                Buffer* buffer = gpu.accessBuffer(bufferHandle);
+
+                descriptorWrite[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+
+                //Bind parent buffer if present, used for dynamic resource.
+                if (buffer->parentBuffer.index != INVALID_INDEX)
+                {
+                    Buffer* parentBuffer = gpu.accessBuffer(buffer->parentBuffer);
+                    bufferInfo[i].buffer = parentBuffer->vkBuffer;
+                }
+                else
+                {
+                    bufferInfo[i].buffer = buffer->vkBuffer;
+                }
+
+                bufferInfo[i].offset = 0;
+                bufferInfo[i].range = buffer->size;
+
+                descriptorWrite[i].pBufferInfo = &bufferInfo[i];
+
+                break;
+            }
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
             {
                 BufferHandle bufferHandle = { resources[res] };
                 Buffer* buffer = gpu.accessBuffer(bufferHandle);
 
                 descriptorWrite[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                descriptorWrite[i].descriptorType = buffer->usage == ResourceType::Type::DYNAMIC ?
-                    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC :
-                    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
                 //Bind parent buffer if present, used for dynamic resource.
                 if (buffer->parentBuffer.index != INVALID_INDEX)
@@ -538,58 +542,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         VkAttachmentDescription colourAttachments[8]{};
         VkAttachmentReference colourAttachmentsRef[8]{};
 
-        VkAttachmentLoadOp colourOP;
-        VkAttachmentLoadOp depthOP;
-        VkAttachmentLoadOp stencilOP;
-
-        VkImageLayout colourInitial;
-        VkImageLayout depthInitial;
-
-        switch (output.colourOperations)
-        {
-        case RenderPassType::Operations::LOAD:
-            colourOP = VK_ATTACHMENT_LOAD_OP_LOAD;
-            colourInitial = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            break;
-        case RenderPassType::Operations::CLEAR:
-            colourOP = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            colourInitial = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            break;
-        default:
-            colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        }
-
-        switch (output.depthOperations)
-        {
-        case RenderPassType::LOAD:
-            depthOP = VK_ATTACHMENT_LOAD_OP_LOAD;
-            depthInitial = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            break;
-        case RenderPassType::CLEAR:
-            depthOP = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depthInitial = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            break;
-        default:
-            depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        }
-
-        switch (output.stencilOperations)
-        {
-        case RenderPassType::LOAD:
-            stencilOP = VK_ATTACHMENT_LOAD_OP_LOAD;
-            break;
-        case RenderPassType::CLEAR:
-            stencilOP = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            break;
-        default:
-            stencilOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            break;
-        }
-
         //Colour attachment setup
         uint32_t colourFormat = 0;
         for (; colourFormat < output.numColourFormats; ++colourFormat)
@@ -597,11 +549,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             VkAttachmentDescription& colourAttachment = colourAttachments[colourFormat];
             colourAttachment.format = output.colourFormats[colourFormat];
             colourAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-            colourAttachment.loadOp = colourOP;
+            colourAttachment.loadOp = output.colourOP;
             colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            colourAttachment.stencilLoadOp = stencilOP;
+            colourAttachment.stencilLoadOp = output.stencilOP;
             colourAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            colourAttachment.initialLayout = colourInitial;
+            colourAttachment.initialLayout = output.colourInitial;
             colourAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
             VkAttachmentReference& colourAttachmentRef = colourAttachmentsRef[colourFormat];
@@ -617,11 +569,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         {
             depthAttachment.format = output.depthStencilFormat;
             depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-            depthAttachment.loadOp = depthOP;
+            depthAttachment.loadOp = output.depthOP;
             depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            depthAttachment.stencilLoadOp = stencilOP;
+            depthAttachment.stencilLoadOp = output.stencilOP;
             depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            depthAttachment.initialLayout = depthInitial;
+            depthAttachment.initialLayout = output.depthInitial;
             depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
             depthAttachmentRef.attachment = colourFormat;
@@ -687,9 +639,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             output.depth(textureVK->vkFormat);
         }
 
-        output.colourOperations = creation.colourOperations;
-        output.depthOperations = creation.depthOperations;
-        output.stencilOperations = creation.stencilOperations;
+        output.colourOP = creation.colourOP;
+        output.depthOP = creation.depthOP;
+        output.stencilOP = creation.stencilOP;
+        output.colourInitial = creation.colourInitial;
+        output.depthInitial = creation.depthInitial;
 
         return output;
     }
@@ -703,7 +657,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
         //Re-create image in place
         TextureCreation textureCreation;
-        textureCreation.setFlags(texture->mipmaps, texture->flags)
+        textureCreation.setFlags(texture->mipmaps, texture->usage)
                        .setFormatType(texture->vkFormat, texture->imageType, texture->imageViewType)
                        .setName(texture->name)
                        .setSize(width, height, depth);
@@ -1282,7 +1236,6 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     BufferCreation fullscreenBufferVbCreation{};
     fullscreenBufferVbCreation.typeFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    fullscreenBufferVbCreation.usage = ResourceType::Type::IMMUTABLE;
     fullscreenBufferVbCreation.size = 0;
     fullscreenBufferVbCreation.initialData = nullptr;
     fullscreenBufferVbCreation.name = "FullscreenVB";
@@ -1295,7 +1248,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     depthTextureCreation.height = swapchainHeight;
     depthTextureCreation.depth = 1;
     depthTextureCreation.mipmaps = 1;
-    depthTextureCreation.flags = 0;
+    depthTextureCreation.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     depthTextureCreation.format = VK_FORMAT_D32_SFLOAT;
     depthTextureCreation.imageType = VK_IMAGE_TYPE_2D;
     depthTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -1305,10 +1258,10 @@ void GPUDevice::init(const DeviceCreation& creation)
     swapchainOutput.depth(VK_FORMAT_D32_SFLOAT);
 
     RenderPassCreation swapchainPassCreation{};
-    swapchainPassCreation.setType(RenderPassType::Types::SWAPCHAIN).setName("Swapchain");
-    swapchainPassCreation.setOperations(RenderPassType::Operations::CLEAR,
-        RenderPassType::Operations::CLEAR,
-        RenderPassType::Operations::CLEAR);
+    swapchainPassCreation.setType(RenderPassEnumType::SWAPCHAIN).setName("Swapchain");
+    swapchainPassCreation.setOperations(VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                        VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                        VK_ATTACHMENT_LOAD_OP_CLEAR);
     swapchainPass = createRenderPass(swapchainPassCreation);
 
     //Init the dummy resources
@@ -1318,7 +1271,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     dummyTextureCreation.height = 1;
     dummyTextureCreation.depth = 1;
     dummyTextureCreation.mipmaps = 1;
-    dummyTextureCreation.flags = 0;
+    dummyTextureCreation.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     dummyTextureCreation.format = VK_FORMAT_R8_UINT;
     dummyTextureCreation.imageType = VK_IMAGE_TYPE_2D;
     dummyTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -1326,7 +1279,6 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     BufferCreation dummyConstantBufferCreation{};
     dummyConstantBufferCreation.typeFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    dummyConstantBufferCreation.usage = ResourceType::Type::IMMUTABLE;
     dummyConstantBufferCreation.size = 16;
     dummyConstantBufferCreation.initialData = nullptr;
     dummyConstantBufferCreation.name = "DummyCB";
@@ -1344,20 +1296,6 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     strcpy(vulkanBinariesPath, compilerPath);
     stringBuffer.clear();
-
-    //Dynamic buffer handling
-    dynamicPerFrameSize = 1024 * 1024 * 10;
-    BufferCreation buffCreation{};
-    buffCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        ResourceType::Type::IMMUTABLE, dynamicPerFrameSize * swapchainImageCount).setName("Dynamic_Persistent_Buffer");
-    dynamicBuffer = createBuffer(buffCreation);
-
-    MapBufferParameters cbMap{};
-    cbMap.buffer = dynamicBuffer;
-    cbMap.offset = 0;
-    cbMap.size = 0;
-
-    dynamicMappedMemory = reinterpret_cast<uint8_t*>(mapBuffer(cbMap));
 
     //Init the render pass cache
     renderPassCache.init(allocator, 16);
@@ -1382,18 +1320,11 @@ void GPUDevice::shutdown()
 
     gpuTimestampManager->shutdown();
 
-    MapBufferParameters cbMap{};
-    cbMap.buffer = dynamicBuffer;
-    cbMap.offset = 0;
-    cbMap.size = 0;
-    unmapBuffer(cbMap);
-
     //Memory: this contains allocation for GPU timestamp memory, queued command buffers and render frames.
     void_free(gpuTimestampManager, allocator);
 
     destroyTexture(depthTexture);
     destroyBuffer(fullscreenVertexBuffer);
-    destroyBuffer(dynamicBuffer);
     destroyRenderPass(swapchainPass);
     destroyTexture(dummyTexture);
     destroyBuffer(dummyConstantBuffer);
@@ -1500,21 +1431,9 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
     buffer->name = creation.name;
     buffer->size = creation.size;
     buffer->typeFlags = creation.typeFlags;
-    buffer->usage = creation.usage;
     buffer->handle = handle;
     buffer->globalOffset = 0;
     buffer->parentBuffer = INVALID_BUFFER;
-
-    //Cache and calculate if the dynamic can be used.
-    static const VkBufferUsageFlags DYNAMIC_BUFFER_MASK = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    const bool useGlobalBuffer = (creation.typeFlags & DYNAMIC_BUFFER_MASK) != 0;
-    if (creation.usage == ResourceType::Type::DYNAMIC && useGlobalBuffer)
-    {
-        buffer->parentBuffer = dynamicBuffer;
-        return handle;
-    }
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -2341,12 +2260,12 @@ RenderPassHandle GPUDevice::createRenderPass(const RenderPassCreation& creation)
 
     switch (creation.type)
     {
-    case RenderPassType::Types::SWAPCHAIN:
+    case RenderPassEnumType::SWAPCHAIN:
         vulkanCreateSwapchainPass(*this, creation, renderPass);
         break;
-    case RenderPassType::Types::COMPUTE:
+    case RenderPassEnumType::COMPUTE:
         break;
-    case RenderPassType::Types::GEOMETRY:
+    case RenderPassEnumType::GRAPHICS:
         renderPass->output = fillRenderPassOutput(*this, creation);
         renderPass->vkRenderPass = getVulkanRenderPass(renderPass->output, creation.name);
 
@@ -2553,7 +2472,6 @@ void GPUDevice::queryBuffer(BufferHandle buffer, BufferDescription& outDescripto
         outDescriptor.name = bufferData->name;
         outDescriptor.size = bufferData->size;
         outDescriptor.typeFlags = bufferData->typeFlags;
-        outDescriptor.usage = bufferData->usage;
         outDescriptor.parentHandle = bufferData->parentBuffer;
         outDescriptor.nativeHandle = reinterpret_cast<void*>(&bufferData->vkBuffer);
     }
@@ -2798,7 +2716,7 @@ bool GPUDevice::getFamilyQueue(VkPhysicalDevice physicalDevice)
     VkQueueFamilyProperties* queueFamilies = reinterpret_cast<VkQueueFamilyProperties*>(void_alloca(sizeof(VkQueueFamilyProperties) * queueFamilyCount, allocator));
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
 
-    VkBool32 surfaceSupport;
+    VkBool32 surfaceSupport = VK_FALSE;
     for (uint32_t familyIndex = 0; familyIndex < queueFamilyCount; ++familyIndex)
     {
         VkQueueFamilyProperties queueFamily = queueFamilies[familyIndex];
@@ -2953,7 +2871,7 @@ void GPUDevice::resizeSwapchain()
     destroyTexture(textureToDelete);
 
     RenderPassCreation swapchainPassCreation{};
-    swapchainPassCreation.setType(RenderPassType::SWAPCHAIN).setName("Swapchain");
+    swapchainPassCreation.setType(RenderPassEnumType::SWAPCHAIN).setName("Swapchain");
     vulkanCreateSwapchainPass(*this, swapchainPassCreation, vkSwapchainPass);
 }
 
@@ -2966,12 +2884,6 @@ void* GPUDevice::mapBuffer(const MapBufferParameters& parameters)
     }
 
     Buffer* buffer = accessBuffer(parameters.buffer);
-
-    if (buffer->parentBuffer.index == dynamicBuffer.index)
-    {
-        buffer->globalOffset = dynamicAllocatedSize;
-        return dynamicAllocate(parameters.size == 0 ? buffer->size : parameters.size);
-    }
 
     void* data;
     vmaMapMemory(VMAAllocator, buffer->vmaAllocation, &data);
@@ -2987,19 +2899,8 @@ void  GPUDevice::unmapBuffer(const MapBufferParameters& parameters)
     }
 
     Buffer* buffer = accessBuffer(parameters.buffer);
-    if (buffer->parentBuffer.index == dynamicBuffer.index)
-    {
-        return;
-    }
 
     vmaUnmapMemory(VMAAllocator, buffer->vmaAllocation);
-}
-
-void* GPUDevice::dynamicAllocate(uint32_t size)
-{
-    void* mappedMemory = dynamicMappedMemory + dynamicAllocatedSize;
-    dynamicAllocatedSize += static_cast<uint32_t>(memoryAlign(size, UBO_ALIGNMENT));
-    return mappedMemory;
 }
 
 void GPUDevice::setBufferGlobalOffset(BufferHandle buffer, uint32_t offset)
@@ -3070,10 +2971,6 @@ bool GPUDevice::newFrame()
 
     //Command pool rest.
     commandBufferRing.resetPools(currentFrame);
-    //Dynamic memory update
-    const uint32_t usedSize = dynamicAllocatedSize - (dynamicPerFrameSize * previousFrame);
-    dynamicMaxPerFrameSize = max(usedSize, dynamicMaxPerFrameSize);
-    dynamicAllocatedSize = dynamicPerFrameSize * currentFrame;
 
     //Descriptor set update.
     if (descriptorSetUpdates.size)
@@ -3101,7 +2998,7 @@ void GPUDevice::present()
         enqueuedCommandBuffers[comBuffer] = commandBuffer->vkCommandBuffer;
 
         if (commandBuffer->isRecording && commandBuffer->currentRenderPass &&
-            (commandBuffer->currentRenderPass->type != RenderPassType::Types::COMPUTE))
+            (commandBuffer->currentRenderPass->type != RenderPassEnumType::COMPUTE))
         {
             vkCmdEndRenderPass(commandBuffer->vkCommandBuffer);
         }

@@ -27,7 +27,7 @@ namespace
             TextureCreation creation;
             creation.setData(imageData)
                     .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-                    .setFlags(1, 0)
+                    .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                     .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
                     .setName(name);
 
@@ -305,10 +305,10 @@ BufferResource* Renderer::createBuffer(const BufferCreation& creation)
     return nullptr;
 }
 
-BufferResource* Renderer::createBuffer(VkBufferUsageFlags type, ResourceType::Type usage,
+BufferResource* Renderer::createBuffer(VkBufferUsageFlags type,
                                         uint32_t size, void* data, const char* name) 
 {
-    BufferCreation creation = { type, usage, size, data, name };
+    BufferCreation creation = { type, size, data, name };
     return createBuffer(creation);
 }
 

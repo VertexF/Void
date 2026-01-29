@@ -143,8 +143,6 @@ struct GPUDevice
     void* mapBuffer(const MapBufferParameters& parameters);
     void  unmapBuffer(const MapBufferParameters& parameters);
 
-    void* dynamicAllocate(uint32_t size);
-
     void setBufferGlobalOffset(BufferHandle buffer, uint32_t offset);
 
     //Command buffers
@@ -246,11 +244,11 @@ struct GPUDevice
     Allocator* allocator;
     StackAllocator* tempAllocator;
 
-    uint32_t dynamicMaxPerFrameSize;
-    BufferHandle dynamicBuffer;
-    uint8_t* dynamicMappedMemory;
-    uint32_t dynamicAllocatedSize;
-    uint32_t dynamicPerFrameSize;
+    //uint32_t dynamicMaxPerFrameSize;
+    //BufferHandle dynamicBuffer;
+    //uint8_t* dynamicMappedMemory;
+    //uint32_t dynamicAllocatedSize;
+    //uint32_t dynamicPerFrameSize;
 
     CommandBuffer** queuedCommandBuffers = nullptr;
     uint32_t numAllocatedCommandBuffers = 0;

@@ -56,10 +56,9 @@ BufferCreation& BufferCreation::reset()
     return *this;
 }
 
-BufferCreation& BufferCreation::set(VkBufferUsageFlags flags, ResourceType::Type resourceUsage, uint32_t bufferSize) 
+BufferCreation& BufferCreation::set(VkBufferUsageFlags flags, uint32_t bufferSize)
 {
     typeFlags = flags;
-    usage = resourceUsage;
     size = bufferSize;
 
     return *this;
@@ -88,10 +87,10 @@ TextureCreation& TextureCreation::setSize(uint16_t newWidth, uint16_t newHeight,
     return *this;
 }
 
-TextureCreation& TextureCreation::setFlags(uint8_t newMipmaps, uint8_t newFlags)
+TextureCreation& TextureCreation::setFlags(uint8_t newMipmaps, VkImageUsageFlags newUsage)
 {
     mipmaps = newMipmaps;
-    flags = newFlags;
+    usage = newUsage;
 
     return *this;
 }
@@ -286,9 +285,12 @@ RenderPassOutput& RenderPassOutput::reset()
         colourFormats[i] = VK_FORMAT_UNDEFINED;
     }
     depthStencilFormat = VK_FORMAT_UNDEFINED;
-    colourOperations = RenderPassType::Operations::DONT_CARE;
-    depthOperations = RenderPassType::Operations::DONT_CARE;
-    stencilOperations = RenderPassType::Operations::DONT_CARE;
+    colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    stencilOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+
+    colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
 
     return *this;
 }
@@ -305,13 +307,23 @@ RenderPassOutput& RenderPassOutput::depth(VkFormat format)
     return *this;
 }
 
-RenderPassOutput& RenderPassOutput::setOperations(RenderPassType::Operations colour,
-                                                    RenderPassType::Operations depth,
-                                                    RenderPassType::Operations stencil) 
+RenderPassOutput& RenderPassOutput::setOperations(VkAttachmentLoadOp colour,
+                                                  VkAttachmentLoadOp depth,
+                                                  VkAttachmentLoadOp stencil) 
 {
-    colourOperations = colour;
-    depthOperations = depth;
-    stencilOperations = stencil;
+    if (VK_ATTACHMENT_LOAD_OP_LOAD == colour || VK_ATTACHMENT_LOAD_OP_CLEAR == colour)
+    {
+        colourInitial = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    if (VK_ATTACHMENT_LOAD_OP_LOAD == depthOP || VK_ATTACHMENT_LOAD_OP_CLEAR == depthOP)
+    {
+        depthInitial = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+
+    colourOP = colour;
+    depthOP = depth;
+    stencilOP = stencil;
 
     return *this;
 }
@@ -324,9 +336,12 @@ RenderPassCreation& RenderPassCreation::reset()
     scaleX = 1.f;
     scaleY = 1.f;
 
-    colourOperations = RenderPassType::Operations::DONT_CARE;
-    depthOperations = RenderPassType::Operations::DONT_CARE;
-    stencilOperations = RenderPassType::Operations::DONT_CARE;
+    colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    stencilOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+
+    colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
 
     return *this;
 }
@@ -360,19 +375,29 @@ RenderPassCreation& RenderPassCreation::setName(const char* inName)
     return *this;
 }
 
-RenderPassCreation& RenderPassCreation::setType(RenderPassType::Types renderPassType) 
+RenderPassCreation& RenderPassCreation::setType(RenderPassEnumType renderPassType)
 {
     type = renderPassType;
     return *this;
 }
 
-RenderPassCreation& RenderPassCreation::setOperations(RenderPassType::Operations colour,
-                                                        RenderPassType::Operations depth,
-                                                        RenderPassType::Operations stencil) 
+RenderPassCreation& RenderPassCreation::setOperations(VkAttachmentLoadOp colour,
+                                                  VkAttachmentLoadOp depth,
+                                                  VkAttachmentLoadOp stencil) 
 {
-    colourOperations = colour;
-    depthOperations = depth;
-    stencilOperations = stencil;
+    if (VK_ATTACHMENT_LOAD_OP_LOAD == colour || VK_ATTACHMENT_LOAD_OP_CLEAR == colour)
+    {
+        colourInitial = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    if (VK_ATTACHMENT_LOAD_OP_LOAD == depthOP || VK_ATTACHMENT_LOAD_OP_CLEAR == depthOP)
+    {
+        depthInitial = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+
+    colourOP = colour;
+    depthOP = depth;
+    stencilOP = stencil;
 
     return *this;
 }

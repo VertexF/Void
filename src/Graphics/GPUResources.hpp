@@ -31,6 +31,13 @@ namespace
     constexpr uint32_t MAX_RESOURCE_DELETIONS = 64;
 }
 
+enum RenderPassEnumType : uint8_t
+{
+    GRAPHICS,
+    SWAPCHAIN,
+    COMPUTE
+};
+
 struct Allocator;
 struct DeviceStateVulkan;
 
@@ -187,14 +194,13 @@ struct RasterisationCreation
 struct BufferCreation 
 {
     VkBufferUsageFlags typeFlags = 0;
-    ResourceType::Type usage = ResourceType::Type::IMMUTABLE;
     uint32_t size = 0;
 
     void* initialData = nullptr;
     const char* name = nullptr;
 
     BufferCreation& reset();
-    BufferCreation& set(VkBufferUsageFlags flags, ResourceType::Type resourceUsage, uint32_t bufferSize);
+    BufferCreation& set(VkBufferUsageFlags flags, uint32_t bufferSize);
     BufferCreation& setData(void *data);
     BufferCreation& setName(const char* inName);
 };
@@ -206,7 +212,7 @@ struct TextureCreation
     uint16_t height = 1;
     uint16_t depth = 1;
     uint8_t mipmaps = 1;
-    uint8_t flags = 0;
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_FLAG_BITS_MAX_ENUM;
 
     VkFormat format = VK_FORMAT_UNDEFINED;
 
@@ -216,7 +222,7 @@ struct TextureCreation
     const char* name = nullptr;
 
     TextureCreation& setSize(uint16_t newWidth, uint16_t newHeight, uint16_t newDepth);
-    TextureCreation& setFlags(uint8_t newMipmaps, uint8_t newFlags);
+    TextureCreation& setFlags(uint8_t newMipmaps, VkImageUsageFlags newUsage);
     TextureCreation& setFormatType(VkFormat newFormat, VkImageType newImageType, VkImageViewType newImageViewType);
     TextureCreation& setName(const char* inName);
     TextureCreation& setData(void* data);
@@ -348,22 +354,25 @@ struct RenderPassOutput
     VkFormat depthStencilFormat;
     uint32_t numColourFormats;
 
-    RenderPassType::Operations colourOperations = RenderPassType::Operations::DONT_CARE;
-    RenderPassType::Operations depthOperations = RenderPassType::Operations::DONT_CARE;
-    RenderPassType::Operations stencilOperations = RenderPassType::Operations::DONT_CARE;
+    VkAttachmentLoadOp colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    VkAttachmentLoadOp depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    VkAttachmentLoadOp stencilOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+
+    VkImageLayout colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
 
     RenderPassOutput& reset();
     RenderPassOutput& colour(VkFormat format);
     RenderPassOutput& depth(VkFormat format);
-    RenderPassOutput& setOperations(RenderPassType::Operations colour,
-                                    RenderPassType::Operations depth,
-                                    RenderPassType::Operations stencil);
+    RenderPassOutput& setOperations(VkAttachmentLoadOp colour,
+                                    VkAttachmentLoadOp depth,
+                                    VkAttachmentLoadOp stencil);
 };
 
 struct RenderPassCreation 
 {
     uint16_t numRenderTargets = 0;
-    RenderPassType::Types type = RenderPassType::Types::GEOMETRY;
+    RenderPassEnumType type = RenderPassEnumType::GRAPHICS;
 
     TextureHandle outputTextures[MAX_IMAGE_OUTPUT];
     TextureHandle depthStencilTexture;
@@ -372,9 +381,12 @@ struct RenderPassCreation
     float scaleY = 1.f;
     uint8_t resize = 1;
 
-    RenderPassType::Operations colourOperations = RenderPassType::Operations::DONT_CARE;
-    RenderPassType::Operations depthOperations = RenderPassType::Operations::DONT_CARE;
-    RenderPassType::Operations stencilOperations = RenderPassType::Operations::DONT_CARE;
+    VkAttachmentLoadOp colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    VkAttachmentLoadOp depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    VkAttachmentLoadOp stencilOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+
+    VkImageLayout colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
 
     const char* name = nullptr;
 
@@ -383,10 +395,10 @@ struct RenderPassCreation
     RenderPassCreation& setScaling(float newScaleX, float newScaleY, uint8_t newResize);
     RenderPassCreation& setDepthStencilTexture(TextureHandle texture);
     RenderPassCreation& setName(const char* inName);
-    RenderPassCreation& setType(RenderPassType::Types renderPassType);
-    RenderPassCreation& setOperations(RenderPassType::Operations colour,
-                                        RenderPassType::Operations depth,
-                                        RenderPassType::Operations stencil);
+    RenderPassCreation& setType(RenderPassEnumType type);
+    RenderPassCreation& setOperations(VkAttachmentLoadOp colour,
+                                    VkAttachmentLoadOp depth,
+                                    VkAttachmentLoadOp stencil);
 };
 
 struct PipelineCreation 
@@ -471,7 +483,7 @@ struct BufferDescription
     const char* name = nullptr;
 
     VkBufferUsageFlags typeFlags = 0;
-    ResourceType::Type usage = ResourceType::Type::IMMUTABLE;
+    //ResourceType::Type usage = ResourceType::Type::IMMUTABLE;
     uint32_t size = 0;
     BufferHandle parentHandle;
 };
@@ -572,7 +584,7 @@ struct Buffer
     VkDeviceSize vkDeviceSize;
 
     VkBufferUsageFlags typeFlags = 0;
-    ResourceType::Type usage = ResourceType::Type::IMMUTABLE;
+    //ResourceType::Type usage = ResourceType::Type::IMMUTABLE;
     uint32_t size = 0;
     uint32_t globalOffset = 0;
 
@@ -617,7 +629,7 @@ struct Texture
     uint16_t height = 1;
     uint16_t depth = 1;
     uint8_t mipmaps = 1;
-    uint8_t flags = 0;
+    VkImageUsageFlags usage = 0;
 };
 
 struct ShaderState 
@@ -696,7 +708,7 @@ struct RenderPass
     TextureHandle outputTextures[MAX_IMAGE_OUTPUT];
     TextureHandle outputDepth;
 
-    RenderPassType::Types type;
+    RenderPassEnumType type;
 
     float scaleX = 1.f;
     float scaleY = 1.f;
@@ -711,21 +723,6 @@ struct RenderPass
 
     const char* name = nullptr;
 };
-
-static const char* toCompilerExtension(VkShaderStageFlagBits value) 
-{
-    switch (value) 
-    {
-    case VK_SHADER_STAGE_VERTEX_BIT:
-        return "vert";
-    case VK_SHADER_STAGE_FRAGMENT_BIT:
-        return "frag";
-    case VK_SHADER_STAGE_COMPUTE_BIT:
-        return "comp";
-    default:
-        return "";
-    }
-}
 
 static const char* toStageDefines(VkShaderStageFlagBits value) 
 {

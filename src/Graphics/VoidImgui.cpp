@@ -270,7 +270,7 @@ void ImguiService::init(void* configuration)
     textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
         .setData(pixels)
         .setSize(uint16_t(width), uint16_t(height), 1)
-        .setFlags(1, 0)
+        .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         .setName("Imgui_Font");
     FONT_TEXTURE = gpu->createTexture(textureCreation);
 
@@ -335,7 +335,7 @@ void ImguiService::init(void* configuration)
 
     //Create constant buffer.
     BufferCreation cbCreation;
-    cbCreation.set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ResourceType::Type::DYNAMIC, 64)
+    cbCreation.set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 64)
         .setName("CB_Imgui");
     UI_CB = gpu->createBuffer(cbCreation);
 
@@ -362,12 +362,12 @@ void ImguiService::init(void* configuration)
 
     //Create vertex and index buffer
     BufferCreation vbCreation;
-    vbCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ResourceType::Type::DYNAMIC, VB_SIZE)
+    vbCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VB_SIZE)
         .setName("VB_Imgui");
     VB = gpu->createBuffer(vbCreation);
 
     BufferCreation ibCreation;
-    ibCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::DYNAMIC, IB_SIZE)
+    ibCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, IB_SIZE)
         .setName("IB_SIZE");
     IB = gpu->createBuffer(ibCreation);
 }

@@ -92,9 +92,7 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
 add_compile_definitions(SDL_MAIN_HANDLED)
 
 
-set(FOUNDATION_SOURCE src/Foundation/Gltf.hpp
-                      src/Foundation/Gltf.cpp
-                      src/Foundation/Array.hpp
+set(FOUNDATION_SOURCE src/Foundation/Array.hpp
                       src/Foundation/Assert.hpp
                       src/Foundation/Bit.cpp
                       src/Foundation/Bit.hpp

@@ -35,7 +35,6 @@
 //#include "vender/tracy/tracy/Tracy.hpp"
 
 #include "Foundation/File.hpp"
-#include "Foundation/Gltf.hpp"
 #include "Foundation/Numerics.hpp"
 #include "Foundation/ResourceManager.hpp"
 #include "Foundation/Time.hpp"
@@ -45,6 +44,23 @@
 #include <stdlib.h>
 #include <SDL3/SDL.h>
 #include <stb_image.h>
+
+
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+
+//I might try to remove this later.
+#define InjectDefault3DModel() \
+if (fileExists(DEFAULT_3D_MODEL)) \
+{\
+    argc = 2;\
+    argv[1] = const_cast<char*>(DEFAULT_3D_MODEL);\
+}\
+else \
+{\
+    vprint("Could not find file.");\
+    exit(-1);\
+}\
 
 namespace
 {
@@ -235,7 +251,7 @@ int main(int argc, char** argv)
             int comp = 0;
             int width = 0;
             int height = 0;
-            uint8_t mipLevels = 1;
+            //uint8_t mipLevels = 1;
 
             uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
             stbi_info_from_memory(rawBufferData, image.buffer_view->size, &width, &height, &comp);
@@ -260,6 +276,7 @@ int main(int argc, char** argv)
             textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
                 .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
                 .setData(textureData)
+                .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                 .setName(nullptr);
 
             TextureResource* textureResource = renderer.createTexture(textureCreation);
@@ -279,7 +296,7 @@ int main(int argc, char** argv)
     textureCreation.setName("dummyTexture")
         .setSize(1, 1, 1)
         .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-        .setFlags(1, 0)
+        .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         .setData(&zeroValue);
     TextureHandle dummyTexture = gpu.createTexture(textureCreation);
 
@@ -325,7 +342,7 @@ int main(int argc, char** argv)
 
     vec4s dummyData[3]{};
     BufferCreation bufferCreation{};
-    bufferCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(vec4s) * 3)
+    bufferCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(vec4s) * 3)
         .setData(dummyData)
         .setName("Dummy_attribute_buffer");
 
@@ -373,7 +390,7 @@ int main(int argc, char** argv)
         //Constant buffer
         BufferCreation uniformBufferCreation;
         uniformBufferCreation.reset()
-            .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ResourceType::Type::DYNAMIC, sizeof(UniformData))
+            .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT , sizeof(UniformData))
             .setName("cubeCB");
         cubeCB = gpu.createBuffer(uniformBufferCreation);
 
@@ -483,7 +500,7 @@ int main(int argc, char** argv)
                     cgltf_accessor_unpack_indices(meshPrimitive.indices, indices.data, indexCompenentSize, indices.size);
 
                     bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, indices.size * meshPrimitive.indices->stride)
+                        .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.size * meshPrimitive.indices->stride)
                         .setName("indices")
                         .setData(indices.data);
                     currentIndexBuffer = gpu.createBuffer(bufferCreation);
@@ -498,7 +515,7 @@ int main(int argc, char** argv)
                     dsCreation.buffer(cubeCB, 0);
 
                     bufferCreation.reset()
-                                  .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, ResourceType::Type::DYNAMIC, sizeof(MaterialData))
+                                  .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
                                   .setName("material");
                     meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
                     dsCreation.buffer(meshDraw.materialBuffer, 1);
@@ -605,7 +622,7 @@ int main(int argc, char** argv)
                         dsCreation.textureSampler(textureGPU.handle, samplerHandle, 4);
 
                         meshDraw.materialData.occlusionFactor = material->occlusion_texture.scale !=
-                            glTF::INVALID_FLOAT_VALUE ?
+                            FLT_MAX ?
                             material->occlusion_texture.scale :
                             1.f;
 
@@ -761,7 +778,7 @@ int main(int argc, char** argv)
                     }
 
                     bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(Vertices) * vertex.size)
+                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(Vertices) * vertex.size)
                         .setName("Vertices")
                         .setData(vertex.data);
                     meshDraw.vertexBuffer = gpu.createBuffer(bufferCreation);

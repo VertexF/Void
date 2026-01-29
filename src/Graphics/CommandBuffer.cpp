@@ -57,17 +57,17 @@ void CommandBuffer::bindPass(RenderPassHandle renderPassHandle)
 
     RenderPass* renderPass = device->accessRenderPass(renderPassHandle);
 
-    if (currentRenderPass && (currentRenderPass->type != RenderPassType::Types::COMPUTE) &&
+    if (currentRenderPass && (currentRenderPass->type != RenderPassEnumType::COMPUTE) &&
                                 (renderPass != currentRenderPass))
     {
         vkCmdEndRenderPass(vkCommandBuffer);
     }
 
-    if (renderPass != currentRenderPass && (renderPass->type != RenderPassType::Types::COMPUTE))
+    if (renderPass != currentRenderPass && (renderPass->type != RenderPassEnumType::COMPUTE))
     {
         VkRenderPassBeginInfo renderPassBegin{};
         renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBegin.framebuffer = renderPass->type == RenderPassType::Types::SWAPCHAIN ?
+        renderPassBegin.framebuffer = renderPass->type == RenderPassEnumType::SWAPCHAIN ?
             device->vulkanSwapchainFramebuffers[device->vulkanImageIndex] :
             renderPass->vkFrameBuffer;
         renderPassBegin.renderPass = renderPass->vkRenderPass;
@@ -278,7 +278,7 @@ void CommandBuffer::dispatchIndirect(BufferHandle bufferHandle, uint32_t offset)
 
 void CommandBuffer::barrier(const ExecutionBarrier& barrier)
 {
-    if (currentRenderPass && (currentRenderPass->type != RenderPassType::Types::COMPUTE)) 
+    if (currentRenderPass && (currentRenderPass->type != RenderPassEnumType::COMPUTE))
     {
         vkCmdEndRenderPass(vkCommandBuffer);
         currentRenderPass = nullptr;

@@ -73,7 +73,7 @@ struct Renderer
 
     //Creation/destruction
     BufferResource* createBuffer(const BufferCreation& creation);
-    BufferResource* createBuffer(VkBufferUsageFlags type, ResourceType::Type usage, 
+    BufferResource* createBuffer(VkBufferUsageFlags type,
                                     uint32_t size, void* data, const char* name);
 
     TextureResource* createTexture(const TextureCreation& creation);
