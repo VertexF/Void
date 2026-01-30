@@ -340,14 +340,6 @@ int main(int argc, char** argv)
     Array<void*> meshIndices;
     meshIndices.init(allocator, 256);
 
-    vec4s dummyData[3]{};
-    BufferCreation bufferCreation{};
-    bufferCreation.set(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(vec4s) * 3)
-        .setData(dummyData)
-        .setName("Dummy_attribute_buffer");
-
-    BufferHandle dummyAttributeBuffer = gpu.createBuffer(bufferCreation);
-
     cgltf_component_type componentType = cgltf_component_type_max_enum;
     Array<Vertices> vertices;
     vertices.init(allocator, 256);
@@ -499,10 +491,10 @@ int main(int argc, char** argv)
                     indices.init(&scratchAllocator, (uint32_t)meshPrimitive.indices->count, (uint32_t)meshPrimitive.indices->count);
                     cgltf_accessor_unpack_indices(meshPrimitive.indices, indices.data, indexCompenentSize, indices.size);
 
-                    bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.size * meshPrimitive.indices->stride)
-                        .setName("indices")
-                        .setData(indices.data);
+                    BufferCreation bufferCreation{};
+                    bufferCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.size * meshPrimitive.indices->stride)
+                                  .setName("indices")
+                                  .setData(indices.data);
                     currentIndexBuffer = gpu.createBuffer(bufferCreation);
 
                     meshDraw.indexBuffer = currentIndexBuffer;
@@ -974,8 +966,6 @@ int main(int argc, char** argv)
         gpu.destroyBuffer(meshDraw.vertexBuffer);
         gpu.destroyBuffer(meshDraw.indexBuffer);
     }
-
-    gpu.destroyBuffer(dummyAttributeBuffer);
 
     gpu.destroyTexture(dummyTexture);
     gpu.destroySampler(dummySampler);

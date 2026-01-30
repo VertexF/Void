@@ -42,8 +42,6 @@ set(VOID_SOURCE src/main.cpp
                 src/Application/Keys.hpp
                 src/Application/Keys.cpp
 
-                src/Graphics/VulkanRenderer.hpp
-                src/Graphics/VulkanRenderer.cpp
                 src/Graphics/VoidImgui.hpp
                 src/Graphics/VoidImgui.cpp
                 src/Graphics/CommandBuffer.hpp
