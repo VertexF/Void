@@ -19,7 +19,7 @@ namespace
     BufferHandle VB;
     BufferHandle IB;
     BufferHandle UI_CB;
-    DescriptorSetLayoutHandle DESCRIPTOR_SET_LAYOUT;
+    DescriptorSetLayoutHandle sDescriptorSetLayout;
     DescriptorSetHandle UI_DESCRIPTOR_SET;
 
     uint32_t VB_SIZE = 665536;
@@ -329,8 +329,8 @@ void ImguiService::init(void* configuration)
             .setName("RLL_Imgui");
     }
 
-    DESCRIPTOR_SET_LAYOUT = gpu->createDescriptorSetLayout(descriptorSetLayoutCreation);
-    pipelineCreation.addDescriptorSetLayout(DESCRIPTOR_SET_LAYOUT);
+    sDescriptorSetLayout = gpu->createDescriptorSetLayout(descriptorSetLayoutCreation);
+    pipelineCreation.addDescriptorSetLayout(sDescriptorSetLayout);
     IMGUI_PIPELINE = gpu->createPipeline(pipelineCreation);
 
     //Create constant buffer.
@@ -388,7 +388,7 @@ void ImguiService::shutdown()
     gpu->destroyBuffer(VB);
     gpu->destroyBuffer(IB);
     gpu->destroyBuffer(UI_CB);
-    gpu->destroyDescriptorSetLayout(DESCRIPTOR_SET_LAYOUT);
+    gpu->destroyDescriptorSetLayout(sDescriptorSetLayout);
 
     gpu->destroyPipeline(IMGUI_PIPELINE);
     gpu->destroyTexture(FONT_TEXTURE);
@@ -548,8 +548,10 @@ void ImguiService::render(CommandBuffer& commands)
                     {
                         Rect2DInt scissorRect =
                         {
-                            static_cast<int16_t>(clipRect.x), static_cast<int16_t>(fbHeight - clipRect.w),
-                            static_cast<int16_t>(clipRect.z - clipRect.x), static_cast<int16_t>(clipRect.w - clipRect.y)
+                            .x = static_cast<int16_t>(clipRect.x),
+                            .y = static_cast<int16_t>(fbHeight - clipRect.w),
+                            .width = static_cast<uint16_t>(clipRect.z - clipRect.x),
+                            .height = static_cast<uint16_t>(clipRect.w - clipRect.y),
                         };
                         commands.setScissor(&scissorRect);
                     }
@@ -557,8 +559,10 @@ void ImguiService::render(CommandBuffer& commands)
                     {
                         Rect2DInt scissorRect =
                         {
-                            static_cast<int16_t>(clipRect.x), static_cast<int16_t>(clipRect.y),
-                            static_cast<int16_t>(clipRect.z - clipRect.x), static_cast<int16_t>(clipRect.w - clipRect.y)
+                            .x = static_cast<int16_t>(clipRect.x),
+                            .y = static_cast<int16_t>(clipRect.y),
+                            .width = static_cast<uint16_t>(clipRect.z - clipRect.x),
+                            .height = static_cast<uint16_t>(clipRect.w - clipRect.y),
                         };
                         commands.setScissor(&scissorRect);
                     }
@@ -579,7 +583,7 @@ void ImguiService::render(CommandBuffer& commands)
                                 //Create new descriptor set
                                 DescriptorSetCreation dsCreation{};
 
-                                dsCreation.setLayout(DESCRIPTOR_SET_LAYOUT)
+                                dsCreation.setLayout(sDescriptorSetLayout)
                                     .buffer(UI_CB, 0)
                                     .texture(lastTexture, 1)
                                     .setName("RL_Dynamic_Imgui");

@@ -217,7 +217,7 @@ int main(int argc, char** argv)
     }
 
     Array<TextureResource> images2;
-    images2.init(allocator, cgltfData->images_count);
+    images2.init(allocator, uint32_t(cgltfData->images_count));
 
     //GLB version.
     for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
@@ -240,7 +240,7 @@ int main(int argc, char** argv)
             //uint8_t mipLevels = 1;
 
             uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
-            stbi_info_from_memory(rawBufferData, image.buffer_view->size, &width, &height, &comp);
+            stbi_info_from_memory(rawBufferData, int(image.buffer_view->size), &width, &height, &comp);
 
             //TODO: Add mipmap support later.
             //uint32_t w = width;
@@ -256,7 +256,7 @@ int main(int argc, char** argv)
 
             int x;
             int y;
-            uint8_t* textureData = stbi_load_from_memory(rawBufferData, image.buffer_view->size, &x, &y, &comp, 4);
+            uint8_t* textureData = stbi_load_from_memory(rawBufferData, int(image.buffer_view->size), &x, &y, &comp, 4);
 
             TextureCreation textureCreation{};
             textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
@@ -297,7 +297,7 @@ int main(int argc, char** argv)
     resourceNameBuffer.init(void_kilo(64), allocator);
 
     Array<SamplerResource> samplers2;
-    samplers2.init(allocator, cgltfData->samplers_count);
+    samplers2.init(allocator, uint32_t(cgltfData->samplers_count));
 
     for (uint32_t samplerIndex = 0; samplerIndex < cgltfData->samplers_count; ++samplerIndex)
     {
@@ -320,7 +320,7 @@ int main(int argc, char** argv)
     directoryChange(cwd.path);
 
     Array<MeshDraw> meshDraws;
-    meshDraws.init(allocator, cgltfData->meshes_count);
+    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
 
     //We have no idea if it's 
     Array<void*> meshIndices;
@@ -373,32 +373,33 @@ int main(int argc, char** argv)
         cubeCB = gpu.createBuffer(uniformBufferCreation);
 
         //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
-        Array<int32_t> nodeParents2;
-        nodeParents2.init(allocator, cgltfData->nodes_count);
-        Array<cgltf_node> nodeStack2;
-        nodeStack2.init(allocator, cgltfData->nodes_count);
+        Array<int32_t> nodeParents;
+        uint32_t nodeCount = uint32_t(cgltfData->nodes_count);
+        nodeParents.init(allocator, nodeCount);
+        Array<cgltf_node> nodeStack;
+        nodeStack.init(allocator, nodeCount);
 
-        Array<mat4s> nodeMatrix2;
-        nodeMatrix2.init(allocator, cgltfData->nodes_count, cgltfData->nodes_count);
+        Array<mat4s> nodeMatrix;
+        nodeMatrix.init(allocator, nodeCount, nodeCount);
 
         //Adding all the root nodes to the array.
-        for (uint32_t sceneIndex = 0; sceneIndex < cgltfData->scenes_count; ++sceneIndex)
+        for (uint32_t sceneIndex = 0; sceneIndex < uint32_t(cgltfData->scenes_count); ++sceneIndex)
         {
             cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
             for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
             {
                 cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
-                nodeParents2.push(-1);
-                nodeStack2.push(*parentNode);
+                nodeParents.push(-1);
+                nodeStack.push(*parentNode);
             }
         }
 
         mat4s finalMatrix = glms_mat4_identity();
-        for (uint32_t sceneIndex = 0; sceneIndex < cgltfData->scenes_count; ++sceneIndex)
+        for (uint32_t sceneIndex = 0; sceneIndex < uint32_t(cgltfData->scenes_count); ++sceneIndex)
         {
-            for (uint32_t nodeIndex = 0; nodeIndex < nodeStack2.size; ++nodeIndex)
+            for (uint32_t nodeIndex = 0; nodeIndex < nodeStack.size; ++nodeIndex)
             {
-                cgltf_node currentNode = nodeStack2[nodeIndex];
+                cgltf_node currentNode = nodeStack[nodeIndex];
 
                 mat4s localMatrix = glms_mat4_identity();
 
@@ -437,24 +438,24 @@ int main(int argc, char** argv)
                     localMatrix = transform.calculateMatrix();
                 }
 
-                nodeMatrix2[nodeIndex] = localMatrix;
+                nodeMatrix[nodeIndex] = localMatrix;
 
                 for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
                 {
                     cgltf_node childNode = *currentNode.children[nodeIndex];
-                    nodeStack2.push(childNode);
-                    nodeParents2.push(nodeIndex);
+                    nodeStack.push(childNode);
+                    nodeParents.push(nodeIndex);
                 }
 
                 finalMatrix = localMatrix;
-                int32_t parentNodeIndex = nodeParents2[nodeIndex];
+                int32_t parentNodeIndex = nodeParents[nodeIndex];
                 while (parentNodeIndex != -1)
                 {
-                    finalMatrix = glms_mat4_mul(nodeMatrix2[parentNodeIndex], finalMatrix);
-                    parentNodeIndex = nodeParents2[parentNodeIndex];
+                    finalMatrix = glms_mat4_mul(nodeMatrix[parentNodeIndex], finalMatrix);
+                    parentNodeIndex = nodeParents[parentNodeIndex];
                 }
 
-                cgltf_mesh* mesh2 = nodeStack2[nodeIndex].mesh;
+                cgltf_mesh* mesh2 = nodeStack[nodeIndex].mesh;
 
                 //Final SRT composition
                 for (uint32_t primitiveIndex = 0; primitiveIndex < mesh2->primitives_count; ++primitiveIndex)
@@ -467,18 +468,19 @@ int main(int argc, char** argv)
 
                     //We are now correctly parsing indices. We always expect with the cgltf_accessor_unpack_indices that the index offset to 0.
                     meshDraw.indexOffset = 0;
-                    meshDraw.count = meshPrimitive.indices->count;
+                    uint32_t indexCount = uint32_t(meshPrimitive.indices->count);
+                    meshDraw.count = indexCount;
                     componentType = meshPrimitive.indices->component_type;
 
-                    uint32_t stackPrimitveMarker = scratchAllocator.getMarker();
+                    size_t stackPrimitveMarker = scratchAllocator.getMarker();
 
-                    uint32_t indexCompenentSize = cgltf_component_size(meshPrimitive.indices->component_type);
+                    uint32_t indexCompenentSize = (uint32_t)cgltf_component_size(meshPrimitive.indices->component_type);
                     Array<uint32_t> indices;
-                    indices.init(&scratchAllocator, (uint32_t)meshPrimitive.indices->count, (uint32_t)meshPrimitive.indices->count);
+                    indices.init(&scratchAllocator, indexCount, indexCount);
                     cgltf_accessor_unpack_indices(meshPrimitive.indices, indices.data, indexCompenentSize, indices.size);
 
                     BufferCreation bufferCreation{};
-                    bufferCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.size * meshPrimitive.indices->stride)
+                    bufferCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, uint32_t(indices.size * meshPrimitive.indices->stride))
                                   .setName("indices")
                                   .setData(indices.data);
                     currentIndexBuffer = gpu.createBuffer(bufferCreation);
@@ -517,7 +519,7 @@ int main(int argc, char** argv)
                             cgltf_texture* textureInfo = material->pbr_metallic_roughness.base_color_texture.texture;
                             SamplerHandle samplerHandle = dummySampler;
 
-                            uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                            uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
                             TextureResource& textureGPU = images2[imageIndex];
 
                             if (textureInfo->sampler)
@@ -542,7 +544,7 @@ int main(int argc, char** argv)
                             cgltf_texture* textureInfo = material->pbr_metallic_roughness.metallic_roughness_texture.texture;
                             SamplerHandle samplerHandle = dummySampler;
 
-                            uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                            uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
                             TextureResource& textureGPU = images2[imageIndex];
 
                             if (textureInfo->sampler)
@@ -586,7 +588,7 @@ int main(int argc, char** argv)
                         cgltf_texture* textureInfo = material->occlusion_texture.texture;
                         SamplerHandle samplerHandle = dummySampler;
 
-                        uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
                         TextureResource& textureGPU = images2[imageIndex];
 
                         if (textureInfo->sampler)
@@ -617,7 +619,7 @@ int main(int argc, char** argv)
                         cgltf_texture* textureInfo = material->emissive_texture.texture;
                         SamplerHandle samplerHandle = dummySampler;
 
-                        uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
                         TextureResource& textureGPU = images2[imageIndex];
 
                         if (textureInfo->sampler)
@@ -650,7 +652,7 @@ int main(int argc, char** argv)
                         cgltf_texture* textureInfo = material->normal_texture.texture;
                         SamplerHandle samplerHandle = dummySampler;
 
-                        uint32_t imageIndex = cgltf_image_index(cgltfData, textureInfo->image);
+                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
                         TextureResource& textureGPU = images2[imageIndex];
 
                         if (textureInfo->sampler)
@@ -675,18 +677,18 @@ int main(int argc, char** argv)
                     const cgltf_accessor* tangentAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_tangent, 0);
                     const cgltf_accessor* textureAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_texcoord, 0);
 
-                    uint32_t vertexCount = positionAccessor->count;
+                    uint32_t vertexCount = uint32_t(positionAccessor->count);
                     Array<Vertices> vertex;
                     vertex.init(&scratchAllocator, vertexCount, vertexCount);
                     if (positionAccessor)
                     {
                         Array<float> scratch;
-                        cgltf_size accessFloatSize = cgltf_num_components(normalAccessor->type);
-                        scratch.init(&scratchAllocator, positionAccessor->count * accessFloatSize, positionAccessor->count * accessFloatSize);
+                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(normalAccessor->type);
+                        scratch.init(&scratchAllocator, vertexCount * accessFloatSize, vertexCount * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(positionAccessor->type) == 3);
                         cgltf_accessor_unpack_floats(positionAccessor, scratch.data, positionAccessor->count * accessFloatSize);
 
-                        for (size_t j = 0; j < vertexCount; ++j)
+                        for (uint32_t j = 0; j < vertexCount; ++j)
                         {
                             vertex[j].position[0] = scratch[j * 3 + 0];
                             vertex[j].position[1] = scratch[j * 3 + 1];
@@ -702,12 +704,13 @@ int main(int argc, char** argv)
                     if (normalAccessor)
                     {
                         Array<float> scratch;
-                        cgltf_size accessFloatSize = cgltf_num_components(normalAccessor->type);
-                        scratch.init(&scratchAllocator, normalAccessor->count * accessFloatSize, normalAccessor->count * accessFloatSize);
+                        uint32_t normalCount = (uint32_t)normalAccessor->count;
+                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(normalAccessor->type);
+                        scratch.init(&scratchAllocator, normalCount* accessFloatSize, normalCount* accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(normalAccessor->type) == 3);
                         cgltf_accessor_unpack_floats(normalAccessor, scratch.data, normalAccessor->count * accessFloatSize);
 
-                        for (size_t j = 0; j < vertexCount; ++j)
+                        for (uint32_t j = 0; j < vertexCount; ++j)
                         {
                             vertex[j].normals[0] = scratch[j * 3 + 0];
                             vertex[j].normals[1] = scratch[j * 3 + 1];
@@ -722,12 +725,13 @@ int main(int argc, char** argv)
                     if (tangentAccessor)
                     {
                         Array<float> scratch;
-                        cgltf_size accessFloatSize = cgltf_num_components(tangentAccessor->type);
-                        scratch.init(&scratchAllocator, tangentAccessor->count * accessFloatSize, tangentAccessor->count * accessFloatSize);
+                        uint32_t tangentCount = uint32_t(tangentAccessor->count);
+                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(tangentAccessor->type);
+                        scratch.init(&scratchAllocator, tangentCount* accessFloatSize, tangentCount * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(tangentAccessor->type) == 4);
                         cgltf_accessor_unpack_floats(tangentAccessor, scratch.data, tangentAccessor->count * accessFloatSize);
 
-                        for (size_t j = 0; j < vertexCount; ++j)
+                        for (uint32_t j = 0; j < vertexCount; ++j)
                         {
                             vertex[j].tangent[0] = scratch[j * 4 + 0];
                             vertex[j].tangent[1] = scratch[j * 4 + 1];
@@ -741,12 +745,13 @@ int main(int argc, char** argv)
                     if (textureAccessor)
                     {
                         Array<float> scratch;
-                        cgltf_size accessFloatSize = cgltf_num_components(textureAccessor->type);
-                        scratch.init(&scratchAllocator, textureAccessor->count * accessFloatSize, textureAccessor->count * accessFloatSize);
+                        uint32_t textureCount = (uint32_t)textureAccessor->count;
+                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(textureAccessor->type);
+                        scratch.init(&scratchAllocator, textureCount * accessFloatSize, textureCount * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(textureAccessor->type) == 2);
                         cgltf_accessor_unpack_floats(textureAccessor, scratch.data, textureAccessor->count * accessFloatSize);
 
-                        for (size_t j = 0; j < vertexCount; ++j)
+                        for (uint32_t j = 0; j < vertexCount; ++j)
                         {
                             vertex[j].texCoord0[0] = scratch[j * 2 + 0];
                             vertex[j].texCoord0[1] = scratch[j * 2 + 1];
@@ -772,9 +777,9 @@ int main(int argc, char** argv)
             }
         }
 
-        nodeParents2.shutdown();
-        nodeStack2.shutdown();
-        nodeMatrix2.shutdown();
+        nodeParents.shutdown();
+        nodeStack.shutdown();
+        nodeMatrix.shutdown();
     }
 
     cgltf_free(cgltfData);

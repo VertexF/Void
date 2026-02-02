@@ -453,10 +453,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         framebufferInfo.height = gpu.swapchainHeight;
         framebufferInfo.layers = 1;
 
-        VkImageView framebufferAttachments[2];
+        VkImageView framebufferAttachments[2]{};
         framebufferAttachments[1] = depthTextureVK->vkImageView;
 
-        for (size_t i = 0; i < gpu.swapchainImageCount; ++i)
+        for (uint32_t i = 0; i < gpu.swapchainImageCount; ++i)
         {
             framebufferAttachments[0] = gpu.vulkanSwapchainImageViews[i];
             framebufferInfo.pAttachments = framebufferAttachments;
@@ -490,7 +490,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         region.imageExtent = { gpu.swapchainWidth, gpu.swapchainHeight };
 
         //Transition
-        for (size_t i = 0; i < gpu.swapchainImageCount; ++i)
+        for (uint32_t i = 0; i < gpu.swapchainImageCount; ++i)
         {
             transitionImageLayout(commandBuffer->vkCommandBuffer, gpu.vulkanSwapchainImages[i], gpu.vulkanSurfaceFormat.format,
                 VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, false);
@@ -694,7 +694,7 @@ void CommandBufferRing::init(GPUDevice* newGPU)
 {
     gpu = newGPU;
 
-    imageThreadCount = MAX_THREADS * gpu->swapchainImageCount;
+    imageThreadCount = uint8_t(MAX_THREADS * gpu->swapchainImageCount);
     commandBufferCount = imageThreadCount * BUFFER_PER_POOL;
     
     vulkanCommandPools.init(gpu->allocator, imageThreadCount, imageThreadCount);
@@ -769,7 +769,7 @@ CommandBuffer* CommandBufferRing::getCommandBuffer(uint32_t frame, bool begin)
     return commandBuffer;
 }
 
-CommandBuffer* CommandBufferRing::getCommandBufferInstant(uint32_t frame, bool begin)
+CommandBuffer* CommandBufferRing::getCommandBufferInstant(uint32_t frame, bool /*begin*/)
 {
     CommandBuffer* commandBuffer = &commandBuffers[frame * BUFFER_PER_POOL + 1];
     return commandBuffer;
@@ -1215,7 +1215,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     }
 
     gpuTimestampManager = reinterpret_cast<GPUTimestampManager*>(memory);
-    gpuTimestampManager->init(allocator, creation.GPUTimeQueriesPerFrame, swapchainImageCount);
+    gpuTimestampManager->init(allocator, creation.GPUTimeQueriesPerFrame, uint16_t(swapchainImageCount));
 
     commandBufferRing.init(this);
 
@@ -1350,28 +1350,28 @@ void GPUDevice::shutdown()
 
         switch (resourceDeletion.type)
         {
-        case ResourceDeletion::Types::BUFFER:
+        case ResourceDeletion::BUFFER:
             destroyBufferInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::Types::PIPELINE:
+        case ResourceDeletion::PIPELINE:
             destroyPipelineInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::Types::RENDER_PASS:
+        case ResourceDeletion::RENDER_PASS:
             destroyRenderPassInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::Types::DESCRIPTOR_SET:
+        case ResourceDeletion::DESCRIPTOR_SET:
             destroyDescriptorSetInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::Types::DESCRIPTOR_SET_LAYOUT:
+        case ResourceDeletion::DESCRIPTOR_SET_LAYOUT:
             destroyDescriptorSetLayoutInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::Types::SAMPLER:
+        case ResourceDeletion::SAMPLER:
             destroySamplerInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::Types::SHADER_STATE:
+        case ResourceDeletion::SHADER_STATE:
             destroyShaderStateInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::Types::TEXTURE:
+        case ResourceDeletion::TEXTURE:
             destroyTextureInstant(resourceDeletion.handle);
             break;
         }
@@ -2374,7 +2374,7 @@ void GPUDevice::destroyBuffer(BufferHandle buffer)
 {
     if (buffer.index < buffers.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::BUFFER, buffer.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::BUFFER, buffer.index, currentFrame });
     }
     else
     {
@@ -2386,7 +2386,7 @@ void GPUDevice::destroyTexture(TextureHandle texture)
 {
     if (texture.index < textures.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::TEXTURE, texture.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::TEXTURE, texture.index, currentFrame });
     }
     else
     {
@@ -2398,7 +2398,7 @@ void GPUDevice::destroyPipeline(PipelineHandle pipeline)
 {
     if (pipeline.index < pipelines.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::PIPELINE, pipeline.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::PIPELINE, pipeline.index, currentFrame });
         //Shader state current is handled internally when creating a pipeline, thus add this to track correctly.
         Pipeline* pipelineTrack = accessPipeline(pipeline);
         destroyShaderState(pipelineTrack->shaderState);
@@ -2413,7 +2413,7 @@ void GPUDevice::destroySampler(SamplerHandle sampler)
 {
     if (sampler.index < samplers.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::SAMPLER, sampler.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::SAMPLER, sampler.index, currentFrame });
     }
     else
     {
@@ -2425,7 +2425,7 @@ void GPUDevice::destroyDescriptorSetLayout(DescriptorSetLayoutHandle layout)
 {
     if (layout.index < descriptorSetLayouts.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::DESCRIPTOR_SET_LAYOUT, layout.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::DESCRIPTOR_SET_LAYOUT, layout.index, currentFrame });
     }
     else
     {
@@ -2437,7 +2437,7 @@ void GPUDevice::destroyDescriptorSet(DescriptorSetHandle layout)
 {
     if (layout.index < descriptorSets.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::DESCRIPTOR_SET, layout.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::DESCRIPTOR_SET, layout.index, currentFrame });
     }
     else
     {
@@ -2449,7 +2449,7 @@ void GPUDevice::destroyRenderPass(RenderPassHandle renderPass)
 {
     if (renderPass.index < renderPasses.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::RENDER_PASS, renderPass.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::RENDER_PASS, renderPass.index, currentFrame });
     }
     else
     {
@@ -2461,7 +2461,7 @@ void GPUDevice::destroyShaderState(ShaderStateHandle shader)
 {
     if (shader.index < shaders.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::Types::SHADER_STATE, shader.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceDeletion::SHADER_STATE, shader.index, currentFrame });
     }
     else
     {
@@ -3109,28 +3109,28 @@ void GPUDevice::present()
             {
                 switch (resourceDeletion.type)
                 {
-                case ResourceDeletion::Types::BUFFER:
+                case ResourceDeletion::BUFFER:
                     destroyBufferInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::Types::PIPELINE:
+                case ResourceDeletion::PIPELINE:
                     destroyPipelineInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::Types::RENDER_PASS:
+                case ResourceDeletion::RENDER_PASS:
                     destroyRenderPassInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::Types::DESCRIPTOR_SET:
+                case ResourceDeletion::DESCRIPTOR_SET:
                     destroyDescriptorSetInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::Types::DESCRIPTOR_SET_LAYOUT:
+                case ResourceDeletion::DESCRIPTOR_SET_LAYOUT:
                     destroyDescriptorSetLayoutInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::Types::SAMPLER:
+                case ResourceDeletion::SAMPLER:
                     destroySamplerInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::Types::SHADER_STATE:
+                case ResourceDeletion::SHADER_STATE:
                     destroyShaderStateInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::Types::TEXTURE:
+                case ResourceDeletion::TEXTURE:
                     destroyTextureInstant(resourceDeletion.handle);
                     break;
                 }

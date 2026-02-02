@@ -2,7 +2,6 @@
 #define GPU_RESOURCE_HDR
 
 #include "Foundation/Platform.hpp"
-#include "Graphics/GPUEnum.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -30,6 +29,19 @@ namespace
     constexpr uint32_t SUBMIT_HEADER_SENTINEL = 0xFEFEB7BA;
     constexpr uint32_t MAX_RESOURCE_DELETIONS = 64;
 }
+
+enum ResourceDeletion : uint8_t
+{
+    BUFFER,
+    TEXTURE,
+    PIPELINE,
+    SAMPLER,
+    DESCRIPTOR_SET_LAYOUT,
+    DESCRIPTOR_SET,
+    RENDER_PASS,
+    SHADER_STATE,
+    COUNT
+};
 
 enum RenderPassEnumType : uint8_t
 {
@@ -571,7 +583,7 @@ struct ExecutionBarrier
 
 struct ResourceUpdate 
 {
-    ResourceDeletion::Types type;
+    ResourceDeletion type;
     uint32_t handle;
     uint32_t currentFrame;
 };
@@ -584,7 +596,6 @@ struct Buffer
     VkDeviceSize vkDeviceSize;
 
     VkBufferUsageFlags typeFlags = 0;
-    //ResourceType::Type usage = ResourceType::Type::IMMUTABLE;
     uint32_t size = 0;
     uint32_t globalOffset = 0;
 
@@ -737,119 +748,6 @@ static const char* toStageDefines(VkShaderStageFlagBits value)
     default:
         return "";
     }
-}
-
-static VkAccessFlags toVKPipelineStage(ResourceState state) 
-{
-    VkAccessFlags returnVal = 0;
-    if (state & RESOURCE_STATE_COPY_SOURCE) 
-    {
-        returnVal |= VK_ACCESS_TRANSFER_READ_BIT;
-    }
-
-    if (state & RESOURCE_STATE_COPY_DEST) 
-    {
-        returnVal |= VK_ACCESS_TRANSFER_WRITE_BIT;
-    }
-
-    if (state & RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER) 
-    {
-        returnVal |= VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    }
-
-    if (state & RESOURCE_STATE_INDEX_BUFFER) 
-    {
-        returnVal |= VK_ACCESS_INDEX_READ_BIT;
-    }
-
-    if (state & RESOURCE_STATE_UNORDERED_ACCESS) 
-    {
-        returnVal |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    }
-
-    if (state & RESOURCE_STATE_INDIRECT_ARGUMENT) 
-    {
-        returnVal |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-    }
-
-    if (state & RESOURCE_STATE_RENDER_TARGET) 
-    {
-        returnVal |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    }
-
-    if (state & RESOURCE_STATE_DEPTH_WRITE) 
-    {
-        returnVal |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-    }
-
-    if (state & RESOURCE_STATE_SHADER_RESOURCE) 
-    {
-        returnVal |= VK_ACCESS_SHADER_READ_BIT;
-    }
-
-    if (state & RESOURCE_STATE_PRESENT) 
-    {
-        returnVal |= VK_ACCESS_MEMORY_READ_BIT;
-    }
-
-#ifdef ENABLE_RAYTRACING
-    if (state & RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE) 
-    {
-        returnVal |= VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV;
-    }
-#endif // ENABLE_RAYTRACING
-
-    return returnVal;
-}
-
-static VkImageLayout utilToVKImageLayout(ResourceState usage) 
-{
-    if (usage & RESOURCE_STATE_COPY_SOURCE) 
-    {
-        return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    }
-
-    if (usage & RESOURCE_STATE_COPY_DEST) 
-    {
-        return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    }
-
-    if (usage & RESOURCE_STATE_RENDER_TARGET) 
-    {
-        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    }
-
-    if (usage & RESOURCE_STATE_DEPTH_WRITE) 
-    {
-        return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-    }
-
-    if (usage & RESOURCE_STATE_DEPTH_READ) 
-    {
-        return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    }
-
-    if (usage & RESOURCE_STATE_UNORDERED_ACCESS) 
-    {
-        return VK_IMAGE_LAYOUT_GENERAL;
-    }
-
-    if (usage & RESOURCE_STATE_SHADER_RESOURCE) 
-    {
-        return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    }
-
-    if (usage & RESOURCE_STATE_PRESENT) 
-    {
-        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    }
-
-    if (usage == RESOURCE_STATE_COMMON) 
-    {
-        return VK_IMAGE_LAYOUT_GENERAL;
-    }
-
-    return VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
 //Determines pipeline stages involved for given accesses.

@@ -48,7 +48,6 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/CommandBuffer.cpp
                 src/Graphics/GPUDevice.cpp
                 src/Graphics/GPUDevice.hpp
-                src/Graphics/GPUEnum.hpp
                 src/Graphics/GPUProfiler.hpp
                 src/Graphics/GPUProfiler.cpp
                 src/Graphics/GPUResources.hpp

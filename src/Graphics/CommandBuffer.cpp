@@ -1,36 +1,44 @@
 #include "CommandBuffer.hpp"
 #include "GPUDevice.hpp"
-#include "GPUEnum.hpp"
 
 namespace 
 {
-    ResourceState toResourceState(VkPipelineStageFlagBits stage) 
+    VkAccessFlags toAccessMask(VkPipelineStageFlagBits stage) 
     {
         switch (stage) 
         {
         case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
-            return RESOURCE_STATE_INDIRECT_ARGUMENT;
+            return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
 
         case VK_PIPELINE_STAGE_VERTEX_INPUT_BIT:
-            return RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            return VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
 
         case VK_PIPELINE_STAGE_VERTEX_SHADER_BIT:
-            return RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        {
+            //Formerly known as return RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            VOID_ERROR("TODO: Check if this is valid for a VK_PIPELINE_STAGE_VERTEX_SHADER_BIT to an access mask of '0' AKA  VK_ACCESS_NONE.\n");
+            return VK_ACCESS_NONE;
+        }
 
         case VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT:
-            return RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        {
+            //Formerly known as return RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+            VOID_ERROR("TODO: Check if this is valid for a VK_PIPELINE_STAGE_VERTEX_SHADER_BIT to an access mask of '0' AKA  VK_ACCESS_NONE.\n");
+            return VK_ACCESS_NONE;
+        }
 
         case VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT:
-            return RESOURCE_STATE_RENDER_TARGET;
+            return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
         case VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT:
-            return RESOURCE_STATE_UNORDERED_ACCESS;
+            return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 
         case VK_PIPELINE_STAGE_TRANSFER_BIT:
-            return RESOURCE_STATE_COPY_DEST;
+            return VK_ACCESS_TRANSFER_WRITE_BIT;
 
         default:
             VOID_ERROR("Pipeline stage to resource state is not supported %d", stage);
+            return VK_ACCESS_FLAG_BITS_MAX_ENUM;
         }
     }
 }
@@ -115,7 +123,6 @@ void CommandBuffer::bindIndexBuffer(BufferHandle bufferHandle, uint32_t offset, 
     Buffer* buffer = device->accessBuffer(bufferHandle);
 
     VkBuffer vkBuffer = buffer->vkBuffer;
-    VkDeviceSize deviceOffset = offset;
     //TODO: Do I need to make global vertex buffer stuff?
     if (buffer->parentBuffer.index != INVALID_INDEX)
     {
@@ -127,7 +134,7 @@ void CommandBuffer::bindIndexBuffer(BufferHandle bufferHandle, uint32_t offset, 
     vkCmdBindIndexBuffer(vkCommandBuffer, vkBuffer, offset, indexType);
 }
 
-void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_t numLists, uint32_t* offsets, uint32_t numOffsets)
+void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_t numLists, uint32_t* /*offsets*/, uint32_t numOffsets)
 {
     uint32_t offsetsCache[8];
     numOffsets = 0;
@@ -244,7 +251,7 @@ void CommandBuffer::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uin
     vkCmdDrawIndexed(vkCommandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void CommandBuffer::drawIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t stride)
+void CommandBuffer::drawIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t /*stride*/)
 {
     Buffer* buffer = device->accessBuffer(bufferHandle);
     VkBuffer vkBuffer = buffer->vkBuffer;
@@ -253,7 +260,7 @@ void CommandBuffer::drawIndirect(BufferHandle bufferHandle, uint32_t offset, uin
     vkCmdDrawIndirect(vkCommandBuffer, vkBuffer, vkOffset, 1, sizeof(VkDrawIndirectCommand));
 }
 
-void CommandBuffer::drawIndexedIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t stride)
+void CommandBuffer::drawIndexedIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t /*stride*/)
 {
     Buffer* buffer = device->accessBuffer(bufferHandle);
     VkBuffer vkBuffer = buffer->vkBuffer;
@@ -305,26 +312,45 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
                 pImageBarrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 pImageBarrier->pNext = nullptr;
 
-                ResourceState currentState = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                            RESOURCE_STATE_RENDER_TARGET : 
-                                                                            RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-                ResourceState nextState = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                                RESOURCE_STATE_RENDER_TARGET :
-                                                                                RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+                VkAccessFlags sourceAccesMask = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ? 
+                                                                              VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
+                                                                              0;
+
+                VkAccessFlags destAccesMask = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                                 VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
+                                                                                 0;
+                VkImageLayout sourceImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ? 
+                                                                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : 
+                                                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+                VkImageLayout desinationImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
+                                                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
                 if (isColour == false) 
                 {
-                    currentState = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                    RESOURCE_STATE_DEPTH_WRITE : 
-                                                                    RESOURCE_STATE_DEPTH_READ;
-                    nextState = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                    RESOURCE_STATE_DEPTH_WRITE :
-                                                                    RESOURCE_STATE_DEPTH_READ;
+                   sourceAccesMask = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT :
+                        0;
+
+                   destAccesMask = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT :
+                        0;
+
+                   sourceImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                          VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL :
+                                                                          VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+                   desinationImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                              VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL :
+                                                                              VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
                 }
 
-                pImageBarrier->srcAccessMask = utilToVKImageLayout(currentState);
-                pImageBarrier->dstAccessMask = utilToVKImageLayout(nextState);
-                pImageBarrier->oldLayout = utilToVKImageLayout(currentState);
-                pImageBarrier->newLayout = utilToVKImageLayout(nextState);
+                pImageBarrier->srcAccessMask = sourceAccesMask;
+                pImageBarrier->dstAccessMask = destAccesMask;
+                pImageBarrier->oldLayout = sourceImageLayout;
+                pImageBarrier->newLayout = desinationImageLayout;
 
                 pImageBarrier->image = textureVulkan->vkImage;
                 pImageBarrier->subresourceRange.aspectMask = isColour ? 
@@ -360,10 +386,8 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
             vkBuffer.offset = 0;
             vkBuffer.size = buffer->size;
 
-            ResourceState currentState = toResourceState(barrier.sourcePipelineStage);
-            ResourceState nextState = toResourceState(barrier.destinationPipelineStage);
-            vkBuffer.srcAccessMask = utilToVKImageLayout(currentState);
-            vkBuffer.dstAccessMask = utilToVKImageLayout(nextState);
+            vkBuffer.srcAccessMask = toAccessMask(barrier.sourcePipelineStage);
+            vkBuffer.dstAccessMask = toAccessMask(barrier.destinationPipelineStage);
 
             sourceAccessFlags |= vkBuffer.srcAccessMask;
             destinationAccessFlags |= vkBuffer.dstAccessMask;
