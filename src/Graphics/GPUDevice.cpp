@@ -208,7 +208,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         VmaAllocationCreateInfo memoryInfo{};
-        memoryInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        memoryInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+        memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
         check(vmaCreateImage(gpu.VMAAllocator, &imageInfo, &memoryInfo, &texture->vkImage, &texture->vmaAllocation, nullptr));
 
@@ -1129,11 +1130,17 @@ void GPUDevice::init(const DeviceCreation& creation)
     //Create swapchain
     createSwapchain();
 
+    VmaVulkanFunctions vkFunctions{};
+    vkFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vkFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+    vkFunctions.vkCreateImage = vkCreateImage;
+
     //Create VMA Allocator
     VmaAllocatorCreateInfo allocatorInfo{};
     allocatorInfo.physicalDevice = vulkanPhysicalDevice;
     allocatorInfo.device = vulkanDevice;
     allocatorInfo.instance = vulkanInstance;
+    allocatorInfo.pVulkanFunctions = &vkFunctions;
 
     result = vmaCreateAllocator(&allocatorInfo, &VMAAllocator);
     check(result);
@@ -1441,8 +1448,8 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.flags = VMA_ALLOCATION_CREATE_STRATEGY_BEST_FIT_BIT;
-    memoryInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
     VmaAllocationInfo allocationInfo{};
     check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &buffer->vkBuffer, &buffer->vmaAllocation, &allocationInfo));
@@ -2772,6 +2779,7 @@ void GPUDevice::createSwapchain()
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = vulkanWindowSurface;
     swapchainCreateInfo.minImageCount = swapchainImageCount;
+    swapchainCreateInfo.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
     swapchainCreateInfo.imageFormat = vulkanSurfaceFormat.format;
     swapchainCreateInfo.imageExtent = { swapchainWidth, swapchainHeight };
     swapchainCreateInfo.clipped = VK_TRUE;

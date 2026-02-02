@@ -1,21 +1,3 @@
-
-////###########-TO BE RESTORED LATER-###########################
-//#include "Foundation/Memory.hpp"
-//#include "Graphics/VulkanRenderer.hpp"
-//
-//int main() 
-//{
-//	MemoryService::instance()->init(void_giga(1ull), void_mega(8));
-//
-//	VulkanRenderer* renderer = (VulkanRenderer*)void_alloca(sizeof(VulkanRenderer), &MemoryService::instance()->systemAllocator);
-//
-//	runGame(renderer);
-//
-//	void_free(renderer, &MemoryService::instance()->systemAllocator);
-//
-//	MemoryService::instance()->shutdown();
-//}
-
 #include "Application/Window.hpp"
 #include "Application/Input.hpp"
 #include "Application/Keys.hpp"
@@ -40,6 +22,7 @@
 #include "Foundation/Time.hpp"
 
 #include <cgltf.h>
+#include <tlsf.h>
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
@@ -164,7 +147,7 @@ int main(int argc, char** argv)
     MemoryService::instance()->init(void_giga(1ull), void_mega(8));
     timeServiceInit();
 
-    Allocator* allocator = &MemoryService::instance()->systemAllocator;
+    HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
     StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
 
     Window::instance()->init(1280, 800, "Void Engine");
@@ -212,6 +195,9 @@ int main(int argc, char** argv)
     cgltf_data* cgltfData = nullptr;
 
     cgltf_options options{};
+    options.memory.alloc_func = tlsf_malloc;
+    options.memory.free_func = tlsf_free;
+    options.memory.user_data = allocator->TLSFHandle;
     cgltf_result result = cgltf_parse_file(&options, GLTFFile, &cgltfData);
     if (result != cgltf_result_success)
     {
@@ -790,6 +776,8 @@ int main(int argc, char** argv)
         nodeStack2.shutdown();
         nodeMatrix2.shutdown();
     }
+
+    cgltf_free(cgltfData);
 
     //DescriptorSetCreation dsCreation{};
     //bufferCreation.reset()
