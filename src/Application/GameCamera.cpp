@@ -22,7 +22,7 @@ static vec3s lerp3(const vec3s& from, const vec3s& to, float t, float deltaTime)
 }
 
 void GameCamera::init(bool inEnabled /*= true*/, float inRotationSpeed /*= 10.f*/,
-                        float inMovementSpeed /*= 10.f*/, float inMovementDelta /*= 0.f*/) 
+                      float inMovementSpeed /*= 10.f*/, float inMovementDelta /*= 0.f*/) 
 {
     reset();
 

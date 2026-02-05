@@ -1055,13 +1055,17 @@ void GPUDevice::init(const DeviceCreation& creation)
     physicalDeviceFeature2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vkGetPhysicalDeviceFeatures2(vulkanPhysicalDevice, &physicalDeviceFeature2);
 
+    VkPhysicalDeviceVulkan11Features features11 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+    features11.pNext = &physicalDeviceFeature2;
+    features11.shaderDrawParameters = true;
+
     VkDeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceCreateInfo.queueCreateInfoCount = sizeof(queueInfo) / sizeof(queueInfo[0]);
     deviceCreateInfo.pQueueCreateInfos = queueInfo;
     deviceCreateInfo.enabledExtensionCount = deviceExtensionCount;
     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
-    deviceCreateInfo.pNext = &physicalDeviceFeature2;
+    deviceCreateInfo.pNext = &features11;
 
     result = vkCreateDevice(vulkanPhysicalDevice, &deviceCreateInfo, vulkanAllocationCallbacks, &vulkanDevice);
     check(result);
@@ -1593,10 +1597,17 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
         vkLayout[layout] = pipeline->descriptorSetLayout[layout]->vkDescriptorSetLayout;
     }
 
+    VkPushConstantRange range{};
+    range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    range.offset = 0;
+    range.size = 4;
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.pSetLayouts = vkLayout;
     pipelineLayoutInfo.setLayoutCount = creation.numActiveLayouts;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &range;
 
     VkPipelineLayout pipelineLayout;
     check(vkCreatePipelineLayout(vulkanDevice, &pipelineLayoutInfo, vulkanAllocationCallbacks, &pipelineLayout));
@@ -1821,270 +1832,6 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
     return handle;
 }
 
-PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation, DescriptorSetLayoutHandle one, DescriptorSetLayoutHandle two)
-{
-    PipelineHandle handle = { pipelines.obtainResource() };
-    if (handle.index == INVALID_INDEX)
-    {
-        return handle;
-    }
-
-    ShaderStateHandle shaderState = createShaderState(creation.shaders);
-    if (shaderState.index == INVALID_INDEX)
-    {
-        //Shader did not compile
-        pipelines.releaseResource(handle.index);
-        handle.index = INVALID_INDEX;
-
-        return handle;
-    }
-
-    //Now that shaders have compiled we can create the pipeline.
-    Pipeline* pipeline = accessPipeline(handle);
-    ShaderState* shaderStateData = accessShaderState(shaderState);
-
-    pipeline->shaderState = shaderState;
-    DescriptorSetLayout* oneLayout = accessDescriptorSetLayout(one);
-    DescriptorSetLayout* twoLayout = accessDescriptorSetLayout(two);
-    VkDescriptorSetLayout vkLayout[] = { oneLayout->vkDescriptorSetLayout, twoLayout->vkDescriptorSetLayout };
-
-    //Create VkPipelineLayout 
-    //for (uint32_t layout = 0; layout < creation.numActiveLayouts; ++layout)
-    //{
-    //    pipeline->descriptorSetLayout[layout] = accessDescriptorSetLayout(creation.descriptorSetLayout[layout]);
-    //    pipeline->descriptorSetLayoutHandle[layout] = creation.descriptorSetLayout[layout];
-
-    //    vkLayout[layout] = pipeline->descriptorSetLayout[layout]->vkDescriptorSetLayout;
-    //}
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.pSetLayouts = vkLayout;
-    pipelineLayoutInfo.setLayoutCount = 2;
-
-    VkPipelineLayout pipelineLayout;
-    check(vkCreatePipelineLayout(vulkanDevice, &pipelineLayoutInfo, vulkanAllocationCallbacks, &pipelineLayout));
-    //Cache the pipeline you created
-    pipeline->vkPipelineLayout = pipelineLayout;
-    pipeline->numActiveLayouts = creation.numActiveLayouts;
-
-    //Create full pipeline
-    if (shaderStateData->graphicsPipeline)
-    {
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-
-        //Shader stage
-        pipelineInfo.pStages = shaderStateData->shaderStateInfo;
-        pipelineInfo.stageCount = shaderStateData->activeShaders;
-        //Pipeline layout
-        pipelineInfo.layout = pipelineLayout;
-
-        //Vertex input
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-        //Vertex attributes.
-        VkVertexInputAttributeDescription vertexAttributes[8]{};
-        if (creation.vertexInput.numVertexAttributes)
-        {
-            for (uint32_t i = 0; i < creation.vertexInput.numVertexAttributes; ++i)
-            {
-                const VertexAttribute& vertexAttribute = creation.vertexInput.vertexAttributes[i];
-                vertexAttributes[i] =
-                {
-                    vertexAttribute.location, vertexAttribute.binding, vertexAttribute.format, vertexAttribute.offset
-                };
-            }
-
-            vertexInputInfo.vertexAttributeDescriptionCount = creation.vertexInput.numVertexAttributes;
-            vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes;
-        }
-        else
-        {
-            vertexInputInfo.vertexAttributeDescriptionCount = 0;
-            vertexInputInfo.pVertexAttributeDescriptions = nullptr;
-        }
-
-        //Vertex bindings
-        VkVertexInputBindingDescription vertexBindings[8];
-        if (creation.vertexInput.numVertexStreams)
-        {
-            vertexInputInfo.vertexBindingDescriptionCount = creation.vertexInput.numVertexStreams;
-
-            for (uint32_t i = 0; i < creation.vertexInput.numVertexStreams; ++i)
-            {
-                const VertexStream& vertexStream = creation.vertexInput.vertexStreams[i];
-                VkVertexInputRate vertexRate = vertexStream.inputRate == VK_VERTEX_INPUT_RATE_VERTEX ?
-                    VK_VERTEX_INPUT_RATE_VERTEX :
-                    VK_VERTEX_INPUT_RATE_INSTANCE;
-                vertexBindings[i] = { vertexStream.binding, vertexStream.stride, vertexRate };
-            }
-            vertexInputInfo.pVertexBindingDescriptions = vertexBindings;
-        }
-        else
-        {
-            vertexInputInfo.vertexBindingDescriptionCount = 0;
-            vertexInputInfo.pVertexBindingDescriptions = nullptr;
-        }
-
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-
-        //Colour blending
-        VkPipelineColorBlendAttachmentState colourBlendAttachment[8];
-        if (creation.blendState.activeStates)
-        {
-            for (size_t i = 0; i < creation.blendState.activeStates; ++i)
-            {
-                const BlendState& blendState = creation.blendState.blendStates[i];
-
-                colourBlendAttachment[i].colorWriteMask = blendState.colourWriteMask;
-                colourBlendAttachment[i].blendEnable = blendState.blendEnabled ? VK_TRUE : VK_FALSE;
-                colourBlendAttachment[i].srcColorBlendFactor = blendState.sourceColour;
-                colourBlendAttachment[i].dstColorBlendFactor = blendState.destinationColour;
-                colourBlendAttachment[i].colorBlendOp = blendState.colourOperation;
-
-                if (blendState.separateBlend)
-                {
-                    colourBlendAttachment[i].srcAlphaBlendFactor = blendState.sourceAlpha;
-                    colourBlendAttachment[i].dstAlphaBlendFactor = blendState.destinationAlpha;
-                    colourBlendAttachment[i].alphaBlendOp = blendState.alphaOperation;
-                }
-                else
-                {
-                    colourBlendAttachment[i].srcAlphaBlendFactor = blendState.sourceColour;
-                    colourBlendAttachment[i].dstAlphaBlendFactor = blendState.destinationColour;
-                    colourBlendAttachment[i].alphaBlendOp = blendState.colourOperation;
-                }
-            }
-        }
-        else
-        {
-            //Default non blended state
-            colourBlendAttachment[0] = {};
-            colourBlendAttachment[0].blendEnable = VK_FALSE;
-            colourBlendAttachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        }
-
-        VkPipelineColorBlendStateCreateInfo colourBlending{};
-        colourBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colourBlending.logicOpEnable = VK_FALSE;
-        colourBlending.logicOp = VK_LOGIC_OP_COPY;
-        colourBlending.attachmentCount = creation.blendState.activeStates ? creation.blendState.activeStates : 1;
-        colourBlending.pAttachments = colourBlendAttachment;
-        colourBlending.blendConstants[0] = 0.f;
-        colourBlending.blendConstants[1] = 0.f;
-        colourBlending.blendConstants[2] = 0.f;
-        colourBlending.blendConstants[3] = 0.f;
-
-        pipelineInfo.pColorBlendState = &colourBlending;
-
-        //Depth stencil
-        VkPipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthWriteEnable = creation.depthStencil.depthWriteEnable ? VK_TRUE : VK_FALSE;
-        depthStencil.stencilTestEnable = creation.depthStencil.stencilEnable ? VK_TRUE : VK_FALSE;
-        depthStencil.depthTestEnable = creation.depthStencil.depthEnable ? VK_TRUE : VK_FALSE;
-        depthStencil.depthCompareOp = creation.depthStencil.depthComparison;
-        if (creation.depthStencil.stencilEnable)
-        {
-            //TODO: add stencil
-            VOID_ERROR("The stencil part of the depth stencil pipeline creation is set to true.");
-        }
-
-        pipelineInfo.pDepthStencilState = &depthStencil;
-
-        //Multisampling
-        VkPipelineMultisampleStateCreateInfo multisampling{};
-        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        multisampling.minSampleShading = 1.f;
-        multisampling.pSampleMask = nullptr;
-        multisampling.alphaToOneEnable = VK_FALSE;
-        multisampling.alphaToCoverageEnable = VK_FALSE;
-
-        pipelineInfo.pMultisampleState = &multisampling;
-
-        VkPipelineRasterizationStateCreateInfo rasteriser{};
-        rasteriser.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasteriser.depthClampEnable = VK_FALSE;
-        rasteriser.rasterizerDiscardEnable = VK_FALSE;
-        rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
-        rasteriser.lineWidth = 1.f;
-        rasteriser.cullMode = creation.rasterisation.cullMode;
-        rasteriser.frontFace = creation.rasterisation.front;
-        rasteriser.depthBiasEnable = VK_FALSE;
-        rasteriser.depthBiasConstantFactor = 0.f;
-        rasteriser.depthBiasClamp = 0.f;
-        rasteriser.depthBiasSlopeFactor = 0.f;
-
-        pipelineInfo.pRasterizationState = &rasteriser;
-
-        //TODO: Check if we need tessellation for what we are doing.
-        //Tessellation
-        pipelineInfo.pTessellationState = nullptr;
-
-        //Viewport
-        VkViewport viewport{};
-        viewport.x = 0.f;
-        viewport.y = 0.f;
-        viewport.width = static_cast<float>(swapchainWidth);
-        viewport.height = static_cast<float>(swapchainHeight);
-        viewport.minDepth = 0.f;
-        viewport.maxDepth = 1.f;
-
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = { swapchainWidth, swapchainHeight };
-
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
-        viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
-
-        pipelineInfo.pViewportState = &viewportState;
-
-        //Render pass
-        pipelineInfo.renderPass = getVulkanRenderPass(creation.renderPass, creation.name);
-
-        //Dynamic state
-        VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = ArraySize(dynamicStates);
-        dynamicState.pDynamicStates = dynamicStates;
-
-        pipelineInfo.pDynamicState = &dynamicState;
-
-        vkCreateGraphicsPipelines(vulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, vulkanAllocationCallbacks, &pipeline->vkPipeline);
-
-        pipeline->vkBindPoint = VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS;
-    }
-    else
-    {
-        VkComputePipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        pipelineInfo.stage = shaderStateData->shaderStateInfo[0];
-        pipelineInfo.layout = pipelineLayout;
-
-        vkCreateComputePipelines(vulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, vulkanAllocationCallbacks, &pipeline->vkPipeline);
-
-        pipeline->vkBindPoint = VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_COMPUTE;
-    }
-
-    return handle;
-}
-
 SamplerHandle GPUDevice::createSampler(const SamplerCreation& creation)
 {
     SamplerHandle handle = { samplers.obtainResource() };
@@ -2206,9 +1953,9 @@ DescriptorSetHandle GPUDevice::createDescriptorSet(const DescriptorSetCreation& 
     descriptorSet->layout = descriptorSetLayout;
 
     //Update descriptor set
-    VkWriteDescriptorSet descriptorWrite[8];
-    VkDescriptorBufferInfo bufferInfo[8];
-    VkDescriptorImageInfo imageInfo[8];
+    VkWriteDescriptorSet descriptorWrite[10];
+    VkDescriptorBufferInfo bufferInfo[10];
+    VkDescriptorImageInfo imageInfo[10];
 
     Sampler* vkDefaultSampler = accessSampler(defaultSampler);
 

@@ -516,7 +516,7 @@ void ImguiService::render(CommandBuffer& commands)
     //TODO: set up the mapping with this descriptor set like how you do it with the textures.
     DescriptorSetHandle lastDescriptorSet = { TEXTURE_TO_DESCRIPTOR_SET.get(lastTexture.index) };
 
-    commands.bindDescriptorSet(&lastDescriptorSet, 1, nullptr, 0);
+    commands.bindDescriptorSet(&lastDescriptorSet, 1, nullptr, 0, 0);
 
     uint32_t vertexBufferOffset = 0;
     uint32_t indexBufferOffset = 0;
@@ -595,7 +595,7 @@ void ImguiService::render(CommandBuffer& commands)
                             {
                                 lastDescriptorSet.index = TEXTURE_TO_DESCRIPTOR_SET.get(it);
                             }
-                            commands.bindDescriptorSet(&lastDescriptorSet, 1, nullptr, 0);
+                            commands.bindDescriptorSet(&lastDescriptorSet, 1, nullptr, 0, 0);
                         }
                     }
 

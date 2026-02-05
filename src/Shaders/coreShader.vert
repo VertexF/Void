@@ -1,4 +1,7 @@
 #version 450
+
+#extension GL_ARB_shader_draw_parameters: require
+
 uint MaterialFeatures_ColourTexture           = 1 << 0;
 uint MaterialFeatures_NormalTexutre           = 1 << 1;
 uint MaterialFeatures_RoughnessTexture        = 1 << 2;
@@ -15,7 +18,12 @@ struct Vertices
     float tu, tv;
 };
 
-layout(std140, binding = 0) uniform LocalConstants
+struct ModelPosition
+{
+   mat4 pos;  
+};
+
+layout(set = 0, std140, binding = 0) uniform LocalConstants
 {
     mat4 globalModel;
     mat4 viewPerspective;
@@ -23,7 +31,7 @@ layout(std140, binding = 0) uniform LocalConstants
     vec4 light;
 };
 
-layout(std140, binding = 1) uniform MaterialConstant
+layout(set = 0, std140, binding = 1) uniform MaterialConstant
 {
     vec4 baseColourFactor;
     mat4 model;
@@ -37,10 +45,26 @@ layout(std140, binding = 1) uniform MaterialConstant
     uint flags;
 };
 
-layout(std140, binding = 7) readonly buffer VertexData
+layout(set = 0, std430, binding = 7) readonly buffer VertexData
 {
     Vertices vertexData[];
 };
+
+layout(set = 1, std430, binding = 0) readonly buffer ModelPositionData
+{
+    ModelPosition modelPositions[];
+};
+
+layout(push_constant, std430) uniform entityIndex
+{
+    uint index;
+};
+
+//
+//layout(set = 2, std140, binding = 0) uniform ModelIndex
+//{
+//    uint modelIndex;
+//};
 
 layout(location = 0) out vec2 vTexcoord0;
 layout(location = 1) out vec3 vNormal;
@@ -54,8 +78,8 @@ void main()
     vec3 normal = vec3(vertexData[gl_VertexIndex].nx, vertexData[gl_VertexIndex].ny, vertexData[gl_VertexIndex].nz);
     vec2 texcoord = vec2(vertexData[gl_VertexIndex].tu, vertexData[gl_VertexIndex].tv);
 
-    gl_Position = viewPerspective * globalModel * model * vec4(position, 1.0);
-    vPosition =  globalModel * model * vec4(position, 1.0);
+    gl_Position = viewPerspective * globalModel * model * modelPositions[index].pos * vec4(position, 1.0);
+    vPosition  =  globalModel * model * modelPositions[index].pos * vec4(position, 1.0);
 
     if ((flags & MaterialFeatures_TexcoordVertexAttribute) != 0)
     {

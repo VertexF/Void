@@ -134,7 +134,7 @@ void CommandBuffer::bindIndexBuffer(BufferHandle bufferHandle, uint32_t offset, 
     vkCmdBindIndexBuffer(vkCommandBuffer, vkBuffer, offset, indexType);
 }
 
-void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_t numLists, uint32_t* /*offsets*/, uint32_t numOffsets)
+void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_t numLists, uint32_t* /*offsets*/, uint32_t numOffsets, uint32_t descriptorSetNumber)
 {
     uint32_t offsetsCache[8];
     numOffsets = 0;
@@ -162,9 +162,8 @@ void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_
         }
     }
 
-    const uint32_t firstSet = 0;
     vkCmdBindDescriptorSets(vkCommandBuffer, currentPipeline->vkBindPoint, currentPipeline->vkPipelineLayout, 
-                            firstSet, numLists, vkDescriptorSets, numOffsets, offsetsCache);
+                            descriptorSetNumber, numLists, vkDescriptorSets, numOffsets, offsetsCache);
 }
 
 void CommandBuffer::setViewport(const Viewport* viewport)
@@ -251,22 +250,22 @@ void CommandBuffer::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uin
     vkCmdDrawIndexed(vkCommandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void CommandBuffer::drawIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t /*stride*/)
+void CommandBuffer::drawIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t stride)
 {
     Buffer* buffer = device->accessBuffer(bufferHandle);
     VkBuffer vkBuffer = buffer->vkBuffer;
     VkDeviceSize vkOffset = offset;
 
-    vkCmdDrawIndirect(vkCommandBuffer, vkBuffer, vkOffset, 1, sizeof(VkDrawIndirectCommand));
+    vkCmdDrawIndirect(vkCommandBuffer, vkBuffer, vkOffset, 1, stride);
 }
 
-void CommandBuffer::drawIndexedIndirect(BufferHandle bufferHandle, uint32_t offset, uint32_t /*stride*/)
+void CommandBuffer::drawIndexedIndirect(BufferHandle bufferHandle, uint32_t drawCount, uint32_t offset, uint32_t stride)
 {
     Buffer* buffer = device->accessBuffer(bufferHandle);
     VkBuffer vkBuffer = buffer->vkBuffer;
     VkDeviceSize vkOffset = offset;
 
-    vkCmdDrawIndexedIndirect(vkCommandBuffer, vkBuffer, vkOffset, 1, sizeof(VkDrawIndirectCommand));
+    vkCmdDrawIndexedIndirect(vkCommandBuffer, vkBuffer, vkOffset, drawCount, stride);
 }
 
 void CommandBuffer::dispatch(uint32_t groupX, uint32_t groupY, uint32_t groupZ)

@@ -30,7 +30,8 @@
 
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
 
 //I might try to remove this later.
 #define InjectDefault3DModel() \
@@ -51,7 +52,9 @@ namespace
     PipelineHandle cubePipeline;
     BufferHandle cubeCB;
     DescriptorSetLayoutHandle cubeDSL;
-    //DescriptorSetLayoutHandle vertexDSL;
+    DescriptorSetLayoutHandle matrixPosition;
+
+    BufferHandle positionalBuffer;
 
     enum MaterialFeatures
     {
@@ -117,7 +120,7 @@ namespace
         versors rotation;
         vec3s translation;
 
-        void reset() 
+        void reset()
         {
             scale = vec3s{ 1.f, 1.f, 1.f };
             rotation = glms_quat_identity();
@@ -232,7 +235,7 @@ int main(int argc, char** argv)
 
             images2.push(*textureResource);
         }
-        else 
+        else
         {
             int comp = 0;
             int width = 0;
@@ -351,24 +354,34 @@ int main(int argc, char** argv)
 
         //Descriptor set layout.
         DescriptorSetLayoutCreation cubeRLLCreation{};
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "diffuseTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "roughnessMetalnessTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "occlusionTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "emissiveTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "normalTexture" });
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7, 1, VK_SHADER_STAGE_VERTEX_BIT, "Vertices" });
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "diffuseTexture" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "roughnessMetalnessTexture" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "occlusionTexture" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "emissiveTexture" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "normalTexture" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7, 1, VK_SHADER_STAGE_VERTEX_BIT, "Vertices" })
+                       .setSetIndex(0);
+
+        DescriptorSetLayoutCreation positionDescriptorLayout{};
+        positionDescriptorLayout.addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, "ModelsPosition" })
+            .setSetIndex(1);
+
         //Setting it into pipeline.
+        //This descriptor set layout will be ran every draw calls
         cubeDSL = gpu.createDescriptorSetLayout(cubeRLLCreation);
-        pipelineCreation.addDescriptorSetLayout(cubeDSL);
+        //This descriptor set layout will be ran every frame
+        matrixPosition = gpu.createDescriptorSetLayout(positionDescriptorLayout);
+        pipelineCreation.addDescriptorSetLayout(cubeDSL)
+                        .addDescriptorSetLayout(matrixPosition);
 
         cubePipeline = gpu.createPipeline(pipelineCreation);
 
         //Constant buffer
         BufferCreation uniformBufferCreation;
         uniformBufferCreation.reset()
-            .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT , sizeof(UniformData))
+            .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
             .setName("cubeCB");
         cubeCB = gpu.createBuffer(uniformBufferCreation);
 
@@ -455,16 +468,20 @@ int main(int argc, char** argv)
                     parentNodeIndex = nodeParents[parentNodeIndex];
                 }
 
-                cgltf_mesh* mesh2 = nodeStack[nodeIndex].mesh;
+                cgltf_mesh* mesh = nodeStack[nodeIndex].mesh;
+                if (mesh == nullptr)
+                {
+                    continue;
+                }
 
                 //Final SRT composition
-                for (uint32_t primitiveIndex = 0; primitiveIndex < mesh2->primitives_count; ++primitiveIndex)
+                for (uint32_t primitiveIndex = 0; primitiveIndex < mesh->primitives_count; ++primitiveIndex)
                 {
                     MeshDraw meshDraw{};
 
                     meshDraw.materialData.model = finalMatrix;
 
-                    cgltf_primitive meshPrimitive = mesh2->primitives[primitiveIndex];
+                    cgltf_primitive meshPrimitive = mesh->primitives[primitiveIndex];
 
                     //We are now correctly parsing indices. We always expect with the cgltf_accessor_unpack_indices that the index offset to 0.
                     meshDraw.indexOffset = 0;
@@ -481,8 +498,8 @@ int main(int argc, char** argv)
 
                     BufferCreation bufferCreation{};
                     bufferCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, uint32_t(indices.size * meshPrimitive.indices->stride))
-                                  .setName("indices")
-                                  .setData(indices.data);
+                        .setName("indices")
+                        .setData(indices.data);
                     currentIndexBuffer = gpu.createBuffer(bufferCreation);
 
                     meshDraw.indexBuffer = currentIndexBuffer;
@@ -495,8 +512,8 @@ int main(int argc, char** argv)
                     dsCreation.buffer(cubeCB, 0);
 
                     bufferCreation.reset()
-                                  .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
-                                  .setName("material");
+                        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
+                        .setName("material");
                     meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
                     dsCreation.buffer(meshDraw.materialBuffer, 1);
 
@@ -706,7 +723,7 @@ int main(int argc, char** argv)
                         Array<float> scratch;
                         uint32_t normalCount = (uint32_t)normalAccessor->count;
                         uint32_t accessFloatSize = (uint32_t)cgltf_num_components(normalAccessor->type);
-                        scratch.init(&scratchAllocator, normalCount* accessFloatSize, normalCount* accessFloatSize);
+                        scratch.init(&scratchAllocator, normalCount * accessFloatSize, normalCount * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(normalAccessor->type) == 3);
                         cgltf_accessor_unpack_floats(normalAccessor, scratch.data, normalAccessor->count * accessFloatSize);
 
@@ -727,7 +744,7 @@ int main(int argc, char** argv)
                         Array<float> scratch;
                         uint32_t tangentCount = uint32_t(tangentAccessor->count);
                         uint32_t accessFloatSize = (uint32_t)cgltf_num_components(tangentAccessor->type);
-                        scratch.init(&scratchAllocator, tangentCount* accessFloatSize, tangentCount * accessFloatSize);
+                        scratch.init(&scratchAllocator, tangentCount * accessFloatSize, tangentCount * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(tangentAccessor->type) == 4);
                         cgltf_accessor_unpack_floats(tangentAccessor, scratch.data, tangentAccessor->count * accessFloatSize);
 
@@ -784,22 +801,46 @@ int main(int argc, char** argv)
 
     cgltf_free(cgltfData);
 
-    //DescriptorSetCreation dsCreation{};
-    //bufferCreation.reset()
-    //    .set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, ResourceType::Type::IMMUTABLE, sizeof(meshIndices)* meshIndices.size)
-    //    //.setData(meshIndices.data)
-    //    .setName("Indices");
+    srand(42);
 
-    //if (componentType == cgltf_component_type_r_16u)
-    //{
-    //    bufferCreation.setData(reinterpret_cast<uint16_t*>(meshIndices.data));
-    //}
-    //else
-    //{
-    //    bufferCreation.setData(reinterpret_cast<uint32_t*>(meshIndices.data));
-    //}
+    uint32_t totalDucks = 500;
+    Array<mat4s> drawMatrices;
+    drawMatrices.init(allocator, totalDucks, totalDucks);
+    float sceneRadius = 5000.f;
+    for (uint32_t i = 0; i < totalDucks; ++i)
+    {
+        vec3s postion{};
 
-    //BufferHandle indexBufferHandle = gpu.createBuffer(bufferCreation);
+        postion.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
+        postion.y = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
+        postion.z = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
+
+        float rotx = ((float(rand()) / RAND_MAX) * 2 - 1);
+        float roty = ((float(rand()) / RAND_MAX) * 2 - 1);
+        float rotz = ((float(rand()) / RAND_MAX) * 2 - 1);
+
+        vec3s axis = glms_normalize({ rotx, roty, rotz });
+        float angle = (float(rand()) / RAND_MAX) * M_PI_4;
+
+        vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
+
+        drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+    }
+
+    DescriptorSetHandle positionDescriptorSets{};
+
+    BufferCreation bufferCreation{};
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(mat4s) * drawMatrices.size)
+        .setName("othername")
+        .setData(drawMatrices.data);
+    positionalBuffer = gpu.createBuffer(bufferCreation);
+
+    DescriptorSetCreation dsCreation{};
+    dsCreation.buffer(positionalBuffer, 0)
+        .setLayout(matrixPosition);
+
+    positionDescriptorSets = gpu.createDescriptorSet(dsCreation);
 
     int64_t beginFrameTick = timeNow();
 
@@ -813,6 +854,7 @@ int main(int argc, char** argv)
 
     float modelScale = 1.f;
     bool fullscreen = false;
+    uint32_t index = 0;
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -826,7 +868,7 @@ int main(int argc, char** argv)
             fullscreen = !fullscreen;
             Window::instance()->setFullscreen(fullscreen);
         }
- 
+
         //New Frame
         if (Window::instance()->minimised == false)
         {
@@ -839,7 +881,7 @@ int main(int argc, char** argv)
 
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
-            if (gpu.newFrame() == false) 
+            if (gpu.newFrame() == false)
             {
                 continue;
             }
@@ -866,7 +908,6 @@ int main(int argc, char** argv)
             }
             ImGui::End();
 
-            mat4s globalModel{};
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -878,17 +919,28 @@ int main(int argc, char** argv)
             float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             beginFrameTick = currentTick;
 
+            inputHandler.newFrame();
+            inputHandler.update();
+            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
+
+            CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
+            gpuCommands->pushMarker("Frame");
+
+            gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
+            gpuCommands->clearDepthStencil(0.f, 0);
+            gpuCommands->bindPass(gpu.getSwapchainPass());
+            gpuCommands->bindPipeline(cubePipeline);
+            gpuCommands->setScissor(nullptr);
+            gpuCommands->setViewport(nullptr);
+
+            mat4s globalModel{};
             //Update rotating cube data.
             MapBufferParameters cbMap = { cubeCB, 0, 0 };
             void* cbData = gpu.mapBuffer(cbMap);
             if (cbData)
             {
                 globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
-
-                inputHandler.newFrame();
-                inputHandler.update();
-                gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-                Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
                 //TODO: Match these name with what's in the shader.
                 UniformData uniformData{};
@@ -903,33 +955,33 @@ int main(int argc, char** argv)
                 gpu.unmapBuffer(cbMap);
             }
 
-            CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
-            gpuCommands->pushMarker("Frame");
+            gpuCommands->bindDescriptorSet(&positionDescriptorSets, 1, nullptr, 0, 1);
 
-            gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
-            gpuCommands->clearDepthStencil(0.f, 0);
-            gpuCommands->bindPass(gpu.getSwapchainPass());
-            gpuCommands->bindPipeline(cubePipeline);
-            gpuCommands->setScissor(nullptr);
-            gpuCommands->setViewport(nullptr);
-
-            for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
+            //ModelIndex uniformData{};
+            for (uint32_t i = 0; i < totalDucks; ++i)
             {
-                MeshDraw meshDraw = meshDraws[meshIndex];
-                meshDraw.materialData.modelInv = glms_mat4_inv(glms_mat4_transpose(glms_mat4_mul(globalModel, meshDraw.materialData.model)));
+                uint32_t offset = 0;
+                uint32_t size = 4;
+                vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, offset, size, &i);
 
-                MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
-                MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
+                for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
+                {
+                    MeshDraw meshDraw = meshDraws[meshIndex];
+                    meshDraw.materialData.modelInv = glms_mat4_inv(glms_mat4_transpose(glms_mat4_mul(globalModel, meshDraw.materialData.model)));
 
-                memcpy(materialBufferData, &meshDraw.materialData, sizeof(MaterialData));
+                    MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
+                    MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
 
-                gpu.unmapBuffer(materialMap);
+                    memcpy(materialBufferData, &meshDraw.materialData, sizeof(MaterialData));
 
-                gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
-                //gpuCommands->bindIndexBuffer(indexBufferHandle, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
-                gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0);
+                    gpu.unmapBuffer(materialMap);
 
-                gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+                    //gpuCommands->bindIndexBuffer(indexBufferHandle, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+                    gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
+
+                    gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+                }
             }
 
             imgui->render(*gpuCommands);
@@ -950,6 +1002,12 @@ int main(int argc, char** argv)
     }
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
+
+    gpu.destroyDescriptorSet(positionDescriptorSets);
+    gpu.destroyDescriptorSetLayout(matrixPosition);
+    gpu.destroyBuffer(positionalBuffer);
+
+    drawMatrices.shutdown();
 
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
@@ -975,7 +1033,7 @@ int main(int argc, char** argv)
     resourceManager.shutdown();
 
     //This is here to solve a bug that happens when allocating image from a .glb file. 
-    for (uint32_t i = 0; i < images2.size; ++i) 
+    for (uint32_t i = 0; i < images2.size; ++i)
     {
         renderer.destroyTexture(&images2[i]);
     }

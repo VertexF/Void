@@ -13,7 +13,7 @@ struct CommandBuffer
     void bindPipeline(PipelineHandle handle);
     void bindVertexBuffer(BufferHandle handle, uint32_t binding, uint32_t offset);
     void bindIndexBuffer(BufferHandle handle, uint32_t offset, VkIndexType indexType);
-    void bindDescriptorSet(DescriptorSetHandle* handle, uint32_t numLists, uint32_t* offsets, uint32_t numOffsets);
+    void bindDescriptorSet(DescriptorSetHandle* handle, uint32_t numLists, uint32_t* offsets, uint32_t numOffsets, uint32_t descriptorSetNumber);
 
     void setViewport(const Viewport* viewport);
     void setScissor(const Rect2DInt* rect);
@@ -25,7 +25,7 @@ struct CommandBuffer
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, 
                                           uint32_t firstInstance);
     void drawIndirect(BufferHandle handle, uint32_t offset, uint32_t stride);
-    void drawIndexedIndirect(BufferHandle handle, uint32_t offset, uint32_t stride);
+    void drawIndexedIndirect(BufferHandle handle, uint32_t drawCount, uint32_t offset, uint32_t stride);
 
     void dispatch(uint32_t groupX, uint32_t groupY, uint32_t groupZ);
     void dispatchIndirect(BufferHandle handle, uint32_t offset);
