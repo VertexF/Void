@@ -196,25 +196,31 @@ void main()
     }
 
     //NOTE: taken from https://www.khronos.org/registry/glTF/specs/2.0/glTF-2.0.html#specular-brdf
-    float NdotH = dot(N, H);
+    float NdotH = clamp(dot(N, H), 0, 1);
     float alphaSquared = alpha * alpha;
     float dDenom = (NdotH * NdotH) * (alphaSquared - 1.0) + 1.0;
     float distribution = (alphaSquared * heaviside(NdotH)) / (PI * dDenom * dDenom);
 
+    float lightRange = 10.f;
+    float lightIntensity = 10.f;
+    vec4 light = {1, 1, 1, 0};
+
     float NdotL = clamp(dot(N, L), 0, 1);
+    float NdotV = clamp(dot(N, V), 0, 1);
+    float HdotL = clamp(dot(H, L), 0, 1);
+    float HdotV = clamp(dot(H, V), 0, 1);
 
-    if (NdotL > 1e-5)
+    float distance = length(light.xyz - vPosition.xyz);
+    float intensity = lightIntensity * max(min(1.0 - pow(distance / lightRange, 4.0), 1.0), 0.0) / pow(distance, 2.0);
+
+    if (NdotL > 0.0 || NdotV > 0.0)
     {
-        float NdotV = dot(N, V);
-        float HdotL = dot(H, L);
-        float HdotV = dot(H, V);
-
         float visibility = (heaviside(HdotL) / (abs(NdotL) + sqrt(alphaSquared + (1.0 - alphaSquared) * (NdotL * NdotL)))) * 
                            (heaviside(HdotV) / (abs(NdotV) + sqrt(alphaSquared + (1.0 - alphaSquared) * (NdotV * NdotV))));
 
-        float specularBrdf = visibility * distribution;
+        float specularBrdf = intensity * visibility * distribution;
 
-        vec3 diffuseBrdf = (1 / PI) * baseColour.rgb;
+        vec3 diffuseBrdf = intensity * (1 / PI) * baseColour.rgb;
 
         //NOTE: f0 in the formula notation refers to the base colour here.
         vec3 conductorFresnel = specularBrdf * (baseColour.rgb + (1.0 - baseColour.rgb) * pow(1.0 - abs(HdotV), 5));
@@ -227,6 +233,8 @@ void main()
         vec3 materialColour = mix(fresnelMix, conductorFresnel, metalness);
 
         materialColour = emissive + mix(materialColour, materialColour * ao, occlusionFactor);
+
+        materialColour *= NdotL;
 
         fragColour = vec4(encodeSRGB(materialColour), baseColour.a);
     }

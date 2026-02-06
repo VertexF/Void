@@ -60,12 +60,6 @@ layout(push_constant, std430) uniform entityIndex
     uint index;
 };
 
-//
-//layout(set = 2, std140, binding = 0) uniform ModelIndex
-//{
-//    uint modelIndex;
-//};
-
 layout(location = 0) out vec2 vTexcoord0;
 layout(location = 1) out vec3 vNormal;
 layout(location = 2) out vec4 vTangent;

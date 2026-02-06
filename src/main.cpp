@@ -30,8 +30,8 @@
 
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
 
 //I might try to remove this later.
 #define InjectDefault3DModel() \
@@ -803,10 +803,10 @@ int main(int argc, char** argv)
 
     srand(42);
 
-    uint32_t totalDucks = 500;
+    uint32_t totalDucks = 1;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
-    float sceneRadius = 5000.f;
+    float sceneRadius = 1.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
     {
         vec3s postion{};
@@ -826,6 +826,8 @@ int main(int argc, char** argv)
 
         drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
     }
+
+    drawMatrices[0] = glms_mat4_identity();
 
     DescriptorSetHandle positionDescriptorSets{};
 
