@@ -32,6 +32,7 @@
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
 static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
 
 //I might try to remove this later.
 #define InjectDefault3DModel() \
@@ -455,8 +456,11 @@ int main(int argc, char** argv)
 
                 for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
                 {
-                    cgltf_node childNode = *currentNode.children[nodeIndex];
-                    nodeStack.push(childNode);
+                    if (currentNode.children[childIndex] != nullptr)
+                    {
+                        cgltf_node childNode = *currentNode.children[childIndex];
+                        nodeStack.push(childNode);
+                    }
                     nodeParents.push(nodeIndex);
                 }
 

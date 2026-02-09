@@ -55,7 +55,7 @@ layout(set = 1, std430, binding = 0) readonly buffer ModelPositionData
     ModelPosition modelPositions[];
 };
 
-layout(push_constant, std430) uniform entityIndex
+layout(push_constant, std140) uniform entityIndex
 {
     uint index;
 };
