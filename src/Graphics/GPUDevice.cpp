@@ -48,6 +48,10 @@ namespace
 #endif
     };
 
+    static constexpr uint32_t MAX_BINDLESS_RESOURCES = 1024;
+    static constexpr uint32_t BINDLESS_TEXTURE_BINDING = 0;
+    static constexpr uint32_t BINDLESS_IMAGE_BINDING = 1;
+
 #if defined(VULKAN_DEBUG_REPORT)
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -237,6 +241,18 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(texture->vkImageView), creation.name);
         texture->vkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        //Add defered bindless update
+        if (gpu.bindlessSupported)
+        {
+            ResourceUpdate resourceUpdate{};
+            resourceUpdate.type = ResourceUpdateType::TEXTURE;
+            resourceUpdate.handle = texture->handle.index;
+            resourceUpdate.currentFrame = gpu.currentFrame;
+            resourceUpdate.deleting = 0;
+
+            gpu.textureToUpdateBindless.push(resourceUpdate);
+        }
     }
 
     void vulkanFillWriteDescriptorSets(GPUDevice& gpu, const DescriptorSetLayout* descriptorSetLayout, VkDescriptorSet vkDescriptorSet,
@@ -245,13 +261,22 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                                        const uint16_t* bindings)
     {
         uint32_t usedResources = 0;
+        const bool skipBindlessBindings = gpu.bindlessSupported && !descriptorSetLayout->bindless;
         for (uint32_t res = 0; res < numResources; ++res)
         {
             //Binding arrays contains the index into the resource. 
             //I am layout binding to retrieve the correct binding information.
             uint32_t layoutBindingIndex = bindings[res];
 
-            const VkDescriptorSetLayoutBinding& binding = descriptorSetLayout->vkBinding[layoutBindingIndex];
+            uint32_t bindingDataIndex = descriptorSetLayout->indexToBinding[layoutBindingIndex];
+            const DescriptorBinding& binding = descriptorSetLayout->bindings[bindingDataIndex];
+
+            //Bindless
+            //Skip bindings for images and textures they are bindless, thus bound in the global bindless array (one for images, one for textures).
+            if (descriptorSetLayout->setIndex == 1 && skipBindlessBindings && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
+            {
+                continue;
+            }
 
             uint32_t i = usedResources;
             ++usedResources;
@@ -261,11 +286,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             descriptorWrite[i].dstSet = vkDescriptorSet;
             //Use binding array to get final binding point.
             //const uint32_t bindingPoint = binding.start;
-            descriptorWrite[i].dstBinding = binding.binding;
+            const uint32_t bindingPoint = binding.start;
+            descriptorWrite[i].dstBinding = bindingPoint;
             descriptorWrite[i].dstArrayElement = 0;
             descriptorWrite[i].descriptorCount = 1;
 
-            switch (binding.descriptorType)
+            switch (binding.type)
             {
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
             {
@@ -386,7 +412,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                 break;
             }
             default:
-                VOID_ASSERTM(false, "Resource type %d not supported in descriptor set creation.\n", binding.descriptorType);
+                VOID_ASSERTM(false, "Resource type %d not supported in descriptor set creation.\n", binding.type);
                 break;
             }
         }
@@ -1051,13 +1077,21 @@ void GPUDevice::init(const DeviceCreation& creation)
     queueInfo[0].pQueuePriorities = queuePriority;
 
     //Enable all features
+    VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
+    indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    indexingFeatures.pNext = nullptr;
+
+    VkPhysicalDeviceScalarBlockLayoutFeatures scalar{};
+    scalar.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
+    scalar.pNext = &indexingFeatures;
+
     VkPhysicalDeviceFeatures2 physicalDeviceFeature2{};
     physicalDeviceFeature2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    physicalDeviceFeature2.pNext = &scalar;
+
     vkGetPhysicalDeviceFeatures2(vulkanPhysicalDevice, &physicalDeviceFeature2);
 
-    VkPhysicalDeviceVulkan11Features features11 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
-    features11.pNext = &physicalDeviceFeature2;
-    features11.shaderDrawParameters = true;
+    bindlessSupported = indexingFeatures.descriptorBindingPartiallyBound && indexingFeatures.runtimeDescriptorArray;
 
     VkDeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1065,7 +1099,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     deviceCreateInfo.pQueueCreateInfos = queueInfo;
     deviceCreateInfo.enabledExtensionCount = deviceExtensionCount;
     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
-    deviceCreateInfo.pNext = &features11;
+    deviceCreateInfo.pNext = &physicalDeviceFeature2;
 
     result = vkCreateDevice(vulkanPhysicalDevice, &deviceCreateInfo, vulkanAllocationCallbacks, &vulkanDevice);
     check(result);
@@ -1172,8 +1206,25 @@ void GPUDevice::init(const DeviceCreation& creation)
     poolInfo.maxSets = GLOBAL_POOL_ELEMENTS * ArraySize(poolSizes);
     poolInfo.poolSizeCount = static_cast<uint32_t>(ArraySize(poolSizes));
     poolInfo.pPoolSizes = poolSizes;
-    result = vkCreateDescriptorPool(vulkanDevice, &poolInfo, vulkanAllocationCallbacks, &vulkanDescriptorPool);
-    check(result);
+    check(vkCreateDescriptorPool(vulkanDevice, &poolInfo, vulkanAllocationCallbacks, &vulkanDescriptorPool));
+
+    //Bindless
+    //Create the descriptor pool used by bindless, that needs update after bind flag.
+    if (bindlessSupported)
+    {
+        VkDescriptorPoolSize poolSizesBindless[] =
+        {
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_BINDLESS_RESOURCES },
+            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_BINDLESS_RESOURCES }
+        };
+
+        //Update after bind is needed here, for each binding and in the descriptor set layout creation.
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
+        poolInfo.maxSets = MAX_BINDLESS_RESOURCES * ArraySize(poolSizesBindless);
+        poolInfo.poolSizeCount = static_cast<uint32_t>(ArraySize(poolSizesBindless));
+        poolInfo.pPoolSizes = poolSizesBindless;
+        check(vkCreateDescriptorPool(vulkanDevice, &poolInfo, vulkanAllocationCallbacks, &bindlessDescriptorPool));
+    }
 
     //Create timestamp query pool used for GPU timings.
     VkQueryPoolCreateInfo vkQueryPoolInfo{};
@@ -1237,6 +1288,7 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     resourceDeletionQueue.init(allocator, 16);
     descriptorSetUpdates.init(allocator, 16);
+    textureToUpdateBindless.init(allocator, 128);
 
     //Init primitive resource.
     SamplerCreation samplerCreaion{};
@@ -1310,6 +1362,26 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     //Init the render pass cache
     renderPassCache.init(allocator, 16);
+
+    if (bindlessSupported)
+    {
+        DescriptorSetLayoutCreation bindlessLayoutCreation{};
+        bindlessLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, BINDLESS_TEXTURE_BINDING, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessTextures" })
+                              .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, BINDLESS_TEXTURE_BINDING + 1, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessImages" })
+                              .setSetIndex(1)
+                              .setName("BindlessLayout");
+        bindlessLayoutCreation.bindless = true;
+
+        bindlessDescriptorSetLayoutHandle = createDescriptorSetLayout(bindlessLayoutCreation);
+
+        DescriptorSetCreation bindlessSetCreation;
+        bindlessSetCreation.reset()
+                           .setLayout(bindlessDescriptorSetLayoutHandle);
+        bindlessDescriptorSetHandle = createDescriptorSet(bindlessSetCreation);
+
+        DescriptorSet* bindlessSet = accessDescriptorSet(bindlessDescriptorSetHandle);
+        bindlessDescriptorSet = bindlessSet->vkDescriptorSet;
+    }
 }
 
 
@@ -1331,6 +1403,9 @@ void GPUDevice::shutdown()
 
     gpuTimestampManager->shutdown();
 
+    destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
+    destroyDescriptorSet(bindlessDescriptorSetHandle);
+
     //Memory: this contains allocation for GPU timestamp memory, queued command buffers and render frames.
     void_free(gpuTimestampManager, allocator);
 
@@ -1340,6 +1415,16 @@ void GPUDevice::shutdown()
     destroyTexture(dummyTexture);
     destroyBuffer(dummyConstantBuffer);
     destroySampler(defaultSampler);
+
+    //Add pending bindless textures to delete.
+    for (uint32_t i = 0; i < textureToUpdateBindless.size; ++i)
+    {
+        ResourceUpdate& update = textureToUpdateBindless[i];
+        if (update.deleting)
+        {
+            destroyTextureInstant(update.handle);
+        }
+    }
 
     //Destroy all pending resources.
     for (uint32_t i = 0; i < resourceDeletionQueue.size; ++i)
@@ -1354,28 +1439,28 @@ void GPUDevice::shutdown()
 
         switch (resourceDeletion.type)
         {
-        case ResourceDeletion::BUFFER:
+        case ResourceUpdateType::BUFFER:
             destroyBufferInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::PIPELINE:
+        case ResourceUpdateType::PIPELINE:
             destroyPipelineInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::RENDER_PASS:
+        case ResourceUpdateType::RENDER_PASS:
             destroyRenderPassInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::DESCRIPTOR_SET:
+        case ResourceUpdateType::DESCRIPTOR_SET:
             destroyDescriptorSetInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::DESCRIPTOR_SET_LAYOUT:
+        case ResourceUpdateType::DESCRIPTOR_SET_LAYOUT:
             destroyDescriptorSetLayoutInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::SAMPLER:
+        case ResourceUpdateType::SAMPLER:
             destroySamplerInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::SHADER_STATE:
+        case ResourceUpdateType::SHADER_STATE:
             destroyShaderStateInstant(resourceDeletion.handle);
             break;
-        case ResourceDeletion::TEXTURE:
+        case ResourceUpdateType::TEXTURE:
             destroyTextureInstant(resourceDeletion.handle);
             break;
         }
@@ -1403,6 +1488,7 @@ void GPUDevice::shutdown()
 
     resourceDeletionQueue.shutdown();
     descriptorSetUpdates.shutdown();
+    textureToUpdateBindless.shutdown();
 
     pipelines.shutdown();
     buffers.shutdown();
@@ -1418,6 +1504,10 @@ void GPUDevice::shutdown()
 #endif //VULKAN_DEBUG_REPORT
 
     vkDestroyDescriptorPool(vulkanDevice, vulkanDescriptorPool, vulkanAllocationCallbacks);
+    if (bindlessSupported)
+    {
+        vkDestroyDescriptorPool(vulkanDevice, bindlessDescriptorPool, vulkanAllocationCallbacks);
+    }
     vkDestroyQueryPool(vulkanDevice, vulkanTimestampQueryPool, vulkanAllocationCallbacks);
 
     vkDestroyDevice(vulkanDevice, vulkanAllocationCallbacks);
@@ -1586,15 +1676,29 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
 
     pipeline->shaderState = shaderState;
 
-    VkDescriptorSetLayout vkLayout[MAX_DESCRIPTOR_SET_LAYOUTS]{};
+    VkDescriptorSetLayout vkLayouts[MAX_DESCRIPTOR_SET_LAYOUTS]{};
 
     //Create VkPipelineLayout 
     for (uint32_t layout = 0; layout < creation.numActiveLayouts; ++layout)
     {
-        pipeline->descriptorSetLayout[layout] = accessDescriptorSetLayout(creation.descriptorSetLayout[layout]);
-        pipeline->descriptorSetLayoutHandle[layout] = creation.descriptorSetLayout[layout];
+        //Bindless
+        //At index 1 there is a bindless layout.
+        if (layout == 1)
+        {
+            DescriptorSetLayout* setLayout = accessDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
+            //We don't want to delete this set as it's global and will be freed later.
+            pipeline->descriptorSetLayoutHandle[layout] = INVALID_LAYOUT;
+            vkLayouts[layout] = setLayout->vkDescriptorSetLayout;
+            continue;
+        }
+        else
+        {
+            pipeline->descriptorSetLayoutHandle[layout] = creation.descriptorSetLayout[layout];
+        }
 
-        vkLayout[layout] = pipeline->descriptorSetLayout[layout]->vkDescriptorSetLayout;
+        pipeline->descriptorSetLayout[layout] = accessDescriptorSetLayout(creation.descriptorSetLayout[layout]);
+
+        vkLayouts[layout] = pipeline->descriptorSetLayout[layout]->vkDescriptorSetLayout;
     }
 
     VkPushConstantRange range{};
@@ -1604,7 +1708,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.pSetLayouts = vkLayout;
+    pipelineLayoutInfo.pSetLayouts = vkLayouts;
     pipelineLayoutInfo.setLayoutCount = creation.numActiveLayouts;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges = &range;
@@ -1880,16 +1984,28 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
 
     DescriptorSetLayout* descriptorSetLayout = accessDescriptorSetLayout(handle);
 
+
+    uint16_t maxBinding = 0;
+    for (uint32_t r = 0; r < creation.numBindings; ++r)
+    {
+        const DescriptorSetLayoutCreation::Binding& inputBinding = creation.bindings[r];
+        maxBinding = max(maxBinding, inputBinding.start);
+    }
+    maxBinding += 1;
+
     //TODO: add support for muliple sets.
     //Create flattened binding list
     descriptorSetLayout->numBindings = static_cast<uint16_t>(creation.numBindings);
-    uint8_t* memory = void_allocam((sizeof(VkDescriptorSetLayoutBinding) + sizeof(DescriptorBinding)) * creation.numBindings, allocator);
+    uint8_t* memory = void_allocam(((sizeof(VkDescriptorSetLayoutBinding) + sizeof(DescriptorBinding)) * creation.numBindings) + (sizeof(uint8_t) * maxBinding), allocator);
     descriptorSetLayout->bindings = reinterpret_cast<DescriptorBinding*>(memory);
     descriptorSetLayout->vkBinding = reinterpret_cast<VkDescriptorSetLayoutBinding*>(memory + sizeof(DescriptorBinding) * creation.numBindings);
+    descriptorSetLayout->indexToBinding = reinterpret_cast<uint8_t*>(descriptorSetLayout->vkBinding + creation.numBindings);
     descriptorSetLayout->handle = handle;
     descriptorSetLayout->setIndex = static_cast<uint16_t>(creation.setIndex);
+    descriptorSetLayout->bindless = (creation.bindless == true) ? 1 : 0;
 
     uint32_t usedBindings = 0;
+    const bool skipBindlessBindings = bindlessSupported && !creation.bindless;
     for (uint32_t i = 0; i < creation.numBindings; ++i)
     {
         DescriptorBinding& binding = descriptorSetLayout->bindings[i];
@@ -1899,15 +2015,27 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
         binding.type = inputBinding.type;
         binding.name = inputBinding.name;
 
+        //Add binding to binding index.
+        descriptorSetLayout->indexToBinding[binding.start] = static_cast<uint8_t>(i);
+
+        //Bindless
+        //Skip bindings for images and textures they are bindless, thus bound in the global bindless array (one for images, one for textures).
+        //TODO: Better solution to allow individual image view to be bound
+        //NOTE: In my old engine set index 0 was a special "global" descriptor set layout. Meaning that anything bindless was part of the MATERIAL_SET found in the shaders.
+        if (creation.setIndex == 1 && skipBindlessBindings && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
+        {
+            continue;
+        }
+
         VkDescriptorSetLayoutBinding& vkBinding = descriptorSetLayout->vkBinding[usedBindings];
         ++usedBindings;
 
         vkBinding.binding = binding.start;
         vkBinding.descriptorType = inputBinding.type;
-        vkBinding.descriptorType = vkBinding.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
-                                                                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC :
-                                                                vkBinding.descriptorType;
-        vkBinding.descriptorCount = 1;
+        //vkBinding.descriptorType = vkBinding.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
+        //                                                       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC :
+        //                                                       vkBinding.descriptorType;
+        vkBinding.descriptorCount = inputBinding.count;
 
         vkBinding.stageFlags = inputBinding.stage;
         vkBinding.pImmutableSamplers = nullptr;
@@ -1919,7 +2047,34 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
     layoutInfo.bindingCount = usedBindings;
     layoutInfo.pBindings = descriptorSetLayout->vkBinding;
 
-    vkCreateDescriptorSetLayout(vulkanDevice, &layoutInfo, vulkanAllocationCallbacks, &descriptorSetLayout->vkDescriptorSetLayout);
+    if (creation.bindless)
+    {
+        //Needs to be updated after bind flag
+        layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
+
+        //TODO: Re-enable variable descriptor count.
+        VkDescriptorBindingFlags bindlessFlags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
+        VkDescriptorBindingFlags bindingFlags[16]/*{ VK_DESCRIPTOR_BINDING_FLAG_BITS_MAX_ENUM }*/;
+
+        for (uint32_t r = 0; r < creation.numBindings; ++r)
+        {
+            bindingFlags[r] = bindlessFlags;
+        }
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfoEXT extendedInfo{};
+        extendedInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+        extendedInfo.pNext = nullptr;
+        extendedInfo.bindingCount = usedBindings;
+        extendedInfo.pBindingFlags = bindingFlags;
+
+        layoutInfo.pNext = &extendedInfo;
+
+        check(vkCreateDescriptorSetLayout(vulkanDevice, &layoutInfo, vulkanAllocationCallbacks, &descriptorSetLayout->vkDescriptorSetLayout));
+    }
+    else
+    {
+        check(vkCreateDescriptorSetLayout(vulkanDevice, &layoutInfo, vulkanAllocationCallbacks, &descriptorSetLayout->vkDescriptorSetLayout));
+    }
 
     return handle;
 }
@@ -1938,11 +2093,25 @@ DescriptorSetHandle GPUDevice::createDescriptorSet(const DescriptorSetCreation& 
     //Allocate descriptor set
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = vulkanDescriptorPool;
+    allocInfo.descriptorPool = descriptorSetLayout->bindless ? bindlessDescriptorPool : vulkanDescriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &descriptorSetLayout->vkDescriptorSetLayout;
 
-    check(vkAllocateDescriptorSets(vulkanDevice, &allocInfo, &descriptorSet->vkDescriptorSet));
+    if (descriptorSetLayout->bindless)
+    {
+        VkDescriptorSetVariableDescriptorCountAllocateInfoEXT countInfo{};
+        countInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT;
+        uint32_t maxBinding = MAX_BINDLESS_RESOURCES - 1;
+        countInfo.descriptorSetCount = 1;
+        //This number is the max allocatable count.
+        countInfo.pDescriptorCounts = &maxBinding;
+        allocInfo.pNext = &countInfo;
+        check(vkAllocateDescriptorSets(vulkanDevice, &allocInfo, &descriptorSet->vkDescriptorSet));
+    }
+    else
+    {
+        check(vkAllocateDescriptorSets(vulkanDevice, &allocInfo, &descriptorSet->vkDescriptorSet));
+    }
 
     //Cache data
     uint8_t* memory = void_allocam((sizeof(uint32_t) + sizeof(SamplerHandle) + sizeof(uint16_t)) * creation.numResources, allocator);
@@ -2121,7 +2290,7 @@ void GPUDevice::destroyBuffer(BufferHandle buffer)
 {
     if (buffer.index < buffers.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::BUFFER, buffer.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceUpdateType::BUFFER, buffer.index, currentFrame });
     }
     else
     {
@@ -2133,7 +2302,13 @@ void GPUDevice::destroyTexture(TextureHandle texture)
 {
     if (texture.index < textures.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::TEXTURE, texture.index, currentFrame });
+        textureToUpdateBindless.push(
+            { 
+                .type = ResourceUpdateType::TEXTURE, 
+                .handle = texture.index, 
+                .currentFrame = currentFrame, 
+                .deleting = 1 
+            });
     }
     else
     {
@@ -2145,7 +2320,7 @@ void GPUDevice::destroyPipeline(PipelineHandle pipeline)
 {
     if (pipeline.index < pipelines.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::PIPELINE, pipeline.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceUpdateType::PIPELINE, pipeline.index, currentFrame });
         //Shader state current is handled internally when creating a pipeline, thus add this to track correctly.
         Pipeline* pipelineTrack = accessPipeline(pipeline);
         destroyShaderState(pipelineTrack->shaderState);
@@ -2160,7 +2335,7 @@ void GPUDevice::destroySampler(SamplerHandle sampler)
 {
     if (sampler.index < samplers.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::SAMPLER, sampler.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceUpdateType::SAMPLER, sampler.index, currentFrame });
     }
     else
     {
@@ -2172,7 +2347,7 @@ void GPUDevice::destroyDescriptorSetLayout(DescriptorSetLayoutHandle layout)
 {
     if (layout.index < descriptorSetLayouts.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::DESCRIPTOR_SET_LAYOUT, layout.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceUpdateType::DESCRIPTOR_SET_LAYOUT, layout.index, currentFrame });
     }
     else
     {
@@ -2184,7 +2359,7 @@ void GPUDevice::destroyDescriptorSet(DescriptorSetHandle layout)
 {
     if (layout.index < descriptorSets.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::DESCRIPTOR_SET, layout.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceUpdateType::DESCRIPTOR_SET, layout.index, currentFrame });
     }
     else
     {
@@ -2196,7 +2371,7 @@ void GPUDevice::destroyRenderPass(RenderPassHandle renderPass)
 {
     if (renderPass.index < renderPasses.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::RENDER_PASS, renderPass.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceUpdateType::RENDER_PASS, renderPass.index, currentFrame });
     }
     else
     {
@@ -2208,7 +2383,7 @@ void GPUDevice::destroyShaderState(ShaderStateHandle shader)
 {
     if (shader.index < shaders.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceDeletion::SHADER_STATE, shader.index, currentFrame });
+        resourceDeletionQueue.push({ ResourceUpdateType::SHADER_STATE, shader.index, currentFrame });
     }
     else
     {
@@ -2761,6 +2936,89 @@ void GPUDevice::present()
         vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
     }
 
+    if (textureToUpdateBindless.size)
+    {
+        //Handle deferred writes to bindless textures.
+        VkWriteDescriptorSet bindlessDescriptorWrites[MAX_BINDLESS_RESOURCES];
+        VkDescriptorImageInfo bindlessImageInfo[MAX_BINDLESS_RESOURCES];
+
+        Texture* vkDummyTexture = accessTexture(dummyTexture);
+
+        uint32_t currentWriteIndex = 0;
+        for (int32_t it = textureToUpdateBindless.size - 1; it >= 0; --it)
+        {
+            ResourceUpdate& textureToUpdate = textureToUpdateBindless[it];
+            Texture* texture = accessTexture({ textureToUpdate.handle });
+
+            if (texture->vkImageView == VK_NULL_HANDLE)
+            {
+                continue;
+            }
+
+            VkWriteDescriptorSet& descriptorWrite = bindlessDescriptorWrites[currentWriteIndex];
+            descriptorWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.dstArrayElement = textureToUpdate.handle;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrite.dstSet = bindlessDescriptorSet;
+            descriptorWrite.dstBinding = BINDLESS_TEXTURE_BINDING;
+
+            //Handles should be the same.
+            VOID_ASSERT(texture->handle.index == textureToUpdate.handle);
+
+            Sampler* vkDefaultSampler = accessSampler(defaultSampler);
+            VkDescriptorImageInfo& descriptorImageInfo = bindlessImageInfo[currentWriteIndex];
+
+            //Update image view and sampler if valid.
+            if (!textureToUpdate.deleting)
+            {
+                descriptorImageInfo.imageView = texture->vkImageView;
+                if (texture->sampler != nullptr)
+                {
+                    descriptorImageInfo.sampler = texture->sampler->vkSampler;
+                }
+                else
+                {
+                    descriptorImageInfo.sampler = vkDefaultSampler->vkSampler;
+                }
+            }
+            else
+            {
+                //Deleting the set of default image view and sampler in the current slot.
+                descriptorImageInfo.imageView = vkDummyTexture->vkImageView;
+                descriptorImageInfo.sampler = vkDefaultSampler->vkSampler;
+            }
+
+            descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            descriptorWrite.pImageInfo = &descriptorImageInfo;
+
+            textureToUpdate.currentFrame = UINT32_MAX;
+            textureToUpdateBindless.deleteSwap(it);
+
+            //Cache this value as deleteSwap will modify the textureToUpdate reference.
+            const bool addTextureToDelete = textureToUpdate.deleting;
+
+            ++currentWriteIndex;
+
+            //Add texture to delete
+            if (addTextureToDelete)
+            {
+                resourceDeletionQueue.push(
+                    { 
+                        .type = ResourceUpdateType::TEXTURE, 
+                        .handle = texture->handle.index, 
+                        .currentFrame = currentFrame, 
+                        .deleting = 1 
+                    });
+            }
+        }
+
+        if (currentWriteIndex)
+        {
+            vkUpdateDescriptorSets(vulkanDevice, currentWriteIndex, bindlessDescriptorWrites, 0, nullptr);
+        }
+    }
+
     //Subit command buffer.
     VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -2856,28 +3114,28 @@ void GPUDevice::present()
             {
                 switch (resourceDeletion.type)
                 {
-                case ResourceDeletion::BUFFER:
+                case ResourceUpdateType::BUFFER:
                     destroyBufferInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::PIPELINE:
+                case ResourceUpdateType::PIPELINE:
                     destroyPipelineInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::RENDER_PASS:
+                case ResourceUpdateType::RENDER_PASS:
                     destroyRenderPassInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::DESCRIPTOR_SET:
+                case ResourceUpdateType::DESCRIPTOR_SET:
                     destroyDescriptorSetInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::DESCRIPTOR_SET_LAYOUT:
+                case ResourceUpdateType::DESCRIPTOR_SET_LAYOUT:
                     destroyDescriptorSetLayoutInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::SAMPLER:
+                case ResourceUpdateType::SAMPLER:
                     destroySamplerInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::SHADER_STATE:
+                case ResourceUpdateType::SHADER_STATE:
                     destroyShaderStateInstant(resourceDeletion.handle);
                     break;
-                case ResourceDeletion::TEXTURE:
+                case ResourceUpdateType::TEXTURE:
                     destroyTextureInstant(resourceDeletion.handle);
                     break;
                 }

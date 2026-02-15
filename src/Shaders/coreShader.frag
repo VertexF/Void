@@ -1,14 +1,10 @@
 #version 450
 
-uint MaterialFeatures_ColourTexture           = 1 << 0;
-uint MaterialFeatures_NormalTexture           = 1 << 1;
-uint MaterialFeatures_RoughnessTexture        = 1 << 2;
-uint MaterialFeatures_OcclusionTexture        = 1 << 3;
-uint MaterialFeatures_EmissiveTexture         = 1 << 4;
-uint MaterialFeatures_TangentVertexAttribute  = 1 << 5;
-uint MaterialFeatures_TexcoordVertexAttribute = 1 << 6; 
+#extension GL_EXT_scalar_block_layout : require
 
-layout(std140, binding = 0) uniform LocalConstants
+uint MaterialFeatures_TangentVertexAttribute  = 1 << 5;
+
+layout(scalar, set = 0, binding = 0) uniform LocalConstants
 {
     mat4 cameraModel;
     mat4 viewPerspective;
@@ -16,25 +12,35 @@ layout(std140, binding = 0) uniform LocalConstants
     vec4 light;
 };
 
-layout(std140, binding = 1) uniform MaterialConstant
+layout(scalar, set = 0, binding = 1) uniform MaterialConstant
 {
-    vec4 baseColourFactor;
     mat4 model;
     mat4 modelInv;
-
+    
+    uvec4 textures;
+    vec4 baseColourFactor;
+    vec4 metallicRoughnessOcclusionFactor;
+    float alphaCutoff;
+    
     vec3 emissiveFactor;
-    float metallicFactor;
-
-    float roughnessFactor;
-    float occlusionFactor;
+    uint emissiveTextureIndex;
     uint flags;
 };
 
-layout(binding = 2) uniform sampler2D diffuseTexture;
-layout(binding = 3) uniform sampler2D roughnessMetalnessTexture;
-layout(binding = 4) uniform sampler2D occlusionTexture;
-layout(binding = 5) uniform sampler2D emissiveTexture;
-layout(binding = 6) uniform sampler2D normalTexture;
+// Bindless support
+// Enable non uniform qualifier extension
+#extension GL_EXT_nonuniform_qualifier : enable
+
+layout(set = 1, binding = 0) uniform sampler2D globalTextures[];
+//Alias textures to use the same binding point, as bindless texture is shared
+//between all kind of textures: 1d, 2d, 3d.
+layout(set = 1, binding = 0) uniform sampler3D globalTextures3D[];
+
+//Write only image do not need formatting in layout.
+layout(set = 1, binding = 1) writeonly uniform image2D globalImages2D[];
+
+#define PI 3.1415926538
+#define INVALID_TEXTURE_INDEX 65535
 
 layout(location = 0) in vec2 vTexcoord0;
 layout(location = 1) in vec3 vNormal;
@@ -123,6 +129,14 @@ float heaviside(float value)
 void main()
 {
     mat3 TBN = mat3(1.0);
+    vec4 baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
+
+    //bool useAlphaMask = (flags & DrawFlags_AlphaMask) != 0;
+    //if (useAlphaMask && baseColour.a < alphaCutoff)
+    if (baseColour.a < alphaCutoff)
+    {
+        baseColour.a = 0.f;
+    }
 
     if ((flags & MaterialFeatures_TangentVertexAttribute) != 0)
     {
@@ -150,47 +164,42 @@ void main()
     vec3 L = normalize(light.xyz - vPosition.xyz);
     //NOTE: Normal textures are encoded to [0, 1] but we need it to be maped to [-1, 1] value.
     vec3 N = normalize(vNormal);
-    if ((flags & MaterialFeatures_NormalTexture) != 0) 
+    if (textures.z != INVALID_TEXTURE_INDEX) 
     {
-        N = normalize(texture(normalTexture, vTexcoord0).rgb * 2.0 - 1.0);
+        N = normalize(texture(globalTextures[nonuniformEXT(textures.z)], vTexcoord0).rgb * 2.0 - 1.0);
         N = normalize(TBN * N);
     }
     vec3 H = normalize(L + V);
 
-    float roughness = roughnessFactor;
-    float metalness = metallicFactor;
+    float metalness = metallicRoughnessOcclusionFactor.x;
+    float roughness = metallicRoughnessOcclusionFactor.y;
 
-    if ((flags & MaterialFeatures_RoughnessTexture) != 0) 
+    if (textures.y != INVALID_TEXTURE_INDEX) 
     {
         //Red channel for occlusion value.
         //Green channel contains roughness values.
         //Blue channel contains metalness.
-        vec4 rm = texture(roughnessMetalnessTexture, vTexcoord0);
+        vec4 rm = texture(globalTextures[nonuniformEXT(textures.y)], vTexcoord0);
 
         roughness *= rm.g;
         metalness *= rm.b;
     } 
 
-    float ao = 1.f;
-    if ((flags & MaterialFeatures_OcclusionTexture) != 0) 
+    float occlusion = metallicRoughnessOcclusionFactor.z;
+    if (textures.w != INVALID_TEXTURE_INDEX) 
     {
-        ao = texture(occlusionTexture, vTexcoord0).r;
+        vec4 o = texture(globalTextures[nonuniformEXT(textures.w)], vTexcoord0);
+        occlusion *= o.r;
     }
 
     float alpha = pow(roughness, 2.0);
 
-    vec4 baseColour = baseColourFactor;
-
-    if ((flags & MaterialFeatures_ColourTexture) != 0) 
-    {
-        vec4 albedo = texture(diffuseTexture, vTexcoord0);
-        baseColour *= vec4(decodeSRGB(albedo.rgb), albedo.a);
-    }
+    baseColour.rgb = decodeSRGB(baseColour.rgb);
 
     vec3 emissive = vec3(0);
-    if ((flags & MaterialFeatures_EmissiveTexture) != 0) 
+    if (emissiveTextureIndex != INVALID_TEXTURE_INDEX) 
     {
-        vec4 e = texture(emissiveTexture, vTexcoord0);
+        vec4 e = texture(globalTextures[nonuniformEXT(emissiveTextureIndex)], vTexcoord0);
 
         emissive += decodeSRGB(e.rgb) * emissiveFactor;
     }
@@ -198,48 +207,47 @@ void main()
     //NOTE: taken from https://www.khronos.org/registry/glTF/specs/2.0/glTF-2.0.html#specular-brdf
     float NdotH = clamp(dot(N, H), 0, 1);
     float alphaSquared = alpha * alpha;
-    float dDenom = (NdotH * NdotH) * (alphaSquared - 1.0) + 1.0;
-    float distribution = (alphaSquared * heaviside(NdotH)) / (PI * dDenom * dDenom);
+    float dDenom = (NdotH * alphaSquared - NdotH) * NdotH + 1.0;
+    float distribution = (alphaSquared) / (PI * dDenom * dDenom);
 
-    float lightRange = 10.f;
-    float lightIntensity = 10.f;
+    float lightRange = 1000.f;
+    float lightIntensity = 100.f;
     vec4 light = {1, 1, 1, 0};
 
+    float NdotV = abs(dot(N, V)) + 1e-5;
     float NdotL = clamp(dot(N, L), 0, 1);
-    float NdotV = clamp(dot(N, V), 0, 1);
     float HdotL = clamp(dot(H, L), 0, 1);
     float HdotV = clamp(dot(H, V), 0, 1);
 
     float distance = length(light.xyz - vPosition.xyz);
     float intensity = lightIntensity * max(min(1.0 - pow(distance / lightRange, 4.0), 1.0), 0.0) / pow(distance, 2.0);
 
-    if (NdotL > 0.0 || NdotV > 0.0)
-    {
-        float visibility = (heaviside(HdotL) / (abs(NdotL) + sqrt(alphaSquared + (1.0 - alphaSquared) * (NdotL * NdotL)))) * 
-                           (heaviside(HdotV) / (abs(NdotV) + sqrt(alphaSquared + (1.0 - alphaSquared) * (NdotV * NdotV))));
+    //Slower but more accurate.
+    float GGXL = NdotV * sqrt((-NdotL * alphaSquared + NdotL) * NdotL + alphaSquared);
+    float GGXV = NdotL * sqrt((-NdotV * alphaSquared + NdotL) * NdotL + alphaSquared);
+    float visibility = 0.5 / (GGXV + GGXL);
 
-        float specularBrdf = intensity * visibility * distribution;
+    //Faster but less accurate.
+    //float GGXL = NdotV * (NdotV * (1.0 - roughnessFactor)) + roughnessFactor;
+    //float GGXV = NdotL * (NdotL * (1.0 - roughnessFactor)) + roughnessFactor;
+    //float visibility = 0.5 / (GGXV + GGXL);
 
-        vec3 diffuseBrdf = intensity * (1 / PI) * baseColour.rgb;
+    float specularBrdf = (visibility * distribution);
 
-        //NOTE: f0 in the formula notation refers to the base colour here.
-        vec3 conductorFresnel = specularBrdf * (baseColour.rgb + (1.0 - baseColour.rgb) * pow(1.0 - abs(HdotV), 5));
+    vec3 diffuseBrdf = (1 / PI) * baseColour.rgb;
 
-        //NOTE: f0 in the formula notation refers to the value derived from IOR = 1.5.
-        float f0 = 0.04;
-        float fr = f0 + (1 - f0) * pow(1 - abs(HdotV), 5);
-        vec3 fresnelMix = mix(diffuseBrdf, vec3(specularBrdf), fr);
+    //NOTE: f0 in the formula notation refers to the base colour here.
+    vec3 conductorFresnel = specularBrdf * (baseColour.rgb + (1.0 - baseColour.rgb) * pow(1.0 - abs(HdotV), 5));
 
-        vec3 materialColour = mix(fresnelMix, conductorFresnel, metalness);
+    //NOTE: f0 in the formula notation refers to the value derived from IOR = 1.5.
+    float f0 = 0.04;
+    float fr = f0 + (1 - f0) * pow(1 - abs(HdotV), 5);
+    vec3 fresnelMix = mix(diffuseBrdf, vec3(specularBrdf), fr);
 
-        materialColour = emissive + mix(materialColour, materialColour * ao, occlusionFactor);
-
-        materialColour *= NdotL;
-
-        fragColour = vec4(encodeSRGB(materialColour), baseColour.a);
-    }
-    else
-    {
-        fragColour = baseColour;
-    }
+    vec3 materialColour = intensity * mix(fresnelMix, conductorFresnel, metalness) * NdotL;
+    
+    //materialColour = emissive + mix(materialColour, materialColour * ao, occlusionFactor);
+    materialColour = emissive + mix(materialColour, materialColour, occlusion);
+        
+    fragColour = vec4(encodeSRGB(materialColour), baseColour.a);
 }

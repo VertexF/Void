@@ -7,7 +7,7 @@ layout(location = 2) flat in uint textureID;
 
 layout(location = 0) out vec4 outColour;
 
-layout(set = 1, binding = 10) uniform sampler2D textures[];
+layout(set = 1, binding = 0) uniform sampler2D textures[];
 
 void main()
 {

@@ -150,12 +150,12 @@ void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_
         {
             const DescriptorBinding& rb = descriptorSetLayout->bindings[i];
 
-            if (rb.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) 
+            if (rb.type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) 
             {
                 //Search for the actual buffer offset.
                 const uint32_t resourceIndex = descriptorSet->bindings[i];
-                uint32_t descriptorSetHandle = descriptorSet->resources[resourceIndex];
-                Buffer* buffer = device->accessBuffer({ descriptorSetHandle });
+                //uint32_t descriptorSetHandle = descriptorSet->resources[resourceIndex];
+                Buffer* buffer = device->accessBuffer({ resourceIndex });
 
                 offsetsCache[numOffsets++] = buffer->globalOffset;
             }
@@ -164,6 +164,15 @@ void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_
 
     vkCmdBindDescriptorSets(vkCommandBuffer, currentPipeline->vkBindPoint, currentPipeline->vkPipelineLayout, 
                             descriptorSetNumber, numLists, vkDescriptorSets, numOffsets, offsetsCache);
+}
+
+void CommandBuffer::bindlessDescriptorSet(uint32_t descriptorSetNumber)
+{
+    if (device->bindlessSupported)
+    {
+        vkCmdBindDescriptorSets(vkCommandBuffer, currentPipeline->vkBindPoint, currentPipeline->vkPipelineLayout,
+            descriptorSetNumber, 1, &device->bindlessDescriptorSet, 0, nullptr);
+    }
 }
 
 void CommandBuffer::setViewport(const Viewport* viewport)

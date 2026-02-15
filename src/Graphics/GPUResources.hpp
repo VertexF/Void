@@ -30,7 +30,7 @@ namespace
     constexpr uint32_t MAX_RESOURCE_DELETIONS = 64;
 }
 
-enum ResourceDeletion : uint8_t
+enum ResourceUpdateType : uint8_t
 {
     BUFFER,
     TEXTURE,
@@ -298,6 +298,8 @@ struct DescriptorSetLayoutCreation
     uint32_t setIndex = 0;
 
     const char* name = nullptr;
+
+    bool bindless = false;
 
     DescriptorSetLayoutCreation& reset();
     DescriptorSetLayoutCreation& addBinding(const Binding& binding);
@@ -583,9 +585,10 @@ struct ExecutionBarrier
 
 struct ResourceUpdate 
 {
-    ResourceDeletion type;
+    ResourceUpdateType type;
     uint32_t handle;
     uint32_t currentFrame;
+    uint32_t deleting;
 };
 
 struct Buffer 
@@ -670,8 +673,11 @@ struct DescriptorSetLayout
 
     VkDescriptorSetLayoutBinding* vkBinding = nullptr;
     DescriptorBinding* bindings = nullptr;
+    //Mapping between binding point binding data.
+    uint8_t* indexToBinding = nullptr;
     uint16_t numBindings = 0;
     uint16_t setIndex = 0;
+    uint8_t bindless = 0;
 
     DescriptorSetLayoutHandle handle;
 };

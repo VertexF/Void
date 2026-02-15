@@ -274,6 +274,7 @@ struct GPUDevice
     VkQueue vulkanQueue;
     uint32_t vulkanQueueFamily;
     VkDescriptorPool vulkanDescriptorPool;
+    VkDescriptorPool bindlessDescriptorPool;
 
     //Swapchain
     Array<VkImage> vulkanSwapchainImages;
@@ -308,6 +309,11 @@ struct GPUDevice
     //These are dynamic - so that workload can handled correctly.
     Array<ResourceUpdate> resourceDeletionQueue;
     Array<DescriptorSetUpdate> descriptorSetUpdates;
+    Array<ResourceUpdate> textureToUpdateBindless;
+
+    VkDescriptorSet bindlessDescriptorSet{};
+    DescriptorSetLayoutHandle bindlessDescriptorSetLayoutHandle{};
+    DescriptorSetHandle bindlessDescriptorSetHandle{};
 
     float gpuTimestampFrequency;
     bool gpuTimestampReset = true;

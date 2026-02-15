@@ -14,6 +14,7 @@ struct CommandBuffer
     void bindVertexBuffer(BufferHandle handle, uint32_t binding, uint32_t offset);
     void bindIndexBuffer(BufferHandle handle, uint32_t offset, VkIndexType indexType);
     void bindDescriptorSet(DescriptorSetHandle* handle, uint32_t numLists, uint32_t* offsets, uint32_t numOffsets, uint32_t descriptorSetNumber);
+    void bindlessDescriptorSet(uint32_t descriptorSetNumber);
 
     void setViewport(const Viewport* viewport);
     void setScissor(const Rect2DInt* rect);

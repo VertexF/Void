@@ -1,14 +1,9 @@
 #version 450
 
 #extension GL_ARB_shader_draw_parameters: require
+#extension GL_EXT_scalar_block_layout : require
 
-uint MaterialFeatures_ColourTexture           = 1 << 0;
-uint MaterialFeatures_NormalTexutre           = 1 << 1;
-uint MaterialFeatures_RoughnessTexture        = 1 << 2;
-uint MaterialFeatures_OcclusionTexture        = 1 << 3;
-uint MaterialFeatures_EmissiveTexture         = 1 << 4;
-uint MaterialFeatures_TangentVertexAttribute  = 1 << 5;
-uint MaterialFeatures_TexcoordVertexAttribute = 1 << 6; 
+uint MaterialFeatures_TangentVertexAttribute  = 1 << 5; 
 
 struct Vertices
 {
@@ -23,7 +18,7 @@ struct ModelPosition
    mat4 pos;  
 };
 
-layout(set = 0, std140, binding = 0) uniform LocalConstants
+layout(scalar, set = 0, scalar, binding = 0) uniform LocalConstants
 {
     mat4 globalModel;
     mat4 viewPerspective;
@@ -31,26 +26,28 @@ layout(set = 0, std140, binding = 0) uniform LocalConstants
     vec4 light;
 };
 
-layout(set = 0, std140, binding = 1) uniform MaterialConstant
+layout(scalar, set = 0, scalar, binding = 1) uniform MaterialConstant
 {
-    vec4 baseColourFactor;
     mat4 model;
     mat4 modelInv;
-
+    
+    uvec4 textures;
+    vec4 baseColourFactor;
+    vec4 metallicRoughnessOcclusionFactor;
+    float alphaCutoff;
+    float pad[3];
+    
     vec3 emissiveFactor;
-    float matallicFactor;
-
-    float roughnessFactor;
-    float occlusionsFactor;
+    uint emissiveTextureIndex;
     uint flags;
 };
 
-layout(set = 0, std430, binding = 7) readonly buffer VertexData
+layout(scalar, set = 0, binding = 2) readonly buffer VertexData
 {
     Vertices vertexData[];
 };
 
-layout(set = 1, std430, binding = 0) readonly buffer ModelPositionData
+layout(scalar, set = 2, binding = 0) readonly buffer ModelPositionData
 {
     ModelPosition modelPositions[];
 };
@@ -75,14 +72,8 @@ void main()
     gl_Position = viewPerspective * globalModel * model * modelPositions[index].pos * vec4(position, 1.0);
     vPosition  =  globalModel * model * modelPositions[index].pos * vec4(position, 1.0);
 
-    if ((flags & MaterialFeatures_TexcoordVertexAttribute) != 0)
-    {
-        vTexcoord0 = texcoord;
-    }
+    vTexcoord0 = texcoord;
     vNormal = mat3(modelInv) * normal;
 
-    if ((flags & MaterialFeatures_TangentVertexAttribute) != 0) 
-    {
-        vTangent = tagent;
-    }
+    vTangent = tagent;
 }

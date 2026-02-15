@@ -30,8 +30,8 @@
 
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza4.glb";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
 
 //I might try to remove this later.
@@ -59,31 +59,25 @@ namespace
 
     enum MaterialFeatures
     {
-        MaterialFeatures_ColourTexture = 1 << 0,
-        MaterialFeatures_NormalTexture = 1 << 1,
-        MaterialFeatures_RoughnessTexture = 1 << 2,
-        MaterialFeatures_OcclusionTexture = 1 << 3,
-        MaterialFeatures_EmissiveTexture = 1 << 4,
-
         MaterialFeatures_TangentVertexAttribute = 1 << 5,
-        MaterialFeatures_TexcoordVertexAttribute = 1 << 6,
     };
 
-    struct alignas(16) MaterialData
+    struct MaterialData
     {
-        vec4s baseColourFactor;
         mat4s model;
         mat4s modelInv;
 
-        vec3s emissiveFactor;
-        float metallicFactor;
+        uint32_t textures[4];
+        vec4s baseColourFactor;
+        vec4s metallicRoughnessOcclusionFactor;
+        float alphaCutoff;
 
-        float roughnessFactor;
-        float occlusionFactor;
+        vec3s emissiveFactor;
+        uint32_t emissiveTextureIndex;
         uint32_t flags;
     };
 
-    struct alignas(16) Vertices
+    struct Vertices
     {
         float tangent[4];
         float position[3];
@@ -93,14 +87,31 @@ namespace
 
     struct MeshDraw
     {
+        mat4s model;
+
+        vec4s baseColourFactor;
+        vec4s metallicRoughnessOcclusionFactor;
+        vec3s scale;
+        vec3s emissiveFactor;
+        
+        float alphaCutoff;
+
         BufferHandle vertexBuffer;
         BufferHandle indexBuffer;
         BufferHandle materialBuffer;
-        MaterialData materialData;
+        //MaterialData materialData;
+
+        //Indices used for bindless textures.
+        uint16_t diffuseTextureIndex;
+        uint16_t roughnessTextureIndex;
+        uint16_t normalTextureIndex;
+        uint16_t occlusionTextureIndex;
+        uint16_t emisiveTextureIndex;
 
         uint32_t indexOffset;
 
         uint32_t count;
+        uint32_t flags;
 
         VkIndexType indexType;
 
@@ -137,6 +148,35 @@ namespace
             return localMatrix;
         }
     };
+
+    void uploadMaterial(MaterialData& meshData, const MeshDraw& meshDraw)
+    {
+        meshData.textures[0] = meshDraw.diffuseTextureIndex;
+        meshData.textures[1] = meshDraw.roughnessTextureIndex;
+        meshData.textures[2] = meshDraw.normalTextureIndex;
+        meshData.textures[3] = meshDraw.occlusionTextureIndex;
+
+        meshData.emissiveFactor = 
+        { 
+            meshDraw.emissiveFactor.x,
+            meshDraw.emissiveFactor.y,
+            meshDraw.emissiveFactor.z
+        };
+
+        meshData.emissiveTextureIndex = meshDraw.emisiveTextureIndex;
+
+        meshData.baseColourFactor = meshDraw.baseColourFactor;
+        meshData.metallicRoughnessOcclusionFactor = meshDraw.metallicRoughnessOcclusionFactor;
+        meshData.alphaCutoff = meshDraw.alphaCutoff;
+        meshData.flags = meshDraw.flags;
+
+        // NOTE: for left-handed systems (as defined in cglm) need to invert positive and negative Z.
+        mat4s model = meshDraw.model;
+        meshData.model = model;
+        meshData.modelInv = glms_mat4_inv(glms_mat4_transpose(model));
+    }
+
+    static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
 }
 
 int main(int argc, char** argv)
@@ -180,6 +220,8 @@ int main(int argc, char** argv)
     ImguiService* imgui = ImguiService::instance();
     ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
     imgui->init(&imguiConfig);
+
+    gpu.bindlessSupported = true;
 
     //Window::instance()->setFullscreen(true);
 
@@ -355,19 +397,16 @@ int main(int argc, char** argv)
 
         //Descriptor set layout.
         DescriptorSetLayoutCreation cubeRLLCreation{};
-        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "diffuseTexture" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "roughnessMetalnessTexture" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "occlusionTexture" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "emissiveTexture" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "normalTexture" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7, 1, VK_SHADER_STAGE_VERTEX_BIT, "Vertices" })
+        cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, 1, VK_SHADER_STAGE_VERTEX_BIT, "Vertices" })
                        .setSetIndex(0);
+        cubeRLLCreation.bindless = false;
 
         DescriptorSetLayoutCreation positionDescriptorLayout{};
         positionDescriptorLayout.addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, "ModelsPosition" })
-            .setSetIndex(1);
+            .setSetIndex(2);
+        positionDescriptorLayout.bindless = false;
 
         //Setting it into pipeline.
         //This descriptor set layout will be ran every draw calls
@@ -375,6 +414,7 @@ int main(int argc, char** argv)
         //This descriptor set layout will be ran every frame
         matrixPosition = gpu.createDescriptorSetLayout(positionDescriptorLayout);
         pipelineCreation.addDescriptorSetLayout(cubeDSL)
+                        .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle)
                         .addDescriptorSetLayout(matrixPosition);
 
         cubePipeline = gpu.createPipeline(pipelineCreation);
@@ -483,7 +523,7 @@ int main(int argc, char** argv)
                 {
                     MeshDraw meshDraw{};
 
-                    meshDraw.materialData.model = finalMatrix;
+                    meshDraw.model = finalMatrix;
 
                     cgltf_primitive meshPrimitive = mesh->primitives[primitiveIndex];
 
@@ -521,19 +561,24 @@ int main(int argc, char** argv)
                     meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
                     dsCreation.buffer(meshDraw.materialBuffer, 1);
 
+                    meshDraw.alphaCutoff = material->alpha_cutoff != FLT_MAX ? material->alpha_cutoff : 1.f;
+
                     if (material->has_pbr_metallic_roughness)
                     {
                         if (material->pbr_metallic_roughness.base_color_factor[0] != 0)
                         {
-                            meshDraw.materialData.baseColourFactor.x = material->pbr_metallic_roughness.base_color_factor[0];
-                            meshDraw.materialData.baseColourFactor.y = material->pbr_metallic_roughness.base_color_factor[1];
-                            meshDraw.materialData.baseColourFactor.z = material->pbr_metallic_roughness.base_color_factor[2];
-                            meshDraw.materialData.baseColourFactor.w = material->pbr_metallic_roughness.base_color_factor[3];
+                            meshDraw.baseColourFactor.x = material->pbr_metallic_roughness.base_color_factor[0];
+                            meshDraw.baseColourFactor.y = material->pbr_metallic_roughness.base_color_factor[1];
+                            meshDraw.baseColourFactor.z = material->pbr_metallic_roughness.base_color_factor[2];
+                            meshDraw.baseColourFactor.w = material->pbr_metallic_roughness.base_color_factor[3];
                         }
                         else
                         {
-                            meshDraw.materialData.baseColourFactor = { 1.f, 1.f, 1.f, 1.f };
+                            meshDraw.baseColourFactor = { 1.f, 1.f, 1.f, 1.f };
                         }
+
+                        meshDraw.metallicRoughnessOcclusionFactor.x = material->pbr_metallic_roughness.metallic_factor != FLT_MAX ? material->pbr_metallic_roughness.metallic_factor : 1.f;
+                        meshDraw.metallicRoughnessOcclusionFactor.y = material->pbr_metallic_roughness.roughness_factor != FLT_MAX ? material->pbr_metallic_roughness.roughness_factor : 1.f;
 
                         if (material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
                         {
@@ -551,13 +596,14 @@ int main(int argc, char** argv)
                                 samplerHandle = samplerGPU.handle;
                             }
 
-                            dsCreation.textureSampler(textureGPU.handle, samplerHandle, 2);
+                            //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 2);
 
-                            meshDraw.materialData.flags |= MaterialFeatures_ColourTexture;
+                            meshDraw.diffuseTextureIndex = (uint16_t)textureGPU.handle.index;
                         }
                         else
                         {
-                            dsCreation.textureSampler(dummyTexture, dummySampler, 2);
+                            //dsCreation.textureSampler(dummyTexture, dummySampler, 2);
+                            meshDraw.diffuseTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                         }
 
                         if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
@@ -576,31 +622,16 @@ int main(int argc, char** argv)
                                 samplerHandle = samplerGPU.handle;
                             }
 
-                            dsCreation.textureSampler(textureGPU.handle, samplerHandle, 3);
+                            //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 3);
 
-                            meshDraw.materialData.flags |= MaterialFeatures_RoughnessTexture;
+                            meshDraw.roughnessTextureIndex = (uint16_t)textureGPU.handle.index;
+
+                            //meshDraw.flags |= MaterialFeatures_RoughnessTexture;
                         }
                         else
                         {
-                            dsCreation.textureSampler(dummyTexture, dummySampler, 3);
-                        }
-
-                        if (material->has_pbr_metallic_roughness)
-                        {
-                            meshDraw.materialData.metallicFactor = material->pbr_metallic_roughness.metallic_factor;
-                        }
-                        else
-                        {
-                            meshDraw.materialData.metallicFactor = 1.0f;
-                        }
-
-                        if (material->has_pbr_metallic_roughness)
-                        {
-                            meshDraw.materialData.roughnessFactor = material->pbr_metallic_roughness.roughness_factor;
-                        }
-                        else
-                        {
-                            meshDraw.materialData.roughnessFactor = 1.0f;
+                            //dsCreation.textureSampler(dummyTexture, dummySampler, 3);
+                            meshDraw.roughnessTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                         }
                     }
 
@@ -620,19 +651,22 @@ int main(int argc, char** argv)
                             samplerHandle = samplerGPU.handle;
                         }
 
-                        dsCreation.textureSampler(textureGPU.handle, samplerHandle, 4);
+                        //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 4);
 
-                        meshDraw.materialData.occlusionFactor = material->occlusion_texture.scale !=
+                        meshDraw.metallicRoughnessOcclusionFactor.z = material->occlusion_texture.scale !=
                             FLT_MAX ?
                             material->occlusion_texture.scale :
                             1.f;
 
-                        meshDraw.materialData.flags |= MaterialFeatures_OcclusionTexture;
+                        //meshDraw.materialData.flags |= MaterialFeatures_OcclusionTexture;
+
+                        meshDraw.occlusionTextureIndex = (uint16_t)textureGPU.handle.index;
                     }
                     else
                     {
-                        meshDraw.materialData.occlusionFactor = 1.f;
-                        dsCreation.textureSampler(dummyTexture, dummySampler, 4);
+                        meshDraw.metallicRoughnessOcclusionFactor.z = 1.f;
+                        //dsCreation.textureSampler(dummyTexture, dummySampler, 4);
+                        meshDraw.occlusionTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                     }
 
                     if (material->emissive_texture.texture != nullptr)
@@ -651,12 +685,14 @@ int main(int argc, char** argv)
                             samplerHandle = samplerGPU.handle;
                         }
 
-                        dsCreation.textureSampler(textureGPU.handle, samplerHandle, 5);
+                        //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 5);
 
-                        meshDraw.materialData.flags |= MaterialFeatures_EmissiveTexture;
+                        meshDraw.emisiveTextureIndex = (uint16_t)textureGPU.handle.index;
+
+                        //meshDraw.materialData.flags |= MaterialFeatures_EmissiveTexture;
 
                         //TODO: Is this always tide to the emissive texture?
-                        meshDraw.materialData.emissiveFactor = vec3s
+                        meshDraw.emissiveFactor = vec3s
                         {
                             material->emissive_factor[0],
                             material->emissive_factor[1],
@@ -665,7 +701,8 @@ int main(int argc, char** argv)
                     }
                     else
                     {
-                        dsCreation.textureSampler(dummyTexture, dummySampler, 5);
+                        //dsCreation.textureSampler(dummyTexture, dummySampler, 5);
+                        meshDraw.emisiveTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                     }
 
                     if (material->normal_texture.texture != nullptr)
@@ -684,13 +721,16 @@ int main(int argc, char** argv)
                             samplerHandle = samplerGPU.handle;
                         }
 
-                        dsCreation.textureSampler(textureGPU.handle, samplerHandle, 6);
+                        //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 6);
 
-                        meshDraw.materialData.flags |= MaterialFeatures_NormalTexture;
+                        meshDraw.normalTextureIndex = (uint16_t)textureGPU.handle.index;
+
+                        //meshDraw.materialData.flags |= MaterialFeatures_NormalTexture;
                     }
                     else
                     {
-                        dsCreation.textureSampler(dummyTexture, dummySampler, 6);
+                        //dsCreation.textureSampler(dummyTexture, dummySampler, 6);
+                        meshDraw.normalTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                     }
 
                     const cgltf_accessor* positionAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_position, 0);
@@ -760,7 +800,7 @@ int main(int argc, char** argv)
                             vertex[j].tangent[3] = scratch[j * 4 + 3];
                         }
 
-                        meshDraw.materialData.flags |= MaterialFeatures_TangentVertexAttribute;
+                        meshDraw.flags |= MaterialFeatures_TangentVertexAttribute;
                     }
 
                     if (textureAccessor)
@@ -778,7 +818,7 @@ int main(int argc, char** argv)
                             vertex[j].texCoord0[1] = scratch[j * 2 + 1];
                         };
 
-                        meshDraw.materialData.flags |= MaterialFeatures_TexcoordVertexAttribute;
+                        //meshDraw.flags |= MaterialFeatures_TexcoordVertexAttribute;
                     }
 
                     bufferCreation.reset()
@@ -787,7 +827,7 @@ int main(int argc, char** argv)
                         .setData(vertex.data);
                     meshDraw.vertexBuffer = gpu.createBuffer(bufferCreation);
 
-                    dsCreation.buffer(meshDraw.vertexBuffer, 7)
+                    dsCreation.buffer(meshDraw.vertexBuffer, 2)
                         .setLayout(cubeDSL);
 
                     scratchAllocator.freeMarker(stackPrimitveMarker);
@@ -807,10 +847,10 @@ int main(int argc, char** argv)
 
     srand(42);
 
-    uint32_t totalDucks = 1;
+    uint32_t totalDucks = 500;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
-    float sceneRadius = 1.f;
+    float sceneRadius = 5000.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
     {
         vec3s postion{};
@@ -860,7 +900,6 @@ int main(int argc, char** argv)
 
     float modelScale = 1.f;
     bool fullscreen = false;
-    uint32_t index = 0;
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -961,7 +1000,11 @@ int main(int argc, char** argv)
                 gpu.unmapBuffer(cbMap);
             }
 
-            gpuCommands->bindDescriptorSet(&positionDescriptorSets, 1, nullptr, 0, 1);
+            gpuCommands->bindDescriptorSet(&positionDescriptorSets, 1, nullptr, 0, 2);
+            if (gpu.bindlessSupported)
+            {
+                gpuCommands->bindlessDescriptorSet(1);
+            }
 
             //ModelIndex uniformData{};
             for (uint32_t i = 0; i < totalDucks; ++i)
@@ -973,18 +1016,21 @@ int main(int argc, char** argv)
                 for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
                 {
                     MeshDraw meshDraw = meshDraws[meshIndex];
-                    meshDraw.materialData.modelInv = glms_mat4_inv(glms_mat4_transpose(glms_mat4_mul(globalModel, meshDraw.materialData.model)));
 
                     MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
                     MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
 
-                    memcpy(materialBufferData, &meshDraw.materialData, sizeof(MaterialData));
+                    //memcpy(materialBufferData, &meshDraw.materialData, sizeof(MaterialData));
 
+                    uploadMaterial(*materialBufferData, meshDraw);
                     gpu.unmapBuffer(materialMap);
 
-                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
                     //gpuCommands->bindIndexBuffer(indexBufferHandle, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
+
+                    //I need to learn how to bind a bindless descriptor set especially because it's a group of them.
+                    //gpuCommands->bindDescriptorSet(&gpu.bindlessDescriptorSetHandle, 1024, nullptr, 0, 1);
 
                     gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
                 }
