@@ -30,8 +30,8 @@
 
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
 
 //I might try to remove this later.
@@ -262,8 +262,8 @@ int main(int argc, char** argv)
         VOID_ERROR("The gltf model is invalid");
     }
 
-    Array<TextureResource> images2;
-    images2.init(allocator, uint32_t(cgltfData->images_count));
+    Array<TextureResource> images;
+    images.init(allocator, uint32_t(cgltfData->images_count));
 
     //GLB version.
     for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
@@ -276,7 +276,7 @@ int main(int argc, char** argv)
 
             VOID_ASSERT(textureResource != nullptr);
 
-            images2.push(*textureResource);
+            images.push(*textureResource);
         }
         else
         {
@@ -314,7 +314,7 @@ int main(int argc, char** argv)
             TextureResource* textureResource = renderer.createTexture(textureCreation);
             VOID_ASSERT(textureResource != nullptr);
 
-            images2.push(*textureResource);
+            images.push(*textureResource);
 
             stbi_image_free(textureData);
         }
@@ -342,8 +342,8 @@ int main(int argc, char** argv)
     StringBuffer resourceNameBuffer;
     resourceNameBuffer.init(void_kilo(64), allocator);
 
-    Array<SamplerResource> samplers2;
-    samplers2.init(allocator, uint32_t(cgltfData->samplers_count));
+    Array<SamplerResource> samplers;
+    samplers.init(allocator, uint32_t(cgltfData->samplers_count));
 
     for (uint32_t samplerIndex = 0; samplerIndex < cgltfData->samplers_count; ++samplerIndex)
     {
@@ -359,7 +359,7 @@ int main(int argc, char** argv)
         SamplerResource* samplerResource = renderer.createSampler(creation);
         VOID_ASSERT(samplerResource != nullptr);
 
-        samplers2.push(*samplerResource);
+        samplers.push(*samplerResource);
     }
 
     //NOTE: resource working directory
@@ -427,22 +427,21 @@ int main(int argc, char** argv)
         cubeCB = gpu.createBuffer(uniformBufferCreation);
 
         uint32_t sceneCount = (uint32_t)cgltfData->scenes_count;
-        uint32_t nodeCount = (uint32_t)cgltfData->nodes_count;
 
         //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
         Array<int32_t> nodeParents;
-        nodeParents.init(allocator, nodeCount);
+        nodeParents.init(allocator, cgltfData->nodes_count);
         Array<cgltf_node> nodeStack;
-        nodeStack.init(allocator, nodeCount);
+        nodeStack.init(allocator, cgltfData->nodes_count);
 
         Array<mat4s> nodeMatrix;
-        nodeMatrix.init(allocator, nodeCount, nodeCount);
+        nodeMatrix.init(allocator, cgltfData->nodes_count);
 
         //Adding all the root nodes to the array.
-        for (uint32_t sceneIndex = 0; sceneIndex < sceneCount; ++sceneIndex)
+        for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
         {
             cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
-            for (uint32_t parentIndex = 0; parentIndex < nodeCount; ++parentIndex)
+            for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
             {
                 cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
                 nodeParents.push(-1);
@@ -451,9 +450,9 @@ int main(int argc, char** argv)
         }
 
         mat4s finalMatrix = glms_mat4_identity();
-        for (uint32_t sceneIndex = 0; sceneIndex < sceneCount; ++sceneIndex)
+        for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
         {
-            for (uint32_t nodeIndex = 0; nodeIndex < nodeStack.size; ++nodeIndex)
+            for (uint32_t nodeIndex = 0; nodeIndex < cgltfData->nodes_count; ++nodeIndex)
             {
                 cgltf_node currentNode = nodeStack[nodeIndex];
 
@@ -494,16 +493,23 @@ int main(int argc, char** argv)
                     localMatrix = transform.calculateMatrix();
                 }
 
-                nodeMatrix[nodeIndex] = localMatrix;
+                nodeMatrix.push(localMatrix);
 
-                for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
+                if (currentNode.children != nullptr && currentNode.children[0] != nullptr)
                 {
-                    if (currentNode.children[childIndex] != nullptr)
+                    for (uint32_t childIndex = 0; childIndex < currentNode.children_count; ++childIndex)
                     {
-                        cgltf_node childNode = *currentNode.children[childIndex];
-                        nodeStack.push(childNode);
+                        if (currentNode.children[childIndex] != nullptr)
+                        {
+                            cgltf_node childNode = *currentNode.children[childIndex];
+                            nodeStack.push(childNode);
+                        }
+                        nodeParents.push(nodeIndex);
                     }
-                    nodeParents.push(nodeIndex);
+                }
+                else 
+                {
+                    int xxx = 9;
                 }
 
                 finalMatrix = localMatrix;
@@ -522,7 +528,7 @@ int main(int argc, char** argv)
 
                 uint32_t primitiveCount = (uint32_t)mesh->primitives_count;
                 //Final SRT composition
-                for (uint32_t primitiveIndex = 0; primitiveIndex < primitiveCount; ++primitiveIndex)
+                for (uint32_t primitiveIndex = 0; primitiveIndex < (uint32_t)mesh->primitives_count; ++primitiveIndex)
                 {
                     MeshDraw meshDraw{};
 
@@ -568,17 +574,10 @@ int main(int argc, char** argv)
 
                     if (material->has_pbr_metallic_roughness)
                     {
-                        if (material->pbr_metallic_roughness.base_color_factor[0] != 0)
-                        {
                             meshDraw.baseColourFactor.x = material->pbr_metallic_roughness.base_color_factor[0];
                             meshDraw.baseColourFactor.y = material->pbr_metallic_roughness.base_color_factor[1];
                             meshDraw.baseColourFactor.z = material->pbr_metallic_roughness.base_color_factor[2];
                             meshDraw.baseColourFactor.w = material->pbr_metallic_roughness.base_color_factor[3];
-                        }
-                        else
-                        {
-                            meshDraw.baseColourFactor = { 1.f, 1.f, 1.f, 1.f };
-                        }
 
                         meshDraw.metallicRoughnessOcclusionFactor.x = material->pbr_metallic_roughness.metallic_factor != FLT_MAX ? material->pbr_metallic_roughness.metallic_factor : 1.f;
                         meshDraw.metallicRoughnessOcclusionFactor.y = material->pbr_metallic_roughness.roughness_factor != FLT_MAX ? material->pbr_metallic_roughness.roughness_factor : 1.f;
@@ -589,23 +588,20 @@ int main(int argc, char** argv)
                             SamplerHandle samplerHandle = dummySampler;
 
                             uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                            TextureResource& textureGPU = images2[imageIndex];
+                            TextureResource& textureGPU = images[imageIndex];
 
                             if (textureInfo->sampler)
                             {
                                 uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                                SamplerResource& samplerGPU = samplers2[sampleIndex];
+                                SamplerResource& samplerGPU = samplers[sampleIndex];
                                 gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                                 samplerHandle = samplerGPU.handle;
                             }
-
-                            //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 2);
 
                             meshDraw.diffuseTextureIndex = (uint16_t)textureGPU.handle.index;
                         }
                         else
                         {
-                            //dsCreation.textureSampler(dummyTexture, dummySampler, 2);
                             meshDraw.diffuseTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                         }
 
@@ -615,25 +611,20 @@ int main(int argc, char** argv)
                             SamplerHandle samplerHandle = dummySampler;
 
                             uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                            TextureResource& textureGPU = images2[imageIndex];
+                            TextureResource& textureGPU = images[imageIndex];
 
                             if (textureInfo->sampler)
                             {
                                 uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                                SamplerResource& samplerGPU = samplers2[sampleIndex];
+                                SamplerResource& samplerGPU = samplers[sampleIndex];
                                 gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                                 samplerHandle = samplerGPU.handle;
                             }
 
-                            //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 3);
-
                             meshDraw.roughnessTextureIndex = (uint16_t)textureGPU.handle.index;
-
-                            //meshDraw.flags |= MaterialFeatures_RoughnessTexture;
                         }
                         else
                         {
-                            //dsCreation.textureSampler(dummyTexture, dummySampler, 3);
                             meshDraw.roughnessTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                         }
                     }
@@ -644,31 +635,26 @@ int main(int argc, char** argv)
                         SamplerHandle samplerHandle = dummySampler;
 
                         uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images2[imageIndex];
+                        TextureResource& textureGPU = images[imageIndex];
 
                         if (textureInfo->sampler)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers2[sampleIndex];
+                            SamplerResource& samplerGPU = samplers[sampleIndex];
                             gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                             samplerHandle = samplerGPU.handle;
                         }
-
-                        //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 4);
 
                         meshDraw.metallicRoughnessOcclusionFactor.z = material->occlusion_texture.scale !=
                             FLT_MAX ?
                             material->occlusion_texture.scale :
                             1.f;
 
-                        //meshDraw.materialData.flags |= MaterialFeatures_OcclusionTexture;
-
                         meshDraw.occlusionTextureIndex = (uint16_t)textureGPU.handle.index;
                     }
                     else
                     {
                         meshDraw.metallicRoughnessOcclusionFactor.z = 1.f;
-                        //dsCreation.textureSampler(dummyTexture, dummySampler, 4);
                         meshDraw.occlusionTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                     }
 
@@ -678,21 +664,17 @@ int main(int argc, char** argv)
                         SamplerHandle samplerHandle = dummySampler;
 
                         uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images2[imageIndex];
+                        TextureResource& textureGPU = images[imageIndex];
 
                         if (textureInfo->sampler)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers2[sampleIndex];
+                            SamplerResource& samplerGPU = samplers[sampleIndex];
                             gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                             samplerHandle = samplerGPU.handle;
                         }
 
-                        //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 5);
-
                         meshDraw.emisiveTextureIndex = (uint16_t)textureGPU.handle.index;
-
-                        //meshDraw.materialData.flags |= MaterialFeatures_EmissiveTexture;
 
                         //TODO: Is this always tide to the emissive texture?
                         meshDraw.emissiveFactor = vec3s
@@ -704,7 +686,6 @@ int main(int argc, char** argv)
                     }
                     else
                     {
-                        //dsCreation.textureSampler(dummyTexture, dummySampler, 5);
                         meshDraw.emisiveTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                     }
 
@@ -714,25 +695,20 @@ int main(int argc, char** argv)
                         SamplerHandle samplerHandle = dummySampler;
 
                         uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images2[imageIndex];
+                        TextureResource& textureGPU = images[imageIndex];
 
                         if (textureInfo->sampler)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers2[sampleIndex];
+                            SamplerResource& samplerGPU = samplers[sampleIndex];
                             gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
                             samplerHandle = samplerGPU.handle;
                         }
 
-                        //dsCreation.textureSampler(textureGPU.handle, samplerHandle, 6);
-
                         meshDraw.normalTextureIndex = (uint16_t)textureGPU.handle.index;
-
-                        //meshDraw.materialData.flags |= MaterialFeatures_NormalTexture;
                     }
                     else
                     {
-                        //dsCreation.textureSampler(dummyTexture, dummySampler, 6);
                         meshDraw.normalTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
                     }
 
@@ -850,10 +826,10 @@ int main(int argc, char** argv)
 
     srand(42);
 
-    uint32_t totalDucks = 1;
+    uint32_t totalDucks = 500;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
-    float sceneRadius = 1.f;
+    float sceneRadius = 5000.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
     {
         vec3s postion{};
@@ -874,7 +850,7 @@ int main(int argc, char** argv)
         drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
     }
 
-    drawMatrices[0] = glms_mat4_identity();
+    //drawMatrices[0] = glms_mat4_identity();
 
     DescriptorSetHandle positionDescriptorSets{};
 
@@ -1086,17 +1062,17 @@ int main(int argc, char** argv)
     resourceManager.shutdown();
 
     //This is here to solve a bug that happens when allocating image from a .glb file. 
-    for (uint32_t i = 0; i < images2.size; ++i)
+    for (uint32_t i = 0; i < images.size; ++i)
     {
-        renderer.destroyTexture(&images2[i]);
+        renderer.destroyTexture(&images[i]);
     }
 
     renderer.shutdown();
 
     vertices.shutdown();
     meshIndices.shutdown();
-    samplers2.shutdown();
-    images2.shutdown();
+    samplers.shutdown();
+    images.shutdown();
 
     resourceNameBuffer.shutdown();
 
