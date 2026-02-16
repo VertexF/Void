@@ -309,14 +309,14 @@ struct DescriptorSetLayoutCreation
 
 struct DescriptorSetCreation 
 {
+    const char* name = nullptr;
+
     uint32_t resources[MAX_DESCRIPTOR_PER_SET];
     SamplerHandle samplers[MAX_DESCRIPTOR_PER_SET];
     uint16_t bindings[MAX_DESCRIPTOR_PER_SET];
 
     DescriptorSetLayoutHandle layout;
     uint32_t numResources = 0;
-
-    const char* name = nullptr;
 
     DescriptorSetCreation& reset();
     DescriptorSetCreation& setLayout(DescriptorSetLayoutHandle newLayout);
@@ -335,11 +335,12 @@ struct DescriptorSetUpdate
 
 struct VertexAttribute 
 {
-    uint16_t location = 0;
-    uint16_t binding = 0;
     uint32_t offset = 0;
 
     VkFormat format = VK_FORMAT_MAX_ENUM;
+
+    uint16_t location = 0;
+    uint16_t binding = 0;
 };
 
 struct VertexStream 
@@ -351,11 +352,11 @@ struct VertexStream
 
 struct VertexInputCreation 
 {
+    VertexAttribute vertexAttributes[MAX_VERTEX_ATTRIBUTES];
+    VertexStream vertexStreams[MAX_VERTEX_STREAMS];
+
     uint32_t numVertexStreams = 0;
     uint32_t numVertexAttributes = 0;
-
-    VertexStream vertexStreams[MAX_VERTEX_STREAMS];
-    VertexAttribute vertexAttributes[MAX_VERTEX_ATTRIBUTES];
 
     VertexInputCreation& reset();
     VertexInputCreation& addVertexStream(const VertexStream& stream);
@@ -385,15 +386,13 @@ struct RenderPassOutput
 
 struct RenderPassCreation 
 {
-    uint16_t numRenderTargets = 0;
-    RenderPassEnumType type = RenderPassEnumType::GRAPHICS;
+    const char* name = nullptr;
 
     TextureHandle outputTextures[MAX_IMAGE_OUTPUT];
     TextureHandle depthStencilTexture;
 
     float scaleX = 1.f;
     float scaleY = 1.f;
-    uint8_t resize = 1;
 
     VkAttachmentLoadOp colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     VkAttachmentLoadOp depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -402,7 +401,10 @@ struct RenderPassCreation
     VkImageLayout colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageLayout depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    const char* name = nullptr;
+    uint16_t numRenderTargets = 0;
+    RenderPassEnumType type = RenderPassEnumType::GRAPHICS;
+
+    uint8_t resize = 1;
 
     RenderPassCreation& reset();
     RenderPassCreation& addRenderTexture(TextureHandle texture);
@@ -497,7 +499,6 @@ struct BufferDescription
     const char* name = nullptr;
 
     VkBufferUsageFlags typeFlags = 0;
-    //ResourceType::Type usage = ResourceType::Type::IMMUTABLE;
     uint32_t size = 0;
     BufferHandle parentHandle;
 };
@@ -585,9 +586,9 @@ struct ExecutionBarrier
 
 struct ResourceUpdate 
 {
-    ResourceUpdateType type;
     uint32_t handle;
     uint32_t currentFrame;
+    ResourceUpdateType type;
 };
 
 struct Buffer 

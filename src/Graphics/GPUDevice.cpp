@@ -261,6 +261,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     {
         uint32_t usedResources = 0;
         const bool skipBindlessBindings = gpu.bindlessSupported && !descriptorSetLayout->bindless;
+        uint32_t bindlessDescriptorSetLayoutIndex = descriptorSetLayout->setIndex;
         for (uint32_t res = 0; res < numResources; ++res)
         {
             //Binding arrays contains the index into the resource. 
@@ -272,7 +273,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
             //Bindless
             //Skip bindings for images and textures they are bindless, thus bound in the global bindless array (one for images, one for textures).
-            if (descriptorSetLayout->setIndex == 1 && skipBindlessBindings && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
+            if (bindlessDescriptorSetLayoutIndex == 1 && skipBindlessBindings && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
             {
                 continue;
             }
@@ -2286,7 +2287,7 @@ void GPUDevice::destroyBuffer(BufferHandle buffer)
 {
     if (buffer.index < buffers.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceUpdateType::BUFFER, buffer.index, currentFrame });
+        resourceDeletionQueue.push({ buffer.index, currentFrame, ResourceUpdateType::BUFFER });
     }
     else
     {
@@ -2300,9 +2301,9 @@ void GPUDevice::destroyTexture(TextureHandle texture)
     {
         resourceDeletionQueue.push(
             { 
-                .type = ResourceUpdateType::TEXTURE, 
                 .handle = texture.index, 
-                .currentFrame = currentFrame
+                .currentFrame = currentFrame,
+                .type = ResourceUpdateType::TEXTURE
             });
     }
     else
@@ -2315,7 +2316,7 @@ void GPUDevice::destroyPipeline(PipelineHandle pipeline)
 {
     if (pipeline.index < pipelines.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceUpdateType::PIPELINE, pipeline.index, currentFrame });
+        resourceDeletionQueue.push({ pipeline.index, currentFrame, ResourceUpdateType::PIPELINE });
         //Shader state current is handled internally when creating a pipeline, thus add this to track correctly.
         Pipeline* pipelineTrack = accessPipeline(pipeline);
         destroyShaderState(pipelineTrack->shaderState);
@@ -2330,7 +2331,7 @@ void GPUDevice::destroySampler(SamplerHandle sampler)
 {
     if (sampler.index < samplers.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceUpdateType::SAMPLER, sampler.index, currentFrame });
+        resourceDeletionQueue.push({ sampler.index, currentFrame, ResourceUpdateType::SAMPLER });
     }
     else
     {
@@ -2342,7 +2343,7 @@ void GPUDevice::destroyDescriptorSetLayout(DescriptorSetLayoutHandle layout)
 {
     if (layout.index < descriptorSetLayouts.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceUpdateType::DESCRIPTOR_SET_LAYOUT, layout.index, currentFrame });
+        resourceDeletionQueue.push({ layout.index, currentFrame, ResourceUpdateType::DESCRIPTOR_SET_LAYOUT });
     }
     else
     {
@@ -2354,7 +2355,7 @@ void GPUDevice::destroyDescriptorSet(DescriptorSetHandle layout)
 {
     if (layout.index < descriptorSets.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceUpdateType::DESCRIPTOR_SET, layout.index, currentFrame });
+        resourceDeletionQueue.push({ layout.index, currentFrame, ResourceUpdateType::DESCRIPTOR_SET });
     }
     else
     {
@@ -2366,7 +2367,7 @@ void GPUDevice::destroyRenderPass(RenderPassHandle renderPass)
 {
     if (renderPass.index < renderPasses.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceUpdateType::RENDER_PASS, renderPass.index, currentFrame });
+        resourceDeletionQueue.push({ renderPass.index, currentFrame, ResourceUpdateType::RENDER_PASS });
     }
     else
     {
@@ -2378,7 +2379,7 @@ void GPUDevice::destroyShaderState(ShaderStateHandle shader)
 {
     if (shader.index < shaders.poolSize)
     {
-        resourceDeletionQueue.push({ ResourceUpdateType::SHADER_STATE, shader.index, currentFrame });
+        resourceDeletionQueue.push({ shader.index, currentFrame, ResourceUpdateType::SHADER_STATE });
     }
     else
     {
@@ -3133,12 +3134,13 @@ void GPUDevice::fillBarrier(RenderPassHandle renderPass, ExecutionBarrier& outBa
     if (vkRenderPass)
     {
         const uint32_t rts = vkRenderPass->numRenderTargets;
+        uint32_t renderPassIndex = vkRenderPass->outputDepth.index;
         for (uint32_t i = 0; i < rts; ++i)
         {
             outBarrier.imageBarriers[outBarrier.numImageBarriers++].texture = vkRenderPass->outputTextures[i];
         }
 
-        if (vkRenderPass->outputDepth.index != INVALID_INDEX)
+        if (renderPassIndex != INVALID_INDEX)
         {
             outBarrier.imageBarriers[outBarrier.numImageBarriers++].texture = vkRenderPass->outputDepth;
         }

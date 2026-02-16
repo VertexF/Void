@@ -168,11 +168,8 @@ void CommandBuffer::bindDescriptorSet(DescriptorSetHandle* bufferHandle, uint32_
 
 void CommandBuffer::bindlessDescriptorSet(uint32_t descriptorSetNumber)
 {
-    if (device->bindlessSupported)
-    {
-        vkCmdBindDescriptorSets(vkCommandBuffer, currentPipeline->vkBindPoint, currentPipeline->vkPipelineLayout,
-            descriptorSetNumber, 1, &device->bindlessDescriptorSet, 0, nullptr);
-    }
+    vkCmdBindDescriptorSets(vkCommandBuffer, currentPipeline->vkBindPoint, currentPipeline->vkPipelineLayout,
+                            descriptorSetNumber, 1, &device->bindlessDescriptorSet, 0, nullptr);
 }
 
 void CommandBuffer::setViewport(const Viewport* viewport)
@@ -315,69 +312,63 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
             VkImageMemoryBarrier& vkBarrier = imageBarriers[i];
             const bool isColour = !TextureFormat::hasDepthOrStencil(textureVulkan->vkFormat);
 
+            VkImageMemoryBarrier* pImageBarrier = &vkBarrier;
+            pImageBarrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            pImageBarrier->pNext = nullptr;
+
+            VkAccessFlags sourceAccesMask = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ? 
+                                                                            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
+                                                                            0;
+
+            VkAccessFlags destAccesMask = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
+                                                                                0;
+            VkImageLayout sourceImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ? 
+                                                                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : 
+                                                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            VkImageLayout desinationImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
+                                                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            if (isColour == false) 
             {
-                VkImageMemoryBarrier* pImageBarrier = &vkBarrier;
-                pImageBarrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                pImageBarrier->pNext = nullptr;
+                sourceAccesMask = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT :
+                    0;
 
-                VkAccessFlags sourceAccesMask = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ? 
-                                                                              VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
-                                                                              0;
+                destAccesMask = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT :
+                    0;
 
-                VkAccessFlags destAccesMask = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                                 VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
-                                                                                 0;
-                VkImageLayout sourceImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ? 
-                                                                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : 
-                                                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                sourceImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                        VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL :
+                                                                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-                VkImageLayout desinationImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
-                                                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-                if (isColour == false) 
-                {
-                   sourceAccesMask = barrier.sourcePipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT :
-                        0;
-
-                   destAccesMask = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT :
-                        0;
-
-                   sourceImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                          VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL :
-                                                                          VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-                   desinationImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
-                                                                              VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL :
-                                                                              VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-                }
-
-                pImageBarrier->srcAccessMask = sourceAccesMask;
-                pImageBarrier->dstAccessMask = destAccesMask;
-                pImageBarrier->oldLayout = sourceImageLayout;
-                pImageBarrier->newLayout = desinationImageLayout;
-
-                pImageBarrier->image = textureVulkan->vkImage;
-                pImageBarrier->subresourceRange.aspectMask = isColour ? 
-                                                                VK_IMAGE_ASPECT_COLOR_BIT : 
-                                                                VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-                pImageBarrier->subresourceRange.baseMipLevel = 0;
-                pImageBarrier->subresourceRange.levelCount = 1;
-                pImageBarrier->subresourceRange.baseArrayLayer = 0;
-                pImageBarrier->subresourceRange.layerCount = 1;
-
-                {
-                    pImageBarrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                    pImageBarrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                }
-
-                sourceAccessFlags |= pImageBarrier->srcAccessMask;
-                destinationAccessFlags |= pImageBarrier->dstAccessMask;
+                desinationImageLayout = barrier.destinationPipelineStage & VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT ?
+                                                                            VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL :
+                                                                            VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             }
 
+            pImageBarrier->srcAccessMask = sourceAccesMask;
+            pImageBarrier->dstAccessMask = destAccesMask;
+            pImageBarrier->oldLayout = sourceImageLayout;
+            pImageBarrier->newLayout = desinationImageLayout;
+
+            pImageBarrier->image = textureVulkan->vkImage;
+            pImageBarrier->subresourceRange.aspectMask = isColour ? 
+                                                            VK_IMAGE_ASPECT_COLOR_BIT : 
+                                                            VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            pImageBarrier->subresourceRange.baseMipLevel = 0;
+            pImageBarrier->subresourceRange.levelCount = 1;
+            pImageBarrier->subresourceRange.baseArrayLayer = 0;
+            pImageBarrier->subresourceRange.layerCount = 1;
+
+            pImageBarrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            pImageBarrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            
+            sourceAccessFlags |= pImageBarrier->srcAccessMask;
+            destinationAccessFlags |= pImageBarrier->dstAccessMask;
+            
             vkBarrier.oldLayout = textureVulkan->vkImageLayout;
             textureVulkan->vkImageLayout = vkBarrier.newLayout;
         }

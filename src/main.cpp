@@ -101,13 +101,6 @@ namespace
         BufferHandle materialBuffer;
         //MaterialData materialData;
 
-        //Indices used for bindless textures.
-        uint16_t diffuseTextureIndex;
-        uint16_t roughnessTextureIndex;
-        uint16_t normalTextureIndex;
-        uint16_t occlusionTextureIndex;
-        uint16_t emisiveTextureIndex;
-
         uint32_t indexOffset;
 
         uint32_t count;
@@ -116,9 +109,16 @@ namespace
         VkIndexType indexType;
 
         DescriptorSetHandle descriptorSet;
+
+        //Indices used for bindless textures.
+        uint16_t diffuseTextureIndex;
+        uint16_t roughnessTextureIndex;
+        uint16_t normalTextureIndex;
+        uint16_t occlusionTextureIndex;
+        uint16_t emisiveTextureIndex;
     };
 
-    struct alignas(16) UniformData
+    struct UniformData
     {
         mat4s globalModel;
         mat4s viewPerspective;
@@ -129,8 +129,8 @@ namespace
     struct Transform
     {
         vec3s scale;
-        versors rotation;
         vec3s translation;
+        versors rotation;
 
         void reset()
         {
@@ -426,9 +426,11 @@ int main(int argc, char** argv)
             .setName("cubeCB");
         cubeCB = gpu.createBuffer(uniformBufferCreation);
 
+        uint32_t sceneCount = (uint32_t)cgltfData->scenes_count;
+        uint32_t nodeCount = (uint32_t)cgltfData->nodes_count;
+
         //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
         Array<int32_t> nodeParents;
-        uint32_t nodeCount = uint32_t(cgltfData->nodes_count);
         nodeParents.init(allocator, nodeCount);
         Array<cgltf_node> nodeStack;
         nodeStack.init(allocator, nodeCount);
@@ -437,10 +439,10 @@ int main(int argc, char** argv)
         nodeMatrix.init(allocator, nodeCount, nodeCount);
 
         //Adding all the root nodes to the array.
-        for (uint32_t sceneIndex = 0; sceneIndex < uint32_t(cgltfData->scenes_count); ++sceneIndex)
+        for (uint32_t sceneIndex = 0; sceneIndex < sceneCount; ++sceneIndex)
         {
             cgltf_scene cgltfscene = cgltfData->scenes[sceneIndex];
-            for (uint32_t parentIndex = 0; parentIndex < cgltfscene.nodes_count; ++parentIndex)
+            for (uint32_t parentIndex = 0; parentIndex < nodeCount; ++parentIndex)
             {
                 cgltf_node* parentNode = cgltfscene.nodes[parentIndex];
                 nodeParents.push(-1);
@@ -449,7 +451,7 @@ int main(int argc, char** argv)
         }
 
         mat4s finalMatrix = glms_mat4_identity();
-        for (uint32_t sceneIndex = 0; sceneIndex < uint32_t(cgltfData->scenes_count); ++sceneIndex)
+        for (uint32_t sceneIndex = 0; sceneIndex < sceneCount; ++sceneIndex)
         {
             for (uint32_t nodeIndex = 0; nodeIndex < nodeStack.size; ++nodeIndex)
             {
@@ -518,8 +520,9 @@ int main(int argc, char** argv)
                     continue;
                 }
 
+                uint32_t primitiveCount = (uint32_t)mesh->primitives_count;
                 //Final SRT composition
-                for (uint32_t primitiveIndex = 0; primitiveIndex < mesh->primitives_count; ++primitiveIndex)
+                for (uint32_t primitiveIndex = 0; primitiveIndex < primitiveCount; ++primitiveIndex)
                 {
                     MeshDraw meshDraw{};
 

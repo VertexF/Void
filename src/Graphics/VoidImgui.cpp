@@ -308,9 +308,9 @@ void ImguiService::init(void* configuration)
 
     pipelineCreation.blendState.addBlendState().setColour(VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD);
 
-    pipelineCreation.vertexInput.addVertexAttribute({ 0, 0, 0, VK_FORMAT_R32G32_SFLOAT })
-        .addVertexAttribute({ 1, 0, 8, VK_FORMAT_R32G32_SFLOAT })
-        .addVertexAttribute({ 2, 0, 16, VK_FORMAT_R8G8B8A8_UINT });
+    pipelineCreation.vertexInput.addVertexAttribute({ .offset = 0, .format = VK_FORMAT_R32G32_SFLOAT, .location = 0, .binding = 0 })
+        .addVertexAttribute({ .offset = 8, .format = VK_FORMAT_R32G32_SFLOAT, .location = 1, .binding = 0 })
+        .addVertexAttribute({ .offset = 16, .format = VK_FORMAT_R8G8B8A8_UINT, .location = 2, .binding = 0 });
 
     pipelineCreation.vertexInput.addVertexStream({ 0, 20, VK_VERTEX_INPUT_RATE_VERTEX });
     pipelineCreation.renderPass = gpu->getSwapchainOutput();
@@ -526,7 +526,8 @@ void ImguiService::render(CommandBuffer& commands)
     {
         const ImDrawList* cmdList = drawData->CmdLists[i];
 
-        for (int cmdIter = 0; cmdIter < cmdList->CmdBuffer.Size; ++cmdIter)
+        int commandBufferSize = cmdList->CmdBuffer.Size;
+        for (int cmdIter = 0; cmdIter < commandBufferSize; ++cmdIter)
         {
             const ImDrawCmd* drawCmd = &cmdList->CmdBuffer[cmdIter];
             if (drawCmd->UserCallback)
@@ -731,16 +732,17 @@ struct AppLogger
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         const char* buff = buffer.begin();
         const char* buffEnd = buffer.end();
+        int lineOffsetSize = lineOffsets.Size;
         if (filter.IsActive())
         {
             //We don't use the clipper when the filter is enabled.
             //This is because we don't have a random access on the result on our filter.
             //A real application preccessing logs with ten of thousands of entries may want to store the result of search/filter.
             //especially if the filtering function is not trivial e.g reg-exp.
-            for (int lineNum = 0; lineNum < lineOffsets.Size; ++lineNum)
+            for (int lineNum = 0; lineNum < lineOffsetSize; ++lineNum)
             {
                 const char* lineStart = buff + lineOffsets[lineNum];
-                const char* lineEnd = (lineNum + 1 < lineOffsets.Size) ? (buff + lineOffsets[lineNum + 1] - 1) : buffEnd;
+                const char* lineEnd = (lineNum + 1 < lineOffsetSize) ? (buff + lineOffsets[lineNum + 1] - 1) : buffEnd;
                 if (filter.PassFilter(lineStart, lineEnd))
                 {
                     ImGui::TextUnformatted(lineStart, lineEnd);
@@ -758,13 +760,13 @@ struct AppLogger
             //access into data to display anymore, which is why we don't use the clipper. Storing or skimming through the search result would make it
             //possible (and would be recommended if you want to earch through tens of thousands of entries)
             ImGuiListClipper clipper;
-            clipper.Begin(lineOffsets.Size);
+            clipper.Begin(lineOffsetSize);
             while (clipper.Step())
             {
                 for (int lineNum = clipper.DisplayStart; lineNum < clipper.DisplayEnd; ++lineNum)
                 {
                     const char* lineStart = buff + lineOffsets[lineNum];
-                    const char* lineEnd = (lineNum + 1 < lineOffsets.Size) ? (buff + lineOffsets[lineNum + 1] - 1) : buffEnd;
+                    const char* lineEnd = (lineNum + 1 < lineOffsetSize) ? (buff + lineOffsets[lineNum + 1] - 1) : buffEnd;
                     ImGui::TextUnformatted(lineStart, lineEnd);
                 }
             }
