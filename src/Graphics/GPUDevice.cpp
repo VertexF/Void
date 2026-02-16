@@ -249,7 +249,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             resourceUpdate.type = ResourceUpdateType::TEXTURE;
             resourceUpdate.handle = texture->handle.index;
             resourceUpdate.currentFrame = gpu.currentFrame;
-            resourceUpdate.deleting = 0;
 
             gpu.textureToUpdateBindless.push(resourceUpdate);
         }
@@ -1420,10 +1419,7 @@ void GPUDevice::shutdown()
     for (uint32_t i = 0; i < textureToUpdateBindless.size; ++i)
     {
         ResourceUpdate& update = textureToUpdateBindless[i];
-        if (update.deleting)
-        {
-            destroyTextureInstant(update.handle);
-        }
+        destroyTextureInstant(update.handle);
     }
 
     //Destroy all pending resources.
@@ -2302,12 +2298,11 @@ void GPUDevice::destroyTexture(TextureHandle texture)
 {
     if (texture.index < textures.poolSize)
     {
-        textureToUpdateBindless.push(
+        resourceDeletionQueue.push(
             { 
                 .type = ResourceUpdateType::TEXTURE, 
                 .handle = texture.index, 
-                .currentFrame = currentFrame, 
-                .deleting = 1 
+                .currentFrame = currentFrame
             });
     }
     else
@@ -2942,8 +2937,6 @@ void GPUDevice::present()
         VkWriteDescriptorSet bindlessDescriptorWrites[MAX_BINDLESS_RESOURCES];
         VkDescriptorImageInfo bindlessImageInfo[MAX_BINDLESS_RESOURCES];
 
-        Texture* vkDummyTexture = accessTexture(dummyTexture);
-
         uint32_t currentWriteIndex = 0;
         for (int32_t it = textureToUpdateBindless.size - 1; it >= 0; --it)
         {
@@ -2970,47 +2963,23 @@ void GPUDevice::present()
             VkDescriptorImageInfo& descriptorImageInfo = bindlessImageInfo[currentWriteIndex];
 
             //Update image view and sampler if valid.
-            if (!textureToUpdate.deleting)
+            descriptorImageInfo.imageView = texture->vkImageView;
+            if (texture->sampler != nullptr)
             {
-                descriptorImageInfo.imageView = texture->vkImageView;
-                if (texture->sampler != nullptr)
-                {
-                    descriptorImageInfo.sampler = texture->sampler->vkSampler;
-                }
-                else
-                {
-                    descriptorImageInfo.sampler = vkDefaultSampler->vkSampler;
-                }
+                descriptorImageInfo.sampler = texture->sampler->vkSampler;
             }
             else
             {
-                //Deleting the set of default image view and sampler in the current slot.
-                descriptorImageInfo.imageView = vkDummyTexture->vkImageView;
                 descriptorImageInfo.sampler = vkDefaultSampler->vkSampler;
             }
-
+            
             descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             descriptorWrite.pImageInfo = &descriptorImageInfo;
 
             textureToUpdate.currentFrame = UINT32_MAX;
             textureToUpdateBindless.deleteSwap(it);
 
-            //Cache this value as deleteSwap will modify the textureToUpdate reference.
-            const bool addTextureToDelete = textureToUpdate.deleting;
-
             ++currentWriteIndex;
-
-            //Add texture to delete
-            if (addTextureToDelete)
-            {
-                resourceDeletionQueue.push(
-                    { 
-                        .type = ResourceUpdateType::TEXTURE, 
-                        .handle = texture->handle.index, 
-                        .currentFrame = currentFrame, 
-                        .deleting = 1 
-                    });
-            }
         }
 
         if (currentWriteIndex)

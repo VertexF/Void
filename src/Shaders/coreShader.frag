@@ -1,6 +1,9 @@
 #version 450
 
 #extension GL_EXT_scalar_block_layout : require
+// Bindless support
+// Enable non uniform qualifier extension
+#extension GL_EXT_nonuniform_qualifier : require
 
 uint MaterialFeatures_TangentVertexAttribute  = 1 << 5;
 
@@ -26,10 +29,6 @@ layout(scalar, set = 0, binding = 1) uniform MaterialConstant
     uint emissiveTextureIndex;
     uint flags;
 };
-
-// Bindless support
-// Enable non uniform qualifier extension
-#extension GL_EXT_nonuniform_qualifier : enable
 
 layout(set = 1, binding = 0) uniform sampler2D globalTextures[];
 //Alias textures to use the same binding point, as bindless texture is shared

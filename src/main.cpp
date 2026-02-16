@@ -30,8 +30,8 @@
 
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza4.glb";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
 
 //I might try to remove this later.
@@ -847,10 +847,10 @@ int main(int argc, char** argv)
 
     srand(42);
 
-    uint32_t totalDucks = 500;
+    uint32_t totalDucks = 1;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
-    float sceneRadius = 5000.f;
+    float sceneRadius = 1.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
     {
         vec3s postion{};
@@ -1019,8 +1019,6 @@ int main(int argc, char** argv)
 
                     MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
                     MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
-
-                    //memcpy(materialBufferData, &meshDraw.materialData, sizeof(MaterialData));
 
                     uploadMaterial(*materialBufferData, meshDraw);
                     gpu.unmapBuffer(materialMap);

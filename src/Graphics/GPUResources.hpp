@@ -588,7 +588,6 @@ struct ResourceUpdate
     ResourceUpdateType type;
     uint32_t handle;
     uint32_t currentFrame;
-    uint32_t deleting;
 };
 
 struct Buffer 
