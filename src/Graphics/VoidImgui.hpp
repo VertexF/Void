@@ -1,7 +1,9 @@
-#ifndef VOID_IMGUI_HDR
-#define VOID_IMGUI_HDR
+#ifndef AIR_IMGUI_HDR
+#define AIR_IMGUI_HDR
 
 #include "Foundation/Platform.hpp"
+
+struct ImFont;
 
 struct GPUDevice;
 struct CommandBuffer;
@@ -23,8 +25,6 @@ struct ImguiServiceConfiguration
 
 struct ImguiService
 {
-    virtual ~ImguiService() = default;
-
     static ImguiService* instance();
 
     void init(void* configuration);
@@ -33,12 +33,13 @@ struct ImguiService
     void newFrame();
     void render(CommandBuffer& commands);
 
-    //Removes the Texture from the cache and destroy the associated descriptor set.
+    //Removes the Texture from the cache and destroy the associated resource list.
     void removeCachedTexture(TextureHandle& texture);
 
     void setStyle(ImguiStyles style);
 
     GPUDevice* gpu;
+    ImFont* font;
 };
 
 //Application log
@@ -54,4 +55,4 @@ static void imguiFPSShutdown();
 static void imguiFPSAdd(float deltaTime);
 static void imguiFPSDraw();
 
-#endif // !VOID_IMGUI_HDR
+#endif // !AIR_IMGUI_HDR
