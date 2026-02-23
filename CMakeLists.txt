@@ -21,6 +21,7 @@ set(RAPID_HASH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/rapidhash")
 set(VENDER_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
 set(IMGUI_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
 set(CGLTF_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/cgltf")
+set(SPRIV_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/SPIRV-Reflect")
 #Set the location of the engine source.
 set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
@@ -84,7 +85,8 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${CGLM_INCLUDE_DIR}
                                                ${VENDER_INCLUDE}
                                                ${IMGUI_INCLUDE}
-                                               ${CGLTF_INCLUDE})
+                                               ${CGLTF_INCLUDE}
+                                               ${SPRIV_INCLUDE})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
@@ -177,6 +179,9 @@ add_library(External STATIC
     vender/imgui/imstb_rectpack.h
     vender/imgui/imstb_textedit.h
     vender/imgui/imstb_truetype.h
+    
+    vender/SPIRV-Reflect/spirv_reflect.c
+    vender/SPIRV-Reflect/spirv_reflect.h
 
     #vender/tracy/tracy/Tracy.hpp
     #vender/tracy/tracy/TracyVulkan.hpp
@@ -261,13 +266,13 @@ endif()
 
 file(COPY ${THINGS_TO_COPY} DESTINATION ${CMAKE_BINARY_DIR})
 
-#NOTE At release this needs to be updated to look for glslc at a particular location.
+#NOTE At release this needs to be updated to look for glslangValidator at a particular location.
 if(UNIX)
-    set(GLSL_VALIDATOR "glslc")
+    set(GLSL_VALIDATOR "glslangValidator")
 elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
-    set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin/glslc.exe")
+    set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin/glslangValidator.exe")
 else()
-    set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin32/glslc.exe")
+    set(GLSL_VALIDATOR "$ENV{VULKAN_SDK}/Bin32/glslangValidator.exe")
 endif()
 
 set(SPIRV_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Assets/Shaders/")
@@ -277,7 +282,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
     add_custom_command(
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SPIRV_OUTPUT_DIR}"
-        COMMAND ${GLSL_VALIDATOR} --target-env=vulkan1.3 -O ${GLSL} -o ${SPIRV}
+        COMMAND ${GLSL_VALIDATOR} --target-env vulkan1.3 ${GLSL} -o ${SPIRV}
         DEPENDS ${GLSL} ${GLSL_HEADER_FILES}
     )
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})

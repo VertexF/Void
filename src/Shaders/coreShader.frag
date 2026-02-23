@@ -209,9 +209,9 @@ void main()
     float dDenom = (NdotH * alphaSquared - NdotH) * NdotH + 1.0;
     float distribution = (alphaSquared) / (PI * dDenom * dDenom);
 
-    float lightRange = 1000.f;
-    float lightIntensity = 100.f;
-    vec4 light = {1, 1, 1, 0};
+    float lightRange = 10.f;
+    float lightIntensity = 20.f;
+    vec4 light = {2, 1, 1, 0};
 
     float NdotV = abs(dot(N, V)) + 1e-5;
     float NdotL = clamp(dot(N, L), 0, 1);

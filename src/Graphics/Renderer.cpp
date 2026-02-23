@@ -16,6 +16,7 @@ namespace
             int comp;
             int width;
             int height;
+            uint8_t mipLevels = 1;
 
             uint8_t* imageData = stbi_load(filename, &width, &height, &comp, 4);
             if (imageData == nullptr) 
@@ -24,10 +25,22 @@ namespace
                 return INVALID_TEXTURE;
             }
 
+            //TODO: Add mipmap support later.
+            uint32_t w = width;
+            uint32_t h = height;
+
+            while (w > 1 && h > 1)
+            {
+                w /= 2;
+                h /= 2;
+
+                ++mipLevels;
+            }
+
             TextureCreation creation;
             creation.setData(imageData)
                     .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-                    .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                    .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                     .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
                     .setName(name);
 

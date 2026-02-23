@@ -243,15 +243,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         texture->vkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         //Add defered bindless update
-        if (gpu.bindlessSupported)
-        {
-            ResourceUpdate resourceUpdate{};
-            resourceUpdate.type = ResourceUpdateType::TEXTURE;
-            resourceUpdate.handle = texture->handle.index;
-            resourceUpdate.currentFrame = gpu.currentFrame;
+        ResourceUpdate resourceUpdate{};
+        resourceUpdate.type = ResourceUpdateType::TEXTURE;
+        resourceUpdate.handle = texture->handle.index;
+        resourceUpdate.currentFrame = gpu.currentFrame;
 
-            gpu.textureToUpdateBindless.push(resourceUpdate);
-        }
+        gpu.textureToUpdateBindless.push(resourceUpdate);
     }
 
     void vulkanFillWriteDescriptorSets(GPUDevice& gpu, const DescriptorSetLayout* descriptorSetLayout, VkDescriptorSet vkDescriptorSet,
@@ -260,7 +257,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                                        const uint16_t* bindings)
     {
         uint32_t usedResources = 0;
-        const bool skipBindlessBindings = gpu.bindlessSupported && !descriptorSetLayout->bindless;
         uint32_t bindlessDescriptorSetLayoutIndex = descriptorSetLayout->setIndex;
         for (uint32_t res = 0; res < numResources; ++res)
         {
@@ -273,7 +269,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
             //Bindless
             //Skip bindings for images and textures they are bindless, thus bound in the global bindless array (one for images, one for textures).
-            if (bindlessDescriptorSetLayoutIndex == 1 && skipBindlessBindings && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
+            if (bindlessDescriptorSetLayoutIndex == 1 && (binding.type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER || binding.type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
             {
                 continue;
             }
@@ -1077,21 +1073,21 @@ void GPUDevice::init(const DeviceCreation& creation)
     queueInfo[0].pQueuePriorities = queuePriority;
 
     //Enable all features
-    VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-    indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    indexingFeatures.pNext = nullptr;
-
-    VkPhysicalDeviceScalarBlockLayoutFeatures scalar{};
-    scalar.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
-    scalar.pNext = &indexingFeatures;
+    VkPhysicalDeviceVulkan12Features physical12Features{};
+    physical12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    physical12Features.bufferDeviceAddress = true;
+    physical12Features.scalarBlockLayout = true;
+    physical12Features.runtimeDescriptorArray = true;
+    physical12Features.descriptorBindingPartiallyBound = true;
 
     VkPhysicalDeviceFeatures2 physicalDeviceFeature2{};
     physicalDeviceFeature2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    physicalDeviceFeature2.pNext = &scalar;
+    physicalDeviceFeature2.features.samplerAnisotropy = true;
+    physicalDeviceFeature2.pNext = &physical12Features;
 
     vkGetPhysicalDeviceFeatures2(vulkanPhysicalDevice, &physicalDeviceFeature2);
 
-    bindlessSupported = indexingFeatures.descriptorBindingPartiallyBound && indexingFeatures.runtimeDescriptorArray;
+    bindlessSupported = true;
 
     VkDeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1210,21 +1206,18 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     //Bindless
     //Create the descriptor pool used by bindless, that needs update after bind flag.
-    if (bindlessSupported)
+    VkDescriptorPoolSize poolSizesBindless[] =
     {
-        VkDescriptorPoolSize poolSizesBindless[] =
-        {
-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_BINDLESS_RESOURCES },
-            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_BINDLESS_RESOURCES }
-        };
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_BINDLESS_RESOURCES },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_BINDLESS_RESOURCES }
+    };
 
-        //Update after bind is needed here, for each binding and in the descriptor set layout creation.
-        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
-        poolInfo.maxSets = MAX_BINDLESS_RESOURCES * ArraySize(poolSizesBindless);
-        poolInfo.poolSizeCount = static_cast<uint32_t>(ArraySize(poolSizesBindless));
-        poolInfo.pPoolSizes = poolSizesBindless;
-        check(vkCreateDescriptorPool(vulkanDevice, &poolInfo, vulkanAllocationCallbacks, &bindlessDescriptorPool));
-    }
+    //Update after bind is needed here, for each binding and in the descriptor set layout creation.
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
+    poolInfo.maxSets = MAX_BINDLESS_RESOURCES * ArraySize(poolSizesBindless);
+    poolInfo.poolSizeCount = static_cast<uint32_t>(ArraySize(poolSizesBindless));
+    poolInfo.pPoolSizes = poolSizesBindless;
+    check(vkCreateDescriptorPool(vulkanDevice, &poolInfo, vulkanAllocationCallbacks, &bindlessDescriptorPool));
 
     //Create timestamp query pool used for GPU timings.
     VkQueryPoolCreateInfo vkQueryPoolInfo{};
@@ -1363,25 +1356,22 @@ void GPUDevice::init(const DeviceCreation& creation)
     //Init the render pass cache
     renderPassCache.init(allocator, 16);
 
-    if (bindlessSupported)
-    {
-        DescriptorSetLayoutCreation bindlessLayoutCreation{};
-        bindlessLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, BINDLESS_TEXTURE_BINDING, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessTextures" })
-                              .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, BINDLESS_TEXTURE_BINDING + 1, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessImages" })
-                              .setSetIndex(1)
-                              .setName("BindlessLayout");
-        bindlessLayoutCreation.bindless = true;
+    DescriptorSetLayoutCreation bindlessLayoutCreation{};
+    bindlessLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, BINDLESS_TEXTURE_BINDING, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessTextures" })
+                          .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, BINDLESS_TEXTURE_BINDING + 1, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessImages" })
+                          .setSetIndex(1)
+                          .setName("BindlessLayout");
+    bindlessLayoutCreation.bindless = true;
 
-        bindlessDescriptorSetLayoutHandle = createDescriptorSetLayout(bindlessLayoutCreation);
+    bindlessDescriptorSetLayoutHandle = createDescriptorSetLayout(bindlessLayoutCreation);
 
-        DescriptorSetCreation bindlessSetCreation;
-        bindlessSetCreation.reset()
-                           .setLayout(bindlessDescriptorSetLayoutHandle);
-        bindlessDescriptorSetHandle = createDescriptorSet(bindlessSetCreation);
+    DescriptorSetCreation bindlessSetCreation;
+    bindlessSetCreation.reset()
+                       .setLayout(bindlessDescriptorSetLayoutHandle);
+    bindlessDescriptorSetHandle = createDescriptorSet(bindlessSetCreation);
 
-        DescriptorSet* bindlessSet = accessDescriptorSet(bindlessDescriptorSetHandle);
-        bindlessDescriptorSet = bindlessSet->vkDescriptorSet;
-    }
+    DescriptorSet* bindlessSet = accessDescriptorSet(bindlessDescriptorSetHandle);
+    bindlessDescriptorSet = bindlessSet->vkDescriptorSet;
 }
 
 
@@ -1501,10 +1491,8 @@ void GPUDevice::shutdown()
 #endif //VULKAN_DEBUG_REPORT
 
     vkDestroyDescriptorPool(vulkanDevice, vulkanDescriptorPool, vulkanAllocationCallbacks);
-    if (bindlessSupported)
-    {
-        vkDestroyDescriptorPool(vulkanDevice, bindlessDescriptorPool, vulkanAllocationCallbacks);
-    }
+    vkDestroyDescriptorPool(vulkanDevice, bindlessDescriptorPool, vulkanAllocationCallbacks);
+
     vkDestroyQueryPool(vulkanDevice, vulkanTimestampQueryPool, vulkanAllocationCallbacks);
 
     vkDestroyDevice(vulkanDevice, vulkanAllocationCallbacks);
@@ -1986,7 +1974,7 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
     for (uint32_t r = 0; r < creation.numBindings; ++r)
     {
         const DescriptorSetLayoutCreation::Binding& inputBinding = creation.bindings[r];
-        maxBinding = max(maxBinding, inputBinding.start);
+        maxBinding = max(maxBinding, inputBinding.binding);
     }
     maxBinding += 1;
 
@@ -2007,7 +1995,7 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
     {
         DescriptorBinding& binding = descriptorSetLayout->bindings[i];
         const DescriptorSetLayoutCreation::Binding& inputBinding = creation.bindings[i];
-        binding.start = inputBinding.start == UINT16_MAX ? static_cast<uint16_t>(i) : inputBinding.start;
+        binding.start = inputBinding.binding == UINT16_MAX ? static_cast<uint16_t>(i) : inputBinding.binding;
         binding.count = 1;
         binding.type = inputBinding.type;
         binding.name = inputBinding.name;
@@ -2029,7 +2017,7 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
 
         vkBinding.binding = binding.start;
         vkBinding.descriptorType = inputBinding.type;
-        vkBinding.descriptorType = vkBinding.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
+                vkBinding.descriptorType = vkBinding.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
                                                                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC :
                                                                vkBinding.descriptorType;
         vkBinding.descriptorCount = inputBinding.count;
@@ -2051,7 +2039,7 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
 
         //TODO: Re-enable variable descriptor count.
         VkDescriptorBindingFlags bindlessFlags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
-        VkDescriptorBindingFlags bindingFlags[16]/*{ VK_DESCRIPTOR_BINDING_FLAG_BITS_MAX_ENUM }*/;
+        VkDescriptorBindingFlags bindingFlags[16];
 
         for (uint32_t r = 0; r < creation.numBindings; ++r)
         {

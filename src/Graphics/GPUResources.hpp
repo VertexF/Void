@@ -287,7 +287,7 @@ struct DescriptorSetLayoutCreation
     struct Binding 
     {
         VkDescriptorType type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
-        uint16_t start = 0;
+        uint16_t binding = 0;
         uint16_t count = 0;
         VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
         const char* name = nullptr;

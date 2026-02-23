@@ -28,10 +28,11 @@
 #include <SDL3/SDL.h>
 #include <stb_image.h>
 
+#include <spirv_reflect.h>
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
 
 //I might try to remove this later.
@@ -99,7 +100,6 @@ namespace
         BufferHandle vertexBuffer;
         BufferHandle indexBuffer;
         BufferHandle materialBuffer;
-        //MaterialData materialData;
 
         uint32_t indexOffset;
 
@@ -221,8 +221,6 @@ int main(int argc, char** argv)
     ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
     imgui->init(&imguiConfig);
 
-    gpu.bindlessSupported = true;
-
     //Window::instance()->setFullscreen(true);
 
     Directory cwd{};
@@ -283,22 +281,22 @@ int main(int argc, char** argv)
             int comp = 0;
             int width = 0;
             int height = 0;
-            //uint8_t mipLevels = 1;
+            uint8_t mipLevels = 1;
 
             uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
             stbi_info_from_memory(rawBufferData, int(image.buffer_view->size), &width, &height, &comp);
 
             //TODO: Add mipmap support later.
-            //uint32_t w = width;
-            //uint32_t h = height;
+            uint32_t w = width;
+            uint32_t h = height;
 
-            //while (w > 1 && h > 1)
-            //{
-            //    w /= 2;
-            //    h /= 2;
+            while (w > 1 && h > 1)
+            {
+                w /= 2;
+                h /= 2;
 
-            //    ++mipLevels;
-            //}
+                ++mipLevels;
+            }
 
             int x;
             int y;
@@ -308,7 +306,7 @@ int main(int argc, char** argv)
             textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
                 .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
                 .setData(textureData)
-                .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                 .setName(nullptr);
 
             TextureResource* textureResource = renderer.createTexture(textureCreation);
@@ -426,8 +424,6 @@ int main(int argc, char** argv)
             .setName("cubeCB");
         cubeCB = gpu.createBuffer(uniformBufferCreation);
 
-        uint32_t sceneCount = (uint32_t)cgltfData->scenes_count;
-
         //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
         Array<int32_t> nodeParents;
         nodeParents.init(allocator, cgltfData->nodes_count);
@@ -507,10 +503,6 @@ int main(int argc, char** argv)
                         nodeParents.push(nodeIndex);
                     }
                 }
-                else 
-                {
-                    int xxx = 9;
-                }
 
                 finalMatrix = localMatrix;
                 int32_t parentNodeIndex = nodeParents[nodeIndex];
@@ -526,7 +518,6 @@ int main(int argc, char** argv)
                     continue;
                 }
 
-                uint32_t primitiveCount = (uint32_t)mesh->primitives_count;
                 //Final SRT composition
                 for (uint32_t primitiveIndex = 0; primitiveIndex < (uint32_t)mesh->primitives_count; ++primitiveIndex)
                 {
@@ -826,10 +817,10 @@ int main(int argc, char** argv)
 
     srand(42);
 
-    uint32_t totalDucks = 500;
+    uint32_t totalDucks = 1;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
-    float sceneRadius = 5000.f;
+    float sceneRadius = 1.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
     {
         vec3s postion{};
@@ -850,7 +841,7 @@ int main(int argc, char** argv)
         drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
     }
 
-    //drawMatrices[0] = glms_mat4_identity();
+    drawMatrices[0] = glms_mat4_identity();
 
     DescriptorSetHandle positionDescriptorSets{};
 
