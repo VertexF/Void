@@ -597,6 +597,7 @@ struct Buffer
     VmaAllocation vmaAllocation;
     VkDeviceMemory vkDeviceMemory;
     VkDeviceSize vkDeviceSize;
+    VkDeviceAddress bufferAddress;
 
     VkBufferUsageFlags typeFlags = 0;
     uint32_t size = 0;

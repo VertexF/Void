@@ -1171,6 +1171,7 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     //Create VMA Allocator
     VmaAllocatorCreateInfo allocatorInfo{};
+    allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
     allocatorInfo.physicalDevice = vulkanPhysicalDevice;
     allocatorInfo.device = vulkanDevice;
     allocatorInfo.instance = vulkanInstance;
@@ -1538,11 +1539,55 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
 
     if (creation.initialData)
     {
-        void* data;
-        vmaMapMemory(VMAAllocator, buffer->vmaAllocation, &data);
-        memcpy(data, creation.initialData, static_cast<size_t>(creation.size));
-        vmaUnmapMemory(VMAAllocator, buffer->vmaAllocation);
+        memcpy(allocationInfo.pMappedData, creation.initialData, static_cast<size_t>(creation.size));
     }
+
+    return handle;
+}
+
+
+BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation) 
+{
+    BufferHandle handle = { buffers.obtainResource() };
+    if (handle.index == INVALID_INDEX)
+    {
+        return handle;
+    }
+
+    Buffer* buffer = accessBuffer(handle);
+
+    buffer->name = creation.name;
+    buffer->size = creation.size;
+    buffer->typeFlags = creation.typeFlags;
+    buffer->handle = handle;
+    buffer->globalOffset = 0;
+    buffer->parentBuffer = INVALID_BUFFER;
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | creation.typeFlags;
+    bufferInfo.size = creation.size > 0 ? creation.size : 1;
+
+    VmaAllocationCreateInfo memoryInfo{};
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+    VmaAllocationInfo allocationInfo{};
+    check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &buffer->vkBuffer, &buffer->vmaAllocation, &allocationInfo));
+
+    setResourceName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(buffer->vkBuffer), creation.name);
+    buffer->vkDeviceMemory = allocationInfo.deviceMemory;
+
+    if (creation.initialData)
+    {
+        memcpy(allocationInfo.pMappedData, creation.initialData, static_cast<size_t>(creation.size));
+    }
+
+    VkBufferDeviceAddressInfo bufferBDAInfo{};
+    bufferBDAInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferBDAInfo.buffer = buffer->vkBuffer;
+
+    buffer->bufferAddress = vkGetBufferDeviceAddress(vulkanDevice, &bufferBDAInfo);
 
     return handle;
 }
@@ -1689,7 +1734,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation)
     VkPushConstantRange range{};
     range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     range.offset = 0;
-    range.size = 4;
+    range.size = 24;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

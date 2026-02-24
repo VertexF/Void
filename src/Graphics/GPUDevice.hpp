@@ -94,6 +94,7 @@ struct GPUDevice
 
     //Creation/Destruction of resources
     BufferHandle createBuffer(const BufferCreation& creation);
+    BufferHandle createBindlessBuffer(const BufferCreation& creation);
     TextureHandle createTexture(const TextureCreation& creation);
     PipelineHandle createPipeline(const PipelineCreation& creation);
     SamplerHandle createSampler(const SamplerCreation& creation);
@@ -253,7 +254,7 @@ struct GPUDevice
     uint32_t numAllocatedCommandBuffers = 0;
     uint32_t numQueuedCommandBuffers = 0;
 
-    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
     uint32_t currentFrame;
     uint32_t previousFrame;
 

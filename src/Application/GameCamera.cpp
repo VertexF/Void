@@ -21,12 +21,11 @@ static vec3s lerp3(const vec3s& from, const vec3s& to, float t, float deltaTime)
     return vec3s{ lerp(from.x, to.x, t, deltaTime), lerp(from.y, to.y, t, deltaTime), lerp(from.z, to.z, t, deltaTime) };
 }
 
-void GameCamera::init(bool inEnabled /*= true*/, float inRotationSpeed /*= 10.f*/,
-                      float inMovementSpeed /*= 10.f*/, float inMovementDelta /*= 0.f*/) 
+void GameCamera::init(float inRotationSpeed,
+                      float inMovementSpeed, float inMovementDelta) 
 {
     reset();
 
-    enabled = inEnabled;
     rotationSpeed = inRotationSpeed;
     movementSpeed = inMovementSpeed;
     movementDelta = inMovementDelta;
@@ -41,16 +40,11 @@ void GameCamera::reset()
 
     mouseDragging = false;
     ignoreDraggingFrames = 3;
-    mouseSensitivity = 0.5f;
+    mouseSensitivity = 3.5f;
 }
 
 void GameCamera::update(InputHandler* input, float windowWidth, float windowHeight, float deltaTime) 
 {
-    if (enabled == false)
-    {
-        return;
-    }
-
     internal3DCamera.update();
 
     //Ignore first dragging frames for mouse movement waiting the cursor to be placed at the center of the screen.
@@ -74,7 +68,7 @@ void GameCamera::update(InputHandler* input, float windowWidth, float windowHeig
     }
 
     vec3s cameraMovement{ 0.f, 0.f, 0.f };
-    float cameraMovementDelta = movementDelta/* * 0.06f*/;
+    float cameraMovementDelta = movementDelta * 0.06f;
 
     //Change movemenet
     if (input->isKeyDown(KEY_RSHIFT) || input->isKeyDown(KEY_LSHIFT))

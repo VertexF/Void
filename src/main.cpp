@@ -54,7 +54,6 @@ namespace
     PipelineHandle cubePipeline;
     BufferHandle cubeCB;
     DescriptorSetLayoutHandle cubeDSL;
-    DescriptorSetLayoutHandle matrixPosition;
 
     BufferHandle positionalBuffer;
 
@@ -147,6 +146,13 @@ namespace
 
             return localMatrix;
         }
+    };
+
+    struct PushConstants
+    {
+        VkDeviceAddress modelPositionAddress;
+        VkDeviceAddress vertexDataAddress;
+        uint32_t index;
     };
 
     void uploadMaterial(MaterialData& meshData, const MeshDraw& meshDraw)
@@ -397,23 +403,15 @@ int main(int argc, char** argv)
         DescriptorSetLayoutCreation cubeRLLCreation{};
         cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
                        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, 1, VK_SHADER_STAGE_VERTEX_BIT, "Vertices" })
                        .setSetIndex(0);
         cubeRLLCreation.bindless = false;
-
-        DescriptorSetLayoutCreation positionDescriptorLayout{};
-        positionDescriptorLayout.addBinding({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, "ModelsPosition" })
-            .setSetIndex(2);
-        positionDescriptorLayout.bindless = false;
 
         //Setting it into pipeline.
         //This descriptor set layout will be ran every draw calls
         cubeDSL = gpu.createDescriptorSetLayout(cubeRLLCreation);
         //This descriptor set layout will be ran every frame
-        matrixPosition = gpu.createDescriptorSetLayout(positionDescriptorLayout);
         pipelineCreation.addDescriptorSetLayout(cubeDSL)
-                        .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle)
-                        .addDescriptorSetLayout(matrixPosition);
+            .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
 
         cubePipeline = gpu.createPipeline(pipelineCreation);
 
@@ -559,16 +557,17 @@ int main(int argc, char** argv)
                         .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
                         .setName("material");
                     meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
-                    dsCreation.buffer(meshDraw.materialBuffer, 1);
+                    dsCreation.buffer(meshDraw.materialBuffer, 1)
+                        .setLayout(cubeDSL);
 
                     meshDraw.alphaCutoff = material->alpha_cutoff != FLT_MAX ? material->alpha_cutoff : 1.f;
 
                     if (material->has_pbr_metallic_roughness)
                     {
-                            meshDraw.baseColourFactor.x = material->pbr_metallic_roughness.base_color_factor[0];
-                            meshDraw.baseColourFactor.y = material->pbr_metallic_roughness.base_color_factor[1];
-                            meshDraw.baseColourFactor.z = material->pbr_metallic_roughness.base_color_factor[2];
-                            meshDraw.baseColourFactor.w = material->pbr_metallic_roughness.base_color_factor[3];
+                        meshDraw.baseColourFactor.x = material->pbr_metallic_roughness.base_color_factor[0];
+                        meshDraw.baseColourFactor.y = material->pbr_metallic_roughness.base_color_factor[1];
+                        meshDraw.baseColourFactor.z = material->pbr_metallic_roughness.base_color_factor[2];
+                        meshDraw.baseColourFactor.w = material->pbr_metallic_roughness.base_color_factor[3];
 
                         meshDraw.metallicRoughnessOcclusionFactor.x = material->pbr_metallic_roughness.metallic_factor != FLT_MAX ? material->pbr_metallic_roughness.metallic_factor : 1.f;
                         meshDraw.metallicRoughnessOcclusionFactor.y = material->pbr_metallic_roughness.roughness_factor != FLT_MAX ? material->pbr_metallic_roughness.roughness_factor : 1.f;
@@ -795,10 +794,7 @@ int main(int argc, char** argv)
                         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(Vertices) * vertex.size)
                         .setName("Vertices")
                         .setData(vertex.data);
-                    meshDraw.vertexBuffer = gpu.createBuffer(bufferCreation);
-
-                    dsCreation.buffer(meshDraw.vertexBuffer, 2)
-                        .setLayout(cubeDSL);
+                    meshDraw.vertexBuffer = gpu.createBindlessBuffer(bufferCreation);
 
                     scratchAllocator.freeMarker(stackPrimitveMarker);
 
@@ -843,20 +839,14 @@ int main(int argc, char** argv)
 
     drawMatrices[0] = glms_mat4_identity();
 
-    DescriptorSetHandle positionDescriptorSets{};
+    PushConstants pushConstants{};
 
     BufferCreation bufferCreation{};
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(mat4s) * drawMatrices.size)
         .setName("othername")
         .setData(drawMatrices.data);
-    positionalBuffer = gpu.createBuffer(bufferCreation);
-
-    DescriptorSetCreation dsCreation{};
-    dsCreation.buffer(positionalBuffer, 0)
-        .setLayout(matrixPosition);
-
-    positionDescriptorSets = gpu.createDescriptorSet(dsCreation);
+    positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
     int64_t beginFrameTick = timeNow();
 
@@ -866,7 +856,7 @@ int main(int argc, char** argv)
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
-    gameCamera.init(true, 7.f, 3.0f, 0.1f);
+    gameCamera.init(7.f, 3.0f, 0.1f);
 
     float modelScale = 1.f;
     bool fullscreen = false;
@@ -970,18 +960,14 @@ int main(int argc, char** argv)
                 gpu.unmapBuffer(cbMap);
             }
 
-            gpuCommands->bindDescriptorSet(&positionDescriptorSets, 1, nullptr, 0, 2);
-            if (gpu.bindlessSupported)
-            {
-                gpuCommands->bindlessDescriptorSet(1);
-            }
+            gpuCommands->bindlessDescriptorSet(1);
 
-            //ModelIndex uniformData{};
             for (uint32_t i = 0; i < totalDucks; ++i)
             {
-                uint32_t offset = 0;
-                uint32_t size = 4;
-                vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, offset, size, &i);
+                Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
+
+                pushConstants.modelPositionAddress = positionBuf->bufferAddress;
+                pushConstants.index = i;
 
                 for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
                 {
@@ -993,12 +979,14 @@ int main(int argc, char** argv)
                     uploadMaterial(*materialBufferData, meshDraw);
                     gpu.unmapBuffer(materialMap);
 
+                    Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+
                     //gpuCommands->bindIndexBuffer(indexBufferHandle, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, componentType == cgltf_component_type_r_32u ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
-
-                    //I need to learn how to bind a bindless descriptor set especially because it's a group of them.
-                    //gpuCommands->bindDescriptorSet(&gpu.bindlessDescriptorSetHandle, 1024, nullptr, 0, 1);
 
                     gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
                 }
@@ -1023,8 +1011,6 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    gpu.destroyDescriptorSet(positionDescriptorSets);
-    gpu.destroyDescriptorSetLayout(matrixPosition);
     gpu.destroyBuffer(positionalBuffer);
 
     drawMatrices.shutdown();
