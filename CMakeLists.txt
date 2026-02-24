@@ -22,6 +22,7 @@ set(VENDER_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
 set(IMGUI_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
 set(CGLTF_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/cgltf")
 set(SPRIV_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/SPIRV-Reflect")
+set(MESHOP_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/meshoptimizer/src/")
 #Set the location of the engine source.
 set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
@@ -86,7 +87,8 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${VENDER_INCLUDE}
                                                ${IMGUI_INCLUDE}
                                                ${CGLTF_INCLUDE}
-                                               ${SPRIV_INCLUDE})
+                                               ${SPRIV_INCLUDE}
+                                               ${MESHOP_INCLUDE})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
@@ -191,23 +193,23 @@ add_library(External STATIC
     #vender/enkiTS/TaskScheduler.cpp
     #vender/enkiTS/TaskScheduler.h
 
-    #vender/meshoptimizer/allocator.cpp
-    #vender/meshoptimizer/clusterizer.cpp
-    #vender/meshoptimizer/indexanalyzer.cpp
-    #vender/meshoptimizer/indexcodec.cpp
-    #vender/meshoptimizer/indexgenerator.cpp
-    #vender/meshoptimizer/meshoptimizer.h
-    #vender/meshoptimizer/overdrawoptimizer.cpp
-    #vender/meshoptimizer/partition.cpp
-    #vender/meshoptimizer/quantization.cpp
-    #vender/meshoptimizer/rasterizer.cpp
-    #vender/meshoptimizer/simplifier.cpp
-    #vender/meshoptimizer/spatialorder.cpp
-    #vender/meshoptimizer/stripifier.cpp
-    #vender/meshoptimizer/vcacheoptimizer.cpp
-    #vender/meshoptimizer/vertexcodec.cpp
-    #vender/meshoptimizer/vertexfilter.cpp
-    #vender/meshoptimizer/vfetchoptimizer.cpp
+    vender/meshoptimizer/src/allocator.cpp
+    vender/meshoptimizer/src/clusterizer.cpp
+    vender/meshoptimizer/src/indexanalyzer.cpp
+    vender/meshoptimizer/src/indexcodec.cpp
+    vender/meshoptimizer/src/indexgenerator.cpp
+    vender/meshoptimizer/src/meshoptimizer.h
+    vender/meshoptimizer/src/overdrawoptimizer.cpp
+    vender/meshoptimizer/src/partition.cpp
+    vender/meshoptimizer/src/quantization.cpp
+    vender/meshoptimizer/src/rasterizer.cpp
+    vender/meshoptimizer/src/simplifier.cpp
+    vender/meshoptimizer/src/spatialorder.cpp
+    vender/meshoptimizer/src/stripifier.cpp
+    vender/meshoptimizer/src/vcacheoptimizer.cpp
+    vender/meshoptimizer/src/vertexcodec.cpp
+    vender/meshoptimizer/src/vertexfilter.cpp
+    vender/meshoptimizer/src/vfetchoptimizer.cpp
 )
 
 set_target_properties(External PROPERTIES SYSTEM ON)

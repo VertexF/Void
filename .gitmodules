@@ -22,3 +22,6 @@
 [submodule "vender/cgltf"]
 	path = vender/cgltf
 	url = https://github.com/jkuhlmann/cgltf.git
+[submodule "vender/meshoptimizer"]
+	path = vender/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git

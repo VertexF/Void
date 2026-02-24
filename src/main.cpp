@@ -29,6 +29,7 @@
 #include <stb_image.h>
 
 #include <spirv_reflect.h>
+#include <meshoptimizer.h>
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
 static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
@@ -79,10 +80,10 @@ namespace
 
     struct Vertices
     {
-        float tangent[4];
         float position[3];
-        float normals[3];
-        float texCoord0[2];
+        uint8_t tangent[4];
+        uint8_t normals[4];
+        uint16_t texCoord0[2];
     };
 
     struct MeshDraw
@@ -742,9 +743,9 @@ int main(int argc, char** argv)
 
                         for (uint32_t j = 0; j < vertexCount; ++j)
                         {
-                            vertex[j].normals[0] = scratch[j * 3 + 0];
-                            vertex[j].normals[1] = scratch[j * 3 + 1];
-                            vertex[j].normals[2] = scratch[j * 3 + 2];
+                            vertex[j].normals[0] = uint8_t(scratch[j * 3 + 0] * 127.f + 127.5f);
+                            vertex[j].normals[1] = uint8_t(scratch[j * 3 + 1] * 127.f + 127.5f);
+                            vertex[j].normals[2] = uint8_t(scratch[j * 3 + 2] * 127.f + 127.5f);
                         }
                     }
                     else
@@ -763,10 +764,10 @@ int main(int argc, char** argv)
 
                         for (uint32_t j = 0; j < vertexCount; ++j)
                         {
-                            vertex[j].tangent[0] = scratch[j * 4 + 0];
-                            vertex[j].tangent[1] = scratch[j * 4 + 1];
-                            vertex[j].tangent[2] = scratch[j * 4 + 2];
-                            vertex[j].tangent[3] = scratch[j * 4 + 3];
+                            vertex[j].tangent[0] = uint8_t(scratch[j * 4 + 0] * 127.f + 127.5f);
+                            vertex[j].tangent[1] = uint8_t(scratch[j * 4 + 1] * 127.f + 127.5f);
+                            vertex[j].tangent[2] = uint8_t(scratch[j * 4 + 2] * 127.f + 127.5f);
+                            vertex[j].tangent[3] = uint8_t(scratch[j * 4 + 3] * 127.f + 127.5f);
                         }
 
                         meshDraw.flags |= MaterialFeatures_TangentVertexAttribute;
@@ -783,8 +784,8 @@ int main(int argc, char** argv)
 
                         for (uint32_t j = 0; j < vertexCount; ++j)
                         {
-                            vertex[j].texCoord0[0] = scratch[j * 2 + 0];
-                            vertex[j].texCoord0[1] = scratch[j * 2 + 1];
+                            vertex[j].texCoord0[0] = meshopt_quantizeHalf(scratch[j * 2 + 0]);
+                            vertex[j].texCoord0[1] = meshopt_quantizeHalf(scratch[j * 2 + 1]);
                         };
 
                         //meshDraw.flags |= MaterialFeatures_TexcoordVertexAttribute;

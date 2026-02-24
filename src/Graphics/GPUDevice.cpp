@@ -1073,9 +1073,18 @@ void GPUDevice::init(const DeviceCreation& creation)
     queueInfo[0].pQueuePriorities = queuePriority;
 
     //Enable all features
+    VkPhysicalDeviceVulkan11Features physical11Features{};
+    physical11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+    physical11Features.storageBuffer16BitAccess = true;
+
     VkPhysicalDeviceVulkan12Features physical12Features{};
     physical12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    physical12Features.pNext = &physical11Features;
     physical12Features.bufferDeviceAddress = true;
+    physical12Features.storageBuffer8BitAccess = true;
+    physical12Features.uniformAndStorageBuffer8BitAccess = true;
+    physical12Features.shaderFloat16 = true;
+    physical12Features.shaderInt8 = true;
     physical12Features.scalarBlockLayout = true;
     physical12Features.runtimeDescriptorArray = true;
     physical12Features.descriptorBindingPartiallyBound = true;
@@ -1083,6 +1092,8 @@ void GPUDevice::init(const DeviceCreation& creation)
     VkPhysicalDeviceFeatures2 physicalDeviceFeature2{};
     physicalDeviceFeature2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     physicalDeviceFeature2.features.samplerAnisotropy = true;
+    physicalDeviceFeature2.features.shaderInt16 = true;
+    physicalDeviceFeature2.features.shaderInt64 = true;
     physicalDeviceFeature2.pNext = &physical12Features;
 
     vkGetPhysicalDeviceFeatures2(vulkanPhysicalDevice, &physicalDeviceFeature2);

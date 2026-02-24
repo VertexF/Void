@@ -3,15 +3,17 @@
 #extension GL_ARB_shader_draw_parameters: require
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_shader_16bit_storage: require
+#extension GL_EXT_shader_8bit_storage: require
 
 uint MaterialFeatures_TangentVertexAttribute  = 1 << 5; 
 
 struct Vertices
 {
-    float tx, ty, tz, tw;
     float px, py, pz;
-    float nx, ny, nz;
-    float tu, tv;
+    uint8_t tx, ty, tz, tw;
+    uint8_t nx, ny, nz, nw;
+    float16_t tu, tv;
 };
 
 struct ModelPosition
@@ -67,9 +69,19 @@ layout(location = 3) out vec4 vPosition;
 
 void main()
 {
-    vec3 position = vec3(vertexDataReference.vertexData[gl_VertexIndex].px, vertexDataReference.vertexData[gl_VertexIndex].py, vertexDataReference.vertexData[gl_VertexIndex].pz);
-    vec4 tagent = vec4(vertexDataReference.vertexData[gl_VertexIndex].tx, vertexDataReference.vertexData[gl_VertexIndex].ty, vertexDataReference.vertexData[gl_VertexIndex].tz, vertexDataReference.vertexData[gl_VertexIndex].tw);
-    vec3 normal = vec3(vertexDataReference.vertexData[gl_VertexIndex].nx, vertexDataReference.vertexData[gl_VertexIndex].ny, vertexDataReference.vertexData[gl_VertexIndex].nz);
+    vec3 position = vec3(vertexDataReference.vertexData[gl_VertexIndex].px, 
+                         vertexDataReference.vertexData[gl_VertexIndex].py, 
+                         vertexDataReference.vertexData[gl_VertexIndex].pz);
+
+    vec4 tagent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
+                       int(vertexDataReference.vertexData[gl_VertexIndex].ty), 
+                       int(vertexDataReference.vertexData[gl_VertexIndex].tz), 
+                       int(vertexDataReference.vertexData[gl_VertexIndex].tw)) / 127.f - 1.0;
+
+    vec3 normal = vec3(int(vertexDataReference.vertexData[gl_VertexIndex].nx), 
+                       int(vertexDataReference.vertexData[gl_VertexIndex].ny),
+                       int(vertexDataReference.vertexData[gl_VertexIndex].nz)) / 127.f - 1.0;
+
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
     gl_Position = viewPerspective * globalModel * model * modelPositionsReference.modelPositions[index].pos * vec4(position, 1.0);
