@@ -9,7 +9,7 @@ struct CommandBuffer
     void terminate();
 
     //Command buffer interface
-    void bindPass(RenderPassHandle handle);
+    void beginRendering();
     void bindPipeline(PipelineHandle handle);
     void bindVertexBuffer(BufferHandle handle, uint32_t binding, uint32_t offset);
     void bindIndexBuffer(BufferHandle handle, uint32_t offset, VkIndexType indexType);
@@ -44,7 +44,6 @@ struct CommandBuffer
     GPUDevice* device;
     VkDescriptorSet vkDescriptorSets[16];
 
-    RenderPass* currentRenderPass;
     Pipeline* currentPipeline;
     //0 = colour; 1 = depth stencil.
     VkClearValue clears[2];

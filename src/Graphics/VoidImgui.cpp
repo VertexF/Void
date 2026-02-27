@@ -303,7 +303,6 @@ namespace
             .addVertexAttribute({ .offset = 16, .format = VK_FORMAT_R8G8B8A8_UINT, .location = 2, .binding = 0 });
 
         pipelineCreation.vertexInput.addVertexStream({ 0, 20, VK_VERTEX_INPUT_RATE_VERTEX });
-        pipelineCreation.renderPass = gpu->getSwapchainOutput();
 
         DescriptorSetLayoutCreation descriptorSetLayoutCreation{};
 
@@ -442,11 +441,11 @@ namespace
             gpu->unmapBuffer(mapParametersindexBufferHandle);
         }
 
-
         //TODO: Look into trying to sorting here or if you need it at all.
         commands.pushMarker("ImGUI");
 
-        commands.bindPass(gpu->getSwapchainPass());
+        //commands.bindPass(gpu->getSwapchainPass());
+        //commands.beginRendering();
         commands.bindPipeline(imguiPipelineHandle);
         commands.bindVertexBuffer(vertexBufferHandle, 0, 0);
         commands.bindIndexBuffer(indexBufferHandle, 0, VK_INDEX_TYPE_UINT16);

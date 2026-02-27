@@ -38,16 +38,8 @@ enum ResourceUpdateType : uint8_t
     SAMPLER,
     DESCRIPTOR_SET_LAYOUT,
     DESCRIPTOR_SET,
-    RENDER_PASS,
     SHADER_STATE,
     COUNT
-};
-
-enum RenderPassEnumType : uint8_t
-{
-    GRAPHICS,
-    SWAPCHAIN,
-    COMPUTE
 };
 
 struct Allocator;
@@ -88,11 +80,6 @@ struct PipelineHandle
     uint32_t index;
 };
 
-struct RenderPassHandle 
-{
-    uint32_t index;
-};
-
 static BufferHandle INVALID_BUFFER { INVALID_INDEX };
 static TextureHandle INVALID_TEXTURE { INVALID_INDEX };
 static ShaderStateHandle INVALID_SHADER { INVALID_INDEX };
@@ -100,7 +87,6 @@ static SamplerHandle INVALID_SAMPLER { INVALID_INDEX };
 static DescriptorSetLayoutHandle INVALID_LAYOUT { INVALID_INDEX };
 static DescriptorSetHandle INVALID_SET { INVALID_INDEX };
 static PipelineHandle INVALID_PIPELINE { INVALID_INDEX };
-static RenderPassHandle INVALID_PASS { INVALID_INDEX };
 
 struct Rect2D 
 {
@@ -363,58 +349,15 @@ struct VertexInputCreation
     VertexInputCreation& addVertexAttribute(const VertexAttribute& attribute);
 };
 
-struct RenderPassOutput 
+struct DynamicRenderingData
 {
     VkFormat colourFormats[MAX_IMAGE_OUTPUT];
     VkFormat depthStencilFormat;
     uint32_t numColourFormats;
 
-    VkAttachmentLoadOp colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    VkAttachmentLoadOp depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    VkAttachmentLoadOp stencilOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-
-    VkImageLayout colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
-    VkImageLayout depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    RenderPassOutput& reset();
-    RenderPassOutput& colour(VkFormat format);
-    RenderPassOutput& depth(VkFormat format);
-    RenderPassOutput& setOperations(VkAttachmentLoadOp colour,
-                                    VkAttachmentLoadOp depth,
-                                    VkAttachmentLoadOp stencil);
-};
-
-struct RenderPassCreation 
-{
-    const char* name = nullptr;
-
-    TextureHandle outputTextures[MAX_IMAGE_OUTPUT];
-    TextureHandle depthStencilTexture;
-
-    float scaleX = 1.f;
-    float scaleY = 1.f;
-
-    VkAttachmentLoadOp colourOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    VkAttachmentLoadOp depthOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    VkAttachmentLoadOp stencilOP = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-
-    VkImageLayout colourInitial = VK_IMAGE_LAYOUT_UNDEFINED;
-    VkImageLayout depthInitial = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    uint16_t numRenderTargets = 0;
-    RenderPassEnumType type = RenderPassEnumType::GRAPHICS;
-
-    uint8_t resize = 1;
-
-    RenderPassCreation& reset();
-    RenderPassCreation& addRenderTexture(TextureHandle texture);
-    RenderPassCreation& setScaling(float newScaleX, float newScaleY, uint8_t newResize);
-    RenderPassCreation& setDepthStencilTexture(TextureHandle texture);
-    RenderPassCreation& setName(const char* inName);
-    RenderPassCreation& setType(RenderPassEnumType type);
-    RenderPassCreation& setOperations(VkAttachmentLoadOp colour,
-                                    VkAttachmentLoadOp depth,
-                                    VkAttachmentLoadOp stencil);
+    DynamicRenderingData& reset();
+    DynamicRenderingData& colour(VkFormat format);
+    DynamicRenderingData& depth(VkFormat format);
 };
 
 struct PipelineCreation 
@@ -425,7 +368,6 @@ struct PipelineCreation
     VertexInputCreation vertexInput;
     ShaderStateCreation shaders;
 
-    RenderPassOutput renderPass;
     DescriptorSetLayoutHandle descriptorSetLayout[MAX_DESCRIPTOR_SET_LAYOUTS];
     const ViewportState* viewport = nullptr;
 
@@ -434,7 +376,6 @@ struct PipelineCreation
     const char* name = nullptr;
 
     PipelineCreation& addDescriptorSetLayout(DescriptorSetLayoutHandle handle);
-    RenderPassOutput& renderPassOutput();
 };
 
 namespace TextureFormat 
@@ -714,32 +655,6 @@ struct Pipeline
 
     PipelineHandle handle;
     bool graphicsPipeline = true;
-};
-
-struct RenderPass 
-{
-    VkRenderPass vkRenderPass;
-    VkFramebuffer vkFrameBuffer;
-
-    RenderPassOutput output;
-
-    TextureHandle outputTextures[MAX_IMAGE_OUTPUT];
-    TextureHandle outputDepth;
-
-    RenderPassEnumType type;
-
-    float scaleX = 1.f;
-    float scaleY = 1.f;
-    uint16_t width = 0;
-    uint16_t height = 0;
-    uint16_t dispatchX = 0;
-    uint16_t dispatchY = 0;
-    uint16_t dispatchZ = 0;
-
-    uint8_t resize = 0;
-    uint8_t numRenderTargets = 0;
-
-    const char* name = nullptr;
 };
 
 static const char* toStageDefines(VkShaderStageFlagBits value) 

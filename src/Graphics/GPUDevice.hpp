@@ -100,7 +100,6 @@ struct GPUDevice
     SamplerHandle createSampler(const SamplerCreation& creation);
     DescriptorSetLayoutHandle createDescriptorSetLayout(const DescriptorSetLayoutCreation& creation);
     DescriptorSetHandle createDescriptorSet(const DescriptorSetCreation& creation);
-    RenderPassHandle createRenderPass(const RenderPassCreation& creation);
     ShaderStateHandle createShaderState(const ShaderStateCreation& creation);
 
     void destroyBuffer(BufferHandle buffer);
@@ -109,7 +108,6 @@ struct GPUDevice
     void destroySampler(SamplerHandle sampler);
     void destroyDescriptorSetLayout(DescriptorSetLayoutHandle layout);
     void destroyDescriptorSet(DescriptorSetHandle layout);
-    void destroyRenderPass(RenderPassHandle renderPass);
     void destroyShaderState(ShaderStateHandle shader);
 
     //Query description
@@ -121,10 +119,7 @@ struct GPUDevice
     void queryDescriptorSet(DescriptorSetHandle set, DescriptorSetDescription& outDescriptor);
     void queryShaderState(ShaderStateHandle shader, ShaderStateDescription& outDescriptor);
 
-    const RenderPassOutput& getRenderPassOutput(RenderPassHandle renderPass) const;
-
     //Update/Reload resources
-    void resizeOutputTextures(RenderPassHandle renderPass, uint32_t width, uint32_t height);
     void updateDescriptorSet(DescriptorSetHandle set);
 
     //Misc
@@ -155,19 +150,14 @@ struct GPUDevice
     bool newFrame();
     void present();
     void resize(uint16_t width, uint16_t height);
-
-    void fillBarrier(RenderPassHandle renderPass, ExecutionBarrier& outBarrier);
+    void beginRenderingTransition(CommandBuffer* commandBuffer);
 
     //Returns a vertex buffer usable for fullscreen that uses no vertices.
     BufferHandle getFullscreenVertexBuffer() const;
-    //Returns what is considered the final pass that writes to the swapchain.
-    RenderPassHandle getSwapchainPass() const;
 
     TextureHandle getDummyTexture() const;
     BufferHandle getDummyConstantBuffer() const;
-    const RenderPassOutput& getSwapchainOutput() const;
-
-    VkRenderPass getVulkanRenderPass(const RenderPassOutput& output, const char* name);
+    const DynamicRenderingData& getSwapchainOutput() const;
 
     //Names and markers
     void setResourceName(VkObjectType objectType, uint64_t handle, const char* name);
@@ -188,7 +178,6 @@ struct GPUDevice
     void destroySamplerInstant(uint32_t sampler);
     void destroyDescriptorSetLayoutInstant(uint32_t layout);
     void destroyDescriptorSetInstant(uint32_t set);
-    void destroyRenderPassInstant(uint32_t renderPass);
     void destroyShaderStateInstant(uint32_t shader);
 
     void updateDescriptorSetInstant(const DescriptorSetUpdate& update);
@@ -215,40 +204,29 @@ struct GPUDevice
     DescriptorSet* accessDescriptorSet(DescriptorSetHandle set);
     const DescriptorSet* accessDescriptorSet(DescriptorSetHandle set) const;
 
-    RenderPass* accessRenderPass(RenderPassHandle renderPass);
-    const RenderPass* accessRenderPass(RenderPassHandle renderPass) const;
-
     ResourcePool buffers;
     ResourcePool textures;
     ResourcePool pipelines;
     ResourcePool samplers;
     ResourcePool descriptorSetLayouts;
     ResourcePool descriptorSets;
-    ResourcePool renderPasses;
     ResourcePool commandBuffers;
     ResourcePool shaders;
 
     //Primitive resources
     BufferHandle fullscreenVertexBuffer;
-    RenderPassHandle swapchainPass;
     SamplerHandle defaultSampler;
 
     //Dummy resources
     TextureHandle dummyTexture;
     BufferHandle dummyConstantBuffer;
 
-    RenderPassOutput swapchainOutput;
+    DynamicRenderingData dymanicRenderingData;
 
     StringBuffer stringBuffer;
 
     Allocator* allocator;
     StackAllocator* tempAllocator;
-
-    //uint32_t dynamicMaxPerFrameSize;
-    //BufferHandle dynamicBuffer;
-    //uint8_t* dynamicMappedMemory;
-    //uint32_t dynamicAllocatedSize;
-    //uint32_t dynamicPerFrameSize;
 
     CommandBuffer** queuedCommandBuffers = nullptr;
     uint32_t numAllocatedCommandBuffers = 0;
@@ -265,8 +243,6 @@ struct GPUDevice
 
     GPUTimestampManager* gpuTimestampManager = nullptr;
 
-    static constexpr const char* NAME = "AIR_GPU_SERVICE";
-
     VkAllocationCallbacks* vulkanAllocationCallbacks;
     VkInstance vulkanInstance;
     VkPhysicalDevice vulkanPhysicalDevice;
@@ -280,13 +256,9 @@ struct GPUDevice
     //Swapchain
     Array<VkImage> vulkanSwapchainImages;
     Array<VkImageView> vulkanSwapchainImageViews;
-    Array<VkFramebuffer> vulkanSwapchainFramebuffers;
 
     VkQueryPool vulkanTimestampQueryPool;
     //Per frame synchronisation
-    //Array<VkSemaphore> imageAvailableSemaphore;
-    //Array<VkSemaphore> renderFinishSemaphore;
-    //Array<VkFence> framesInFlight;
     Array<VkSemaphore> imageAvailableSemaphore;
     Array<VkSemaphore> renderFinishSemaphore;
     Array<VkFence> framesInFlight;
@@ -321,11 +293,8 @@ struct GPUDevice
     bool debugUtilsExtensionPresent = false;
     bool swapchainIsValid = false;
 
-    bool bindlessSupported = false;
     bool timestampsEnabled = false;
     bool verticalSync = false;
-
-    char vulkanBinariesPath[512];
 };
 
 #endif // !GPU_DEVICE_HDR

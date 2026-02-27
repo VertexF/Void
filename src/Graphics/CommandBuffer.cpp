@@ -1,6 +1,8 @@
 #include "CommandBuffer.hpp"
 #include "GPUDevice.hpp"
 
+#include "Application/Window.hpp"
+
 namespace 
 {
     VkAccessFlags toAccessMask(VkPipelineStageFlagBits stage) 
@@ -58,38 +60,43 @@ void CommandBuffer::terminate()
     isRecording = false;
 }
 
-//Command buffer interface
-void CommandBuffer::bindPass(RenderPassHandle renderPassHandle)
+void CommandBuffer::beginRendering() 
 {
-    isRecording = true;
+    VkRenderingAttachmentInfo colourAttachment{};
+    colourAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    colourAttachment.pNext = nullptr;
+    colourAttachment.imageView = device->vulkanSwapchainImageViews[device->currentFrame];
+    colourAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colourAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
+    colourAttachment.resolveImageView = VK_NULL_HANDLE;
+    colourAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colourAttachment.clearValue = clears[0];
 
-    RenderPass* renderPass = device->accessRenderPass(renderPassHandle);
+    Texture* depthTexture = device->accessTexture(device->depthTexture);
 
-    if (currentRenderPass && (currentRenderPass->type != RenderPassEnumType::COMPUTE) &&
-                                (renderPass != currentRenderPass))
-    {
-        vkCmdEndRenderPass(vkCommandBuffer);
-    }
+    VkRenderingAttachmentInfo depthAttachment{};
+    depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depthAttachment.pNext = nullptr;
+    depthAttachment.imageView = depthTexture->vkImageView;
+    depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depthAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
+    depthAttachment.resolveImageView = VK_NULL_HANDLE;
+    depthAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.clearValue = clears[1];
 
-    if (renderPass != currentRenderPass && (renderPass->type != RenderPassEnumType::COMPUTE))
-    {
-        VkRenderPassBeginInfo renderPassBegin{};
-        renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBegin.framebuffer = renderPass->type == RenderPassEnumType::SWAPCHAIN ?
-            device->vulkanSwapchainFramebuffers[device->vulkanImageIndex] :
-            renderPass->vkFrameBuffer;
-        renderPassBegin.renderPass = renderPass->vkRenderPass;
+    VkRenderingInfo renderingInfo{};
+    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    renderingInfo.renderArea = { .extent{.width = Window::instance()->width, .height = Window::instance()->height }};
+    renderingInfo.layerCount = 1;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments = &colourAttachment;
+    renderingInfo.pDepthAttachment = &depthAttachment;
 
-        renderPassBegin.renderArea.offset = {0, 0};
-        renderPassBegin.renderArea.extent = {renderPass->width, renderPass->height};
-
-        renderPassBegin.clearValueCount = 2;
-        renderPassBegin.pClearValues = clears;
-
-        vkCmdBeginRenderPass(vkCommandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
-    }
-
-    currentRenderPass = renderPass;
+    vkCmdBeginRendering(vkCommandBuffer, &renderingInfo);
 }
 
 void CommandBuffer::bindPipeline(PipelineHandle pipelineHandle)
@@ -189,23 +196,12 @@ void CommandBuffer::setViewport(const Viewport* viewport)
     else 
     {
         vkViewport.x = 0.f;
+        vkViewport.width = device->swapchainWidth * 1.f;
 
-        if (currentRenderPass) 
-        {
-            vkViewport.width = currentRenderPass->width * 1.f;
-
-            //We invert the Y with a negative and proper offset. Vulkan has unique Y clipping.
-            vkViewport.y = currentRenderPass->height * 1.f;
-            vkViewport.height = -currentRenderPass->height * 1.f;
-        }
-        else 
-        {
-            vkViewport.width = device->swapchainWidth * 1.f;
-
-            //We invert the Y with a negative and proper offset. Vulkan has unique Y clipping.
-            vkViewport.y = device->swapchainHeight * 1.f;
-            vkViewport.height = -device->swapchainHeight * 1.f;
-        }
+        //We invert the Y with a negative and proper offset. Vulkan has unique Y clipping.
+        vkViewport.y = device->swapchainHeight * 1.f;
+        vkViewport.height = -device->swapchainHeight * 1.f;
+        
         vkViewport.minDepth = 0.f;
         vkViewport.maxDepth = 1.f;
     }
@@ -290,12 +286,6 @@ void CommandBuffer::dispatchIndirect(BufferHandle bufferHandle, uint32_t offset)
 
 void CommandBuffer::barrier(const ExecutionBarrier& barrier)
 {
-    if (currentRenderPass && (currentRenderPass->type != RenderPassEnumType::COMPUTE))
-    {
-        vkCmdEndRenderPass(vkCommandBuffer);
-        currentRenderPass = nullptr;
-    }
-
     static VkImageMemoryBarrier imageBarriers[8];
     //TODO: subpass
     if (barrier.newBarrierExperimental != UINT32_MAX) 
@@ -555,7 +545,6 @@ void CommandBuffer::popMarker()
 void CommandBuffer::reset()
 {
     isRecording = false;
-    currentRenderPass = nullptr;
     currentPipeline = nullptr;
     currentCommand = 0;
 }

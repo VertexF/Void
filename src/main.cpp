@@ -386,8 +386,6 @@ int main(int argc, char** argv)
         //Create pipeline state
         PipelineCreation pipelineCreation;
 
-        //Render pass
-        pipelineCreation.renderPass = gpu.getSwapchainOutput();
         //Depth
         pipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
@@ -714,7 +712,7 @@ int main(int argc, char** argv)
                     if (positionAccessor)
                     {
                         Array<float> scratch;
-                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(normalAccessor->type);
+                        uint32_t accessFloatSize = (uint32_t)cgltf_num_components(positionAccessor->type);
                         scratch.init(&scratchAllocator, vertexCount * accessFloatSize, vertexCount * accessFloatSize);
                         VOID_ASSERT(cgltf_num_components(positionAccessor->type) == 3);
                         cgltf_accessor_unpack_floats(positionAccessor, scratch.data, positionAccessor->count * accessFloatSize);
@@ -933,9 +931,11 @@ int main(int argc, char** argv)
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
 
+            gpu.beginRenderingTransition(gpuCommands);
+
             gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
-            gpuCommands->bindPass(gpu.getSwapchainPass());
+            gpuCommands->beginRendering();
             gpuCommands->bindPipeline(cubePipeline);
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
