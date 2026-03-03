@@ -32,8 +32,9 @@
 #include <meshoptimizer.h>
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
-static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
+//static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Duck.glb";
+static const char* DEFAULT_3D_MODEL = "Assets/Models/out/rock.glb";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/riggedModel.glb";
 
 //I might try to remove this later.
@@ -57,11 +58,6 @@ namespace
     DescriptorSetLayoutHandle cubeDSL;
 
     BufferHandle positionalBuffer;
-
-    enum MaterialFeatures
-    {
-        MaterialFeatures_TangentVertexAttribute = 1 << 5,
-    };
 
     struct MaterialData
     {
@@ -328,15 +324,6 @@ int main(int argc, char** argv)
     //NOTE: resource working directory
     directoryChange(cwd.path);
 
-    TextureCreation textureCreation{};
-    uint32_t zeroValue = 0;
-    textureCreation.setName("dummyTexture")
-        .setSize(1, 1, 1)
-        .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-        .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-        .setData(&zeroValue);
-    TextureHandle dummyTexture = gpu.createTexture(textureCreation);
-
     SamplerCreation samplerCreation{};
     samplerCreation.minFilter = VK_FILTER_LINEAR;
     samplerCreation.magFilter = VK_FILTER_LINEAR;
@@ -591,7 +578,7 @@ int main(int argc, char** argv)
                         }
                         else
                         {
-                            meshDraw.diffuseTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
+                            meshDraw.diffuseTextureIndex = INVALID_INDEX;
                         }
 
                         if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
@@ -614,7 +601,7 @@ int main(int argc, char** argv)
                         }
                         else
                         {
-                            meshDraw.roughnessTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
+                            meshDraw.roughnessTextureIndex = INVALID_INDEX;
                         }
                     }
 
@@ -644,7 +631,7 @@ int main(int argc, char** argv)
                     else
                     {
                         meshDraw.metallicRoughnessOcclusionFactor.z = 1.f;
-                        meshDraw.occlusionTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
+                        meshDraw.occlusionTextureIndex = INVALID_INDEX;
                     }
 
                     if (material->emissive_texture.texture != nullptr)
@@ -675,7 +662,7 @@ int main(int argc, char** argv)
                     }
                     else
                     {
-                        meshDraw.emisiveTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
+                        meshDraw.emisiveTextureIndex = INVALID_INDEX;
                     }
 
                     if (material->normal_texture.texture != nullptr)
@@ -698,7 +685,7 @@ int main(int argc, char** argv)
                     }
                     else
                     {
-                        meshDraw.normalTextureIndex = INVALID_SCENE_TEXTURE_INDEX;
+                        meshDraw.normalTextureIndex = INVALID_INDEX;
                     }
 
                     const cgltf_accessor* positionAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_position, 0);
@@ -767,8 +754,10 @@ int main(int argc, char** argv)
                             vertex[j].tangent[2] = uint8_t(scratch[j * 4 + 2] * 127.f + 127.5f);
                             vertex[j].tangent[3] = uint8_t(scratch[j * 4 + 3] * 127.f + 127.5f);
                         }
-
-                        meshDraw.flags |= MaterialFeatures_TangentVertexAttribute;
+                    }
+                    else 
+                    {
+                        VOID_ERROR("The model needs tangent.");
                     }
 
                     if (textureAccessor)
@@ -785,8 +774,6 @@ int main(int argc, char** argv)
                             vertex[j].texCoord0[0] = meshopt_quantizeHalf(scratch[j * 2 + 0]);
                             vertex[j].texCoord0[1] = meshopt_quantizeHalf(scratch[j * 2 + 1]);
                         };
-
-                        //meshDraw.flags |= MaterialFeatures_TexcoordVertexAttribute;
                     }
 
                     bufferCreation.reset()
@@ -812,10 +799,10 @@ int main(int argc, char** argv)
 
     srand(42);
 
-    uint32_t totalDucks = 1;
+    uint32_t totalDucks = 1111;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
-    float sceneRadius = 1.f;
+    float sceneRadius = 5000.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
     {
         vec3s postion{};
@@ -836,8 +823,6 @@ int main(int argc, char** argv)
         drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
     }
 
-    drawMatrices[0] = glms_mat4_identity();
-
     PushConstants pushConstants{};
 
     BufferCreation bufferCreation{};
@@ -857,8 +842,9 @@ int main(int argc, char** argv)
     gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
     gameCamera.init(7.f, 3.0f, 0.1f);
 
-    float modelScale = 1.f;
+    float modelScale = 0.1f;
     bool fullscreen = false;
+    versors rotation = glms_quat_identity();
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -933,7 +919,8 @@ int main(int argc, char** argv)
 
             gpu.beginRenderingTransition(gpuCommands);
 
-            gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
+            //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
+            gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
             gpuCommands->beginRendering();
             gpuCommands->bindPipeline(cubePipeline);
@@ -953,8 +940,9 @@ int main(int argc, char** argv)
                 uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                 uniformData.globalModel = globalModel;
                 //eye not used in shader.
-                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
-                uniformData.light = vec4s{ 2.f, 2.f, 0.f, 1.f };
+                
+                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f};
+                uniformData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
                 memcpy(cbData, &uniformData, sizeof(UniformData));
 
@@ -1025,7 +1013,6 @@ int main(int argc, char** argv)
         gpu.destroyBuffer(meshDraw.indexBuffer);
     }
 
-    gpu.destroyTexture(dummyTexture);
     gpu.destroySampler(dummySampler);
 
     meshDraws.shutdown();

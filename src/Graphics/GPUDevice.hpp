@@ -156,7 +156,6 @@ struct GPUDevice
     BufferHandle getFullscreenVertexBuffer() const;
 
     TextureHandle getDummyTexture() const;
-    BufferHandle getDummyConstantBuffer() const;
     const DynamicRenderingData& getSwapchainOutput() const;
 
     //Names and markers
@@ -219,7 +218,6 @@ struct GPUDevice
 
     //Dummy resources
     TextureHandle dummyTexture;
-    BufferHandle dummyConstantBuffer;
 
     DynamicRenderingData dymanicRenderingData;
 

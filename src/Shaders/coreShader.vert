@@ -6,8 +6,6 @@
 #extension GL_EXT_shader_16bit_storage: require
 #extension GL_EXT_shader_8bit_storage: require
 
-uint MaterialFeatures_TangentVertexAttribute  = 1 << 5; 
-
 struct Vertices
 {
     float px, py, pz;

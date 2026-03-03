@@ -1086,24 +1086,18 @@ void GPUDevice::init(const DeviceCreation& creation)
     dymanicRenderingData.depth(VK_FORMAT_D32_SFLOAT);
 
     //Init the dummy resources
+    uint32_t dummyData = 0xFFFFFFFF;
     TextureCreation dummyTextureCreation{};
-    dummyTextureCreation.initialData = nullptr;
+    dummyTextureCreation.initialData = &dummyData;
     dummyTextureCreation.width = 1;
     dummyTextureCreation.height = 1;
     dummyTextureCreation.depth = 1;
     dummyTextureCreation.mipmaps = 1;
     dummyTextureCreation.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    dummyTextureCreation.format = VK_FORMAT_R8_UINT;
+    dummyTextureCreation.format = VK_FORMAT_R8G8B8A8_SRGB;
     dummyTextureCreation.imageType = VK_IMAGE_TYPE_2D;
     dummyTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
     dummyTexture = createTexture(dummyTextureCreation);
-
-    BufferCreation dummyConstantBufferCreation{};
-    dummyConstantBufferCreation.typeFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    dummyConstantBufferCreation.size = 16;
-    dummyConstantBufferCreation.initialData = nullptr;
-    dummyConstantBufferCreation.name = "DummyCB";
-    dummyConstantBuffer = createBuffer(dummyConstantBufferCreation);
 
     DescriptorSetLayoutCreation bindlessLayoutCreation{};
     bindlessLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, BINDLESS_TEXTURE_BINDING, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessTextures" })
@@ -1151,7 +1145,6 @@ void GPUDevice::shutdown()
     destroyTexture(depthTexture);
     destroyBuffer(fullscreenVertexBuffer);
     destroyTexture(dummyTexture);
-    destroyBuffer(dummyConstantBuffer);
     destroySampler(defaultSampler);
 
     //Add pending bindless textures to delete.
@@ -2522,11 +2515,6 @@ void GPUDevice::present()
             ResourceUpdate& textureToUpdate = textureToUpdateBindless[it];
             Texture* texture = accessTexture({ textureToUpdate.handle });
 
-            if (texture->vkImageView == VK_NULL_HANDLE)
-            {
-                continue;
-            }
-
             VkWriteDescriptorSet& descriptorWrite = bindlessDescriptorWrites[currentWriteIndex];
             descriptorWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
             descriptorWrite.descriptorCount = 1;
@@ -2551,7 +2539,7 @@ void GPUDevice::present()
             {
                 descriptorImageInfo.sampler = vkDefaultSampler->vkSampler;
             }
-            
+
             descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             descriptorWrite.pImageInfo = &descriptorImageInfo;
 
@@ -2717,11 +2705,6 @@ BufferHandle GPUDevice::getFullscreenVertexBuffer() const
 TextureHandle GPUDevice::getDummyTexture() const
 {
     return dummyTexture;
-}
-
-BufferHandle GPUDevice::getDummyConstantBuffer() const
-{
-    return dummyConstantBuffer;
 }
 
 const DynamicRenderingData& GPUDevice::getSwapchainOutput() const

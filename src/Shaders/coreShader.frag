@@ -211,7 +211,6 @@ void main()
 
     float lightRange = 100.f;
     float lightIntensity = 40.f;
-    vec4 light = {2, 1, 1, 0};
 
     float NdotV = abs(dot(N, V)) + 1e-5;
     float NdotL = clamp(dot(N, L), 0, 1);

@@ -86,6 +86,8 @@ void GameCamera::update(InputHandler* input, float windowWidth, float windowHeig
         cameraMovementDelta *= 0.1f;
     }
 
+    cameraMovementDelta *= 10.f;
+
     //Actual 3D movememnt
     if (input->isKeyDown(KEY_LEFT) || input->isKeyDown(KEY_A))
     {
