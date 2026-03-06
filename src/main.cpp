@@ -54,8 +54,10 @@ namespace
 {
     //TODO: Figure out if you need this stuff.
     PipelineHandle cubePipeline;
+    PipelineHandle skyboxPipeline;
     BufferHandle cubeCB;
     DescriptorSetLayoutHandle cubeDSL;
+    DescriptorSetLayoutHandle skyboxDescriptorSetLayout;
 
     BufferHandle positionalBuffer;
 
@@ -71,6 +73,7 @@ namespace
 
         vec3s emissiveFactor;
         uint32_t emissiveTextureIndex;
+        uint32_t skyboxTextureIndex;
         uint32_t flags;
     };
 
@@ -112,6 +115,7 @@ namespace
         uint16_t normalTextureIndex;
         uint16_t occlusionTextureIndex;
         uint16_t emisiveTextureIndex;
+        uint16_t skyboxTextureIndex;
     };
 
     struct UniformData
@@ -158,6 +162,7 @@ namespace
         meshData.textures[1] = meshDraw.roughnessTextureIndex;
         meshData.textures[2] = meshDraw.normalTextureIndex;
         meshData.textures[3] = meshDraw.occlusionTextureIndex;
+        meshData.skyboxTextureIndex = meshDraw.skyboxTextureIndex;
 
         meshData.emissiveFactor = 
         { 
@@ -320,9 +325,21 @@ int main(int argc, char** argv)
             stbi_image_free(textureData);
         }
     }
-
     //NOTE: resource working directory
     directoryChange(cwd.path);
+
+    Array<const char*> cubemapsImage;
+    cubemapsImage.init(allocator, 6);
+    cubemapsImage.push("Assets/Textures/1.png");
+    cubemapsImage.push("Assets/Textures/2.png");
+    cubemapsImage.push("Assets/Textures/3.png");
+    cubemapsImage.push("Assets/Textures/4.png");
+    cubemapsImage.push("Assets/Textures/5.png");
+    cubemapsImage.push("Assets/Textures/6.png");
+
+    TextureResource* skyboxTextureResource = renderer.createSkybox(cubemapsImage, "SpaceCubeMap");
+
+    cubemapsImage.shutdown();
 
     SamplerCreation samplerCreation{};
     samplerCreation.minFilter = VK_FILTER_LINEAR;
@@ -400,6 +417,35 @@ int main(int argc, char** argv)
             .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
 
         cubePipeline = gpu.createPipeline(pipelineCreation);
+
+        //Depth
+        PipelineCreation pipelineCreation2{};
+        pipelineCreation2.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+        //Shader state
+        FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
+        FileReadResult fragSkybox = fileReadBinary("Assets/Shaders/skybox.frag.spv", &MemoryService::instance()->scratchAllocator);
+
+        pipelineCreation2.shaders.setName("skybox")
+            .addStage(vertSkybox.data, uint32_t(vertSkybox.size), VK_SHADER_STAGE_VERTEX_BIT)
+            .addStage(fragSkybox.data, uint32_t(fragSkybox.size), VK_SHADER_STAGE_FRAGMENT_BIT)
+            .setSPVInput(true);
+
+        //Descriptor set layout.
+        DescriptorSetLayoutCreation skyboxSetLayout{};
+        skyboxSetLayout.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
+                       .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
+                       .setSetIndex(0);
+        skyboxSetLayout.bindless = false;
+
+        //Setting it into pipeline.
+        //This descriptor set layout will be ran every draw calls
+        skyboxDescriptorSetLayout = gpu.createDescriptorSetLayout(skyboxSetLayout);
+        //This descriptor set layout will be ran every frame
+        pipelineCreation2.addDescriptorSetLayout(skyboxDescriptorSetLayout)
+            .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
+
+        skyboxPipeline = gpu.createPipeline(pipelineCreation2);
 
         //Constant buffer
         BufferCreation uniformBufferCreation;
@@ -506,6 +552,8 @@ int main(int argc, char** argv)
                 for (uint32_t primitiveIndex = 0; primitiveIndex < (uint32_t)mesh->primitives_count; ++primitiveIndex)
                 {
                     MeshDraw meshDraw{};
+
+                    meshDraw.skyboxTextureIndex = skyboxTextureResource->handle.index;
 
                     meshDraw.model = finalMatrix;
 
@@ -844,7 +892,6 @@ int main(int argc, char** argv)
 
     float modelScale = 0.1f;
     bool fullscreen = false;
-    versors rotation = glms_quat_identity();
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -923,6 +970,43 @@ int main(int argc, char** argv)
             gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
             gpuCommands->beginRendering();
+
+            //Skybox!
+            gpuCommands->bindPipeline(skyboxPipeline);
+            gpuCommands->setScissor(nullptr);
+            gpuCommands->setViewport(nullptr);
+
+            //Update rotating cube data.
+            MapBufferParameters skyboxCBMap = { cubeCB, 0, 0 };
+            void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
+            if (skyboxCBData)
+            {
+                //TODO: Match these name with what's in the shader.
+                UniformData uniformData{};
+                uniformData.viewPerspective = glms_mat4_identity();//gameCamera.internal3DCamera.viewProjection;
+                uniformData.viewPerspective.m30 = 0;
+                uniformData.viewPerspective.m31 = 0;
+                uniformData.viewPerspective.m32 = 0;
+                uniformData.viewPerspective.m30 = 1;
+                memcpy(skyboxCBData, &uniformData, sizeof(UniformData));
+                gpu.unmapBuffer(skyboxCBMap);
+            }
+
+            gpuCommands->bindlessDescriptorSet(1);
+
+            MeshDraw skyboxMeshDraw = meshDraws[0];
+
+            MapBufferParameters skyboxMaterialMap = { skyboxMeshDraw.materialBuffer, 0, 0 };
+            MaterialData* skyboxMaterialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(skyboxMaterialMap));
+
+            uploadMaterial(*skyboxMaterialBufferData, skyboxMeshDraw);
+            gpu.unmapBuffer(skyboxMaterialMap);
+
+            gpuCommands->bindDescriptorSet(&skyboxMeshDraw.descriptorSet, 1, nullptr, 0, 0);
+
+            gpuCommands->draw(36, 1, 0, 0);
+
+            //Scene
             gpuCommands->bindPipeline(cubePipeline);
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
@@ -1019,7 +1103,9 @@ int main(int argc, char** argv)
 
     gpu.destroyBuffer(cubeCB);
     gpu.destroyPipeline(cubePipeline);
+    gpu.destroyPipeline(skyboxPipeline);
     gpu.destroyDescriptorSetLayout(cubeDSL);
+    gpu.destroyDescriptorSetLayout(skyboxDescriptorSetLayout);
 
     imgui->shutdown();
 

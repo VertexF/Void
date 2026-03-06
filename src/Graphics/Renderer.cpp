@@ -1,7 +1,7 @@
 #include "Renderer.hpp"
 
 #include "CommandBuffer.hpp"
-#include "Foundation/Memory.hpp"
+#include "Application/Window.hpp"
 #include "Foundation/File.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -50,6 +50,49 @@ namespace
 
             return newTexture;
         }
+
+        return INVALID_TEXTURE;
+    }
+
+    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, const char* name)
+    {
+        uint32_t totalWidth = 0;
+        Array<uint8_t*> skyboxImageArray;
+        skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 4);
+        for (uint32_t i = 0; i < images.size; ++i)
+        {
+            if (images[i])
+            {
+                //Load 6 images.
+                int comp;
+                int width;
+                int height;
+                uint8_t mipLevels = 1;
+
+                uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 3);
+                if (imageData == nullptr)
+                {
+                    vprint("Error loading texture %s", images[i]);
+                    return INVALID_TEXTURE;
+                }
+
+                skyboxImageArray.push(imageData);
+                totalWidth += width;
+                free(imageData);
+            }
+        }
+
+        //Create the single texture.
+        TextureCreation creation{};
+        creation.setData(skyboxImageArray.data)
+            .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
+            .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+            .setSize(static_cast<uint16_t>(totalWidth), static_cast<uint16_t>(totalWidth), 1)
+            .setName(name);
+        creation.layerCount = 6;
+        TextureHandle newTexture = gpu.createTexture(creation);
+
+        return newTexture;
 
         return INVALID_TEXTURE;
     }
@@ -361,6 +404,25 @@ TextureResource* Renderer::createTexture(const char* name, const char* filename)
         texture->name = name;
 
         resourceCache.textures.insert(hashCalculate(name), texture);
+
+        return texture;
+    }
+    return nullptr;
+}
+
+TextureResource* Renderer::createSkybox(const Array<const char*>& images, const char* cubemapName)
+{
+    TextureResource* texture = textures.obtain();
+
+    if (texture)
+    {
+        TextureHandle handle = createACubemap(*gpu, images, cubemapName);
+        texture->handle = handle;
+        gpu->queryTexture(handle, texture->textureDescription);
+        texture->references = 1;
+        texture->name = cubemapName;
+
+        resourceCache.textures.insert(hashCalculate(cubemapName), texture);
 
         return texture;
     }

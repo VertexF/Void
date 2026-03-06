@@ -22,7 +22,7 @@ struct CommandBuffer
     void clear(float red, float green, float blue, float alpha);
     void clearDepthStencil(float depth, uint8_t stencil);
 
-    void draw(uint32_t firstVertex, uint32_t vertexCount, uint32_t firstInstance, uint32_t instanceCount);
+    void draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, 
                                           uint32_t firstInstance);
     void drawIndirect(BufferHandle handle, uint32_t offset, uint32_t stride);

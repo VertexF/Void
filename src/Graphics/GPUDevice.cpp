@@ -211,15 +211,15 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         //Create the image
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.flags = creation.layerCount == 1 ? 0 : VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
         imageInfo.format = texture->vkFormat;
         imageInfo.usage = texture->usage;
-        imageInfo.flags = 0;
         imageInfo.imageType = texture->imageType;
-        imageInfo.extent.width = creation.width;
-        imageInfo.extent.height = creation.height;
+        imageInfo.extent.width  = creation.layerCount == 1 ? creation.width : creation.width;
+        imageInfo.extent.height = creation.layerCount == 1 ? creation.height : creation.width;
         imageInfo.extent.depth = creation.depth;
         imageInfo.mipLevels = creation.mipmaps;
-        imageInfo.arrayLayers = 1;
+        imageInfo.arrayLayers = creation.layerCount;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -250,7 +250,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         }
 
         info.subresourceRange.levelCount = 1;
-        info.subresourceRange.layerCount = 1;
+        info.subresourceRange.layerCount = creation.layerCount;
         check(vkCreateImageView(gpu.vulkanDevice, &info, gpu.vulkanAllocationCallbacks, &texture->vkImageView));
 
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(texture->vkImageView), creation.name);
@@ -1339,8 +1339,8 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         bufferInfo.size = imageSize;
 
         VmaAllocationCreateInfo memoryInfo{};
-        memoryInfo.flags = VMA_ALLOCATION_CREATE_STRATEGY_BEST_FIT_BIT;
-        memoryInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
         VmaAllocationInfo allocationInfo{};
         VkBuffer stagingBuffer;

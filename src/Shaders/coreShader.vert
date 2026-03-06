@@ -36,10 +36,10 @@ layout(scalar, set = 0, scalar, binding = 1) uniform MaterialConstant
     vec4 baseColourFactor;
     vec4 metallicRoughnessOcclusionFactor;
     float alphaCutoff;
-    float pad[3];
     
     vec3 emissiveFactor;
     uint emissiveTextureIndex;
+    uint skyboxIndex;
     uint flags;
 };
 

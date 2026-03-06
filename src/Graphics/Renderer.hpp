@@ -78,6 +78,7 @@ struct Renderer
 
     TextureResource* createTexture(const TextureCreation& creation);
     TextureResource* createTexture(const char* name, const char* filename);
+    TextureResource* createSkybox(const Array<const char*>& images, const char* cubemapName);
 
     SamplerResource* createSampler(const SamplerCreation& creation);
 

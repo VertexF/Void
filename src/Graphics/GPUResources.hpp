@@ -206,6 +206,7 @@ struct BufferCreation
 struct TextureCreation 
 {
     void* initialData = nullptr;
+    uint32_t layerCount = 1;
     uint16_t width = 1;
     uint16_t height = 1;
     uint16_t depth = 1;

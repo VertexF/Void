@@ -242,7 +242,7 @@ void CommandBuffer::clearDepthStencil(float depth, uint8_t stencil)
     clears[1].depthStencil.stencil = stencil;
 }
 
-void CommandBuffer::draw(uint32_t firstVertex, uint32_t vertexCount, uint32_t firstInstance, uint32_t instanceCount)
+void CommandBuffer::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 {
     vkCmdDraw(vkCommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
