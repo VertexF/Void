@@ -25,7 +25,6 @@ layout(scalar, set = 0, binding = 1) uniform MaterialConstant
     
     vec3 emissiveFactor;
     uint emissiveTextureIndex;
-    uint skyboxIndex;
     uint flags;
 };
 
@@ -33,6 +32,8 @@ layout(set = 1, binding = 0) uniform sampler2D globalTextures[];
 //Alias textures to use the same binding point, as bindless texture is shared
 //between all kind of textures: 1d, 2d, 3d.
 layout(set = 1, binding = 0) uniform sampler3D globalTextures3D[];
+
+layout(set = 1, binding = 0) uniform samplerCube globalTexturesCube[];
 
 //Write only image do not need formatting in layout.
 layout(set = 1, binding = 1) writeonly uniform image2D globalImages2D[];
@@ -126,9 +127,11 @@ float heaviside(float value)
 
 void main()
 {
-    mat3 TBN = mat3(1.0);
     fragColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
 
+//    mat3 TBN = mat3(1.0);
+//    vec4 baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
+//
 //    //bool useAlphaMask = (flags & DrawFlags_AlphaMask) != 0;
 //    //if (useAlphaMask && baseColour.a < alphaCutoff)
 //    if (baseColour.a < alphaCutoff)
@@ -191,8 +194,8 @@ void main()
 //    float dDenom = (NdotH * alphaSquared - NdotH) * NdotH + 1.0;
 //    float distribution = (alphaSquared) / (PI * dDenom * dDenom);
 //
-//    float lightRange = 100.f;
-//    float lightIntensity = 40.f;
+//    float lightRange = 175.f;
+//    float lightIntensity = 60.f;
 //
 //    float NdotV = abs(dot(N, V)) + 1e-5;
 //    float NdotL = clamp(dot(N, L), 0, 1);

@@ -30,6 +30,7 @@
 
 #include <spirv_reflect.h>
 #include <meshoptimizer.h>
+#include <cglm/types-struct.h>
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
@@ -56,8 +57,11 @@ namespace
     PipelineHandle cubePipeline;
     PipelineHandle skyboxPipeline;
     BufferHandle cubeCB;
+    BufferHandle skyboxUniformBuffer;
+    BufferHandle skyboxMaterialBuffer;
     DescriptorSetLayoutHandle cubeDSL;
     DescriptorSetLayoutHandle skyboxDescriptorSetLayout;
+    DescriptorSetHandle skyboxDescriptorSet;
 
     BufferHandle positionalBuffer;
 
@@ -73,8 +77,13 @@ namespace
 
         vec3s emissiveFactor;
         uint32_t emissiveTextureIndex;
-        uint32_t skyboxTextureIndex;
         uint32_t flags;
+    };
+
+    struct SkyboxData
+    {
+        vec3s testColour;
+        uint32_t skyboxTextureIndex;
     };
 
     struct Vertices
@@ -115,7 +124,6 @@ namespace
         uint16_t normalTextureIndex;
         uint16_t occlusionTextureIndex;
         uint16_t emisiveTextureIndex;
-        uint16_t skyboxTextureIndex;
     };
 
     struct UniformData
@@ -162,7 +170,6 @@ namespace
         meshData.textures[1] = meshDraw.roughnessTextureIndex;
         meshData.textures[2] = meshDraw.normalTextureIndex;
         meshData.textures[3] = meshDraw.occlusionTextureIndex;
-        meshData.skyboxTextureIndex = meshDraw.skyboxTextureIndex;
 
         meshData.emissiveFactor = 
         { 
@@ -338,6 +345,14 @@ int main(int argc, char** argv)
     cubemapsImage.push("Assets/Textures/6.png");
 
     TextureResource* skyboxTextureResource = renderer.createSkybox(cubemapsImage, "SpaceCubeMap");
+    SamplerCreation skyboxSamplerCreation{};
+    skyboxSamplerCreation.minFilter = VK_FILTER_LINEAR;
+    skyboxSamplerCreation.magFilter = VK_FILTER_LINEAR;
+    skyboxSamplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    skyboxSamplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    SamplerHandle skyboxSampler = gpu.createSampler(skyboxSamplerCreation);
+    gpu.linkTextureSampler(skyboxTextureResource->handle, skyboxSampler);
 
     cubemapsImage.shutdown();
 
@@ -420,7 +435,7 @@ int main(int argc, char** argv)
 
         //Depth
         PipelineCreation pipelineCreation2{};
-        pipelineCreation2.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        pipelineCreation2.depthStencil.depthEnable = false;
 
         //Shader state
         FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
@@ -434,8 +449,8 @@ int main(int argc, char** argv)
         //Descriptor set layout.
         DescriptorSetLayoutCreation skyboxSetLayout{};
         skyboxSetLayout.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
-                       .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
-                       .setSetIndex(0);
+            .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "SkyboxMaterial" })
+            .setSetIndex(0);
         skyboxSetLayout.bindless = false;
 
         //Setting it into pipeline.
@@ -552,8 +567,6 @@ int main(int argc, char** argv)
                 for (uint32_t primitiveIndex = 0; primitiveIndex < (uint32_t)mesh->primitives_count; ++primitiveIndex)
                 {
                     MeshDraw meshDraw{};
-
-                    meshDraw.skyboxTextureIndex = skyboxTextureResource->handle.index;
 
                     meshDraw.model = finalMatrix;
 
@@ -880,6 +893,23 @@ int main(int argc, char** argv)
         .setData(drawMatrices.data);
     positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
+        .setName("SkyboxData");
+    skyboxMaterialBuffer = gpu.createBuffer(bufferCreation);
+
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
+        .setName("skyboxUniformDescriptor");
+    skyboxUniformBuffer = gpu.createBuffer(bufferCreation);
+
+    DescriptorSetCreation dsCreation{};
+    dsCreation.buffer(skyboxUniformBuffer, 0);
+    dsCreation.buffer(skyboxMaterialBuffer, 1);
+    dsCreation.setLayout(skyboxDescriptorSetLayout);
+
+    skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
+
     int64_t beginFrameTick = timeNow();
 
     vec3s eye = vec3s{ 0.f, 2.5f, 2.f };
@@ -967,7 +997,7 @@ int main(int argc, char** argv)
             gpu.beginRenderingTransition(gpuCommands);
 
             //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
-            gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
+            gpuCommands->clear(1.f, 0.f, 1.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
             gpuCommands->beginRendering();
 
@@ -976,33 +1006,36 @@ int main(int argc, char** argv)
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
 
+            gpuCommands->bindlessDescriptorSet(1);
+
             //Update rotating cube data.
-            MapBufferParameters skyboxCBMap = { cubeCB, 0, 0 };
+            MapBufferParameters skyboxCBMap = { skyboxUniformBuffer, 0, 0 };
             void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
             if (skyboxCBData)
             {
                 //TODO: Match these name with what's in the shader.
                 UniformData uniformData{};
-                uniformData.viewPerspective = glms_mat4_identity();//gameCamera.internal3DCamera.viewProjection;
+                uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                 uniformData.viewPerspective.m30 = 0;
                 uniformData.viewPerspective.m31 = 0;
                 uniformData.viewPerspective.m32 = 0;
-                uniformData.viewPerspective.m30 = 1;
+                uniformData.viewPerspective.m33 = 1;
                 memcpy(skyboxCBData, &uniformData, sizeof(UniformData));
                 gpu.unmapBuffer(skyboxCBMap);
             }
 
-            gpuCommands->bindlessDescriptorSet(1);
+            MapBufferParameters skyboxMaterialMap = { skyboxMaterialBuffer, 0, 0 };
+            SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
+            if (skyboxMaterialBufferData)
+            {
+                SkyboxData skyboxData{};
+                skyboxData.skyboxTextureIndex = skyboxTextureResource->handle.index;
+                skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
+                memcpy(skyboxMaterialBufferData, &skyboxData, sizeof(SkyboxData));
+                gpu.unmapBuffer(skyboxMaterialMap);
+            }
 
-            MeshDraw skyboxMeshDraw = meshDraws[0];
-
-            MapBufferParameters skyboxMaterialMap = { skyboxMeshDraw.materialBuffer, 0, 0 };
-            MaterialData* skyboxMaterialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(skyboxMaterialMap));
-
-            uploadMaterial(*skyboxMaterialBufferData, skyboxMeshDraw);
-            gpu.unmapBuffer(skyboxMaterialMap);
-
-            gpuCommands->bindDescriptorSet(&skyboxMeshDraw.descriptorSet, 1, nullptr, 0, 0);
+            gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
 
             gpuCommands->draw(36, 1, 0, 0);
 
@@ -1024,16 +1057,14 @@ int main(int argc, char** argv)
                 uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                 uniformData.globalModel = globalModel;
                 //eye not used in shader.
-                
-                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f};
+
+                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
                 uniformData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
                 memcpy(cbData, &uniformData, sizeof(UniformData));
 
                 gpu.unmapBuffer(cbMap);
             }
-
-            gpuCommands->bindlessDescriptorSet(1);
 
             for (uint32_t i = 0; i < totalDucks; ++i)
             {
@@ -1088,6 +1119,10 @@ int main(int argc, char** argv)
 
     drawMatrices.shutdown();
 
+    gpu.destroyDescriptorSet(skyboxDescriptorSet);
+    gpu.destroyBuffer(skyboxMaterialBuffer);
+    gpu.destroyBuffer(skyboxUniformBuffer);
+
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
         MeshDraw& meshDraw = meshDraws[meshIndex];
@@ -1098,6 +1133,7 @@ int main(int argc, char** argv)
     }
 
     gpu.destroySampler(dummySampler);
+    gpu.destroySampler(skyboxSampler);
 
     meshDraws.shutdown();
 

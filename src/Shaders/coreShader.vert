@@ -39,7 +39,6 @@ layout(scalar, set = 0, scalar, binding = 1) uniform MaterialConstant
     
     vec3 emissiveFactor;
     uint emissiveTextureIndex;
-    uint skyboxIndex;
     uint flags;
 };
 

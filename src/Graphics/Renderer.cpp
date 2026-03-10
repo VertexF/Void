@@ -56,20 +56,18 @@ namespace
 
     TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, const char* name)
     {
-        uint32_t totalWidth = 0;
         Array<uint8_t*> skyboxImageArray;
-        skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 4);
+        skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
+        int comp;
+        int width;
+        int height;
+
         for (uint32_t i = 0; i < images.size; ++i)
         {
             if (images[i])
             {
                 //Load 6 images.
-                int comp;
-                int width;
-                int height;
-                uint8_t mipLevels = 1;
-
-                uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 3);
+                uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
                 if (imageData == nullptr)
                 {
                     vprint("Error loading texture %s", images[i]);
@@ -77,7 +75,6 @@ namespace
                 }
 
                 skyboxImageArray.push(imageData);
-                totalWidth += width;
                 free(imageData);
             }
         }
@@ -87,14 +84,14 @@ namespace
         creation.setData(skyboxImageArray.data)
             .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
             .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-            .setSize(static_cast<uint16_t>(totalWidth), static_cast<uint16_t>(totalWidth), 1)
+            .setSize(static_cast<uint16_t>(width * skyboxImageArray.size), static_cast<uint16_t>(width * skyboxImageArray.size), 1)
             .setName(name);
         creation.layerCount = 6;
         TextureHandle newTexture = gpu.createTexture(creation);
 
-        return newTexture;
+        skyboxImageArray.shutdown();
 
-        return INVALID_TEXTURE;
+        return newTexture;
     }
 }//Anon
 

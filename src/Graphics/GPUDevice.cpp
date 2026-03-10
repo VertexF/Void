@@ -215,8 +215,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         imageInfo.format = texture->vkFormat;
         imageInfo.usage = texture->usage;
         imageInfo.imageType = texture->imageType;
-        imageInfo.extent.width  = creation.layerCount == 1 ? creation.width : creation.width;
-        imageInfo.extent.height = creation.layerCount == 1 ? creation.height : creation.width;
+        imageInfo.extent.width  = creation.width;
+        imageInfo.extent.height = creation.height;
         imageInfo.extent.depth = creation.depth;
         imageInfo.mipLevels = creation.mipmaps;
         imageInfo.arrayLayers = creation.layerCount;

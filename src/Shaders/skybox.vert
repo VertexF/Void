@@ -33,26 +33,18 @@ layout(scalar, set = 0, binding = 0) uniform LocalConstants
     vec4 light;
 };
 
-layout(scalar, set = 0, binding = 1) uniform MaterialConstant
+layout(scalar, set = 0, binding = 1) uniform SkyboxData
 {
-    mat4 model;
-    mat4 modelInv;
-    
-    uvec4 textures;
-    vec4 baseColourFactor;
-    vec4 metallicRoughnessOcclusionFactor;
-    float alphaCutoff;
-    
-    vec3 emissiveFactor;
-    uint emissiveTextureIndex;
-    uint skyboxIndex;
-    uint flags;
+    vec3 testColour;
+    uint skyboxTextureIndex;
 };
 
 layout(set = 1, binding = 0) uniform sampler2D globalTextures[];
 //Alias textures to use the same binding point, as bindless texture is shared
 //between all kind of textures: 1d, 2d, 3d.
 layout(set = 1, binding = 0) uniform sampler3D globalTextures3D[];
+
+layout(set = 1, binding = 0) uniform samplerCube globalTexturesCube[];
 
 //Write only image do not need formatting in layout.
 layout(set = 1, binding = 1) writeonly uniform image2D globalImages2D[];
@@ -63,11 +55,7 @@ layout (location = 0) out vec3 dir;
 void main()
 {
 	int idx = indices[gl_VertexIndex];
-	gl_Position = viewPerspective * vec4(pos[idx], 1.0);
-	dir = pos[idx].xyz;
-
-//	int idx = indices[gl_VertexIndex];
-//    vec4 pos = viewPerspective * vec4(pos[idx], 1.0);
-//	dir = pos.xyz;
-//    gl_Position = pos.xyww;
+    vec4 pos = viewPerspective * vec4(pos[idx], 1.0);
+	dir = pos.xyz;
+    gl_Position = pos.xyww;
 }

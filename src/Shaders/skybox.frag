@@ -13,20 +13,10 @@ layout(scalar, set = 0, binding = 0) uniform LocalConstants
     vec4 light;
 };
 
-layout(scalar, set = 0, binding = 1) uniform MaterialConstant
+layout(scalar, set = 0, binding = 1) uniform SkyboxData
 {
-    mat4 model;
-    mat4 modelInv;
-    
-    uvec4 textures;
-    vec4 baseColourFactor;
-    vec4 metallicRoughnessOcclusionFactor;
-    float alphaCutoff;
-    
-    vec3 emissiveFactor;
-    uint emissiveTextureIndex;
-    uint skyboxIndex;
-    uint flags;
+    vec3 testColour;
+    uint skyboxTextureIndex;
 };
 
 layout(set = 1, binding = 0) uniform sampler2D globalTextures[];
@@ -46,5 +36,6 @@ layout (location = 0) out vec4 fragColour;
 
 void main()
 {
-	fragColour = texture(globalTexturesCube[nonuniformEXT(skyboxIndex)], dir);
+	fragColour = texture(globalTexturesCube[nonuniformEXT(skyboxTextureIndex)], dir);
+	//fragColour = vec4(testColour, 1.0);
 }
