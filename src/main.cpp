@@ -922,6 +922,16 @@ int main(int argc, char** argv)
 
     float modelScale = 0.1f;
     bool fullscreen = false;
+
+    MapBufferParameters skyboxCBMap = { skyboxUniformBuffer, 0, 0 };
+    void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
+
+    MapBufferParameters cbMap = { cubeCB, 0, 0 };
+    void* cbData = gpu.mapBuffer(cbMap);
+
+    MapBufferParameters skyboxMaterialMap = { skyboxMaterialBuffer, 0, 0 };
+    SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
+
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -1008,31 +1018,27 @@ int main(int argc, char** argv)
 
             gpuCommands->bindlessDescriptorSet(1);
 
-            //Update rotating cube data.
-            MapBufferParameters skyboxCBMap = { skyboxUniformBuffer, 0, 0 };
-            void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
+            //Update the perspective matrix for the skybox.
             if (skyboxCBData)
             {
                 //TODO: Match these name with what's in the shader.
                 UniformData uniformData{};
                 uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                //It needs to have no translation.
                 uniformData.viewPerspective.m30 = 0;
                 uniformData.viewPerspective.m31 = 0;
                 uniformData.viewPerspective.m32 = 0;
                 uniformData.viewPerspective.m33 = 1;
                 memcpy(skyboxCBData, &uniformData, sizeof(UniformData));
-                gpu.unmapBuffer(skyboxCBMap);
             }
 
-            MapBufferParameters skyboxMaterialMap = { skyboxMaterialBuffer, 0, 0 };
-            SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
+            //Maybe we can make this non-dymanic after things are working?
             if (skyboxMaterialBufferData)
             {
                 SkyboxData skyboxData{};
                 skyboxData.skyboxTextureIndex = skyboxTextureResource->handle.index;
                 skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
                 memcpy(skyboxMaterialBufferData, &skyboxData, sizeof(SkyboxData));
-                gpu.unmapBuffer(skyboxMaterialMap);
             }
 
             gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
@@ -1046,8 +1052,6 @@ int main(int argc, char** argv)
 
             mat4s globalModel{};
             //Update rotating cube data.
-            MapBufferParameters cbMap = { cubeCB, 0, 0 };
-            void* cbData = gpu.mapBuffer(cbMap);
             if (cbData)
             {
                 globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
@@ -1062,8 +1066,6 @@ int main(int argc, char** argv)
                 uniformData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
                 memcpy(cbData, &uniformData, sizeof(UniformData));
-
-                gpu.unmapBuffer(cbMap);
             }
 
             for (uint32_t i = 0; i < totalDucks; ++i)
@@ -1114,6 +1116,10 @@ int main(int argc, char** argv)
     }
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
+
+    gpu.unmapBuffer(cbMap);
+    gpu.unmapBuffer(skyboxMaterialMap);
+    gpu.unmapBuffer(skyboxCBMap);
 
     gpu.destroyBuffer(positionalBuffer);
 
