@@ -56,6 +56,8 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/GPUResources.cpp
                 src/Graphics/Renderer.hpp
                 src/Graphics/Renderer.cpp
+                src/Graphics/LoadGLTF.hpp
+                src/Graphics/LoadGLTF.cpp
 )
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
@@ -63,7 +65,6 @@ add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})
 if (WIN32)
     target_compile_definitions(Void PRIVATE
                                CGLM_FORCE_DEPTH_ZERO_TO_ONE
-                               CGLTF_IMPLEMENTATION
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX
@@ -72,7 +73,6 @@ if (WIN32)
 else(UNIX)
     target_compile_definitions(Void PRIVATE 
                                CGLM_FORCE_DEPTH_ZERO_TO_ONE
-                               CGLTF_IMPLEMENTATION
                                #VOID_IMGUI                     
                                VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
