@@ -1305,6 +1305,8 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
         memcpy(allocationInfo.pMappedData, creation.initialData, static_cast<size_t>(creation.size));
     }
 
+    buffer->mappedMemory = allocationInfo.pMappedData;
+
     VkBufferDeviceAddressInfo bufferBDAInfo{};
     bufferBDAInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     bufferBDAInfo.buffer = buffer->vkBuffer;

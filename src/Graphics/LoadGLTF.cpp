@@ -15,14 +15,6 @@
 #include "GPUResources.hpp"
 #include "Renderer.hpp"
 
-Array<Vertices> vertices;
-Array<void*> meshIndices;
-Array<SamplerResource> samplers;
-Array<TextureResource> images;
-StringBuffer resourceNameBuffer;
-
-SamplerHandle dummySampler;
-
 struct Transform
 {
     vec3s scale;
@@ -492,8 +484,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                 }
                 else
                 {
-                    VOID_ERROR("No position data found.");
-                    continue;
+                    VOID_ERROR("No position data found in model %s", modelPath);
                 }
 
                 if (normalAccessor)
@@ -514,7 +505,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                 }
                 else
                 {
-                    VOID_ERROR("The model needs normals.");
+                    VOID_ERROR("The model needs normals model %s", modelPath);
                 }
 
                 if (tangentAccessor)
@@ -536,7 +527,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                 }
                 else
                 {
-                    VOID_ERROR("The model needs tangent.");
+                    VOID_ERROR("The model needs tangent model %s", modelPath);
                 }
 
                 if (textureAccessor)
@@ -573,7 +564,6 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
     nodeStack.shutdown();
     nodeMatrix.shutdown();
 
-
     cgltf_free(cgltfData);
 }
 
@@ -588,13 +578,19 @@ void Model::shutdownModel(GPUDevice& gpu, Renderer& renderer)
         gpu.destroyBuffer(meshDraw.indexBuffer);
     }
 
-    gpu.destroySampler(dummySampler);
     meshDraws.shutdown();
+
+    gpu.destroySampler(dummySampler);
 
     //This is here to solve a bug that happens when allocating image from a .glb file. 
     for (uint32_t i = 0; i < images.size; ++i)
     {
         renderer.destroyTexture(&images[i]);
+    }
+
+    for (uint32_t i = 0; i < samplers.size; ++i)
+    {
+        renderer.destroySampler(&samplers[i]);
     }
 
     vertices.shutdown();

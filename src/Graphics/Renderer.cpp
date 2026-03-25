@@ -417,7 +417,6 @@ TextureResource* Renderer::createSkybox(const Array<const char*>& images, const 
         gpu->queryTexture(handle, texture->textureDescription);
         texture->references = 1;
         texture->name = cubemapName;
-
         resourceCache.textures.insert(hashCalculate(cubemapName), texture);
 
         return texture;

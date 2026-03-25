@@ -74,5 +74,13 @@ struct Model
 
     void loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
     void shutdownModel(GPUDevice& gpu, Renderer& renderer);
+
+    Array<Vertices> vertices;
+    Array<void*> meshIndices;
+    Array<SamplerResource> samplers;
+    Array<TextureResource> images;
+    StringBuffer resourceNameBuffer;
+
+    SamplerHandle dummySampler;
 };
 #endif // !LOAD_GLTF_HDR

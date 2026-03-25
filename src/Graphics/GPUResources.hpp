@@ -549,6 +549,7 @@ struct Buffer
     BufferHandle parentBuffer;
 
     const char* name = nullptr;
+    void* mappedMemory = nullptr;
 };
 
 struct Sampler 

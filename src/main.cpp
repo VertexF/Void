@@ -109,6 +109,14 @@ namespace
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
 }
 
+struct Entity 
+{
+    //If we do this we can have a gaint bindless positionally buffer that has everything in it we just index into the that position array.
+    uint32_t positionIndex;
+    //We can loop through all the entities and use that model index to fetch the meshDraw to be able to draw all the models regardless of the model.
+    uint32_t modelIndex;
+};
+
 int main(int argc, char** argv)
 {
     if (argc < 2)
@@ -220,9 +228,6 @@ int main(int argc, char** argv)
         .setName("sceneBuffer");
     sceneBuffer = gpu.createBuffer(uniformBufferCreation);
 
-    Model rock{};
-    rock.loadModel(DEFAULT_3D_MODEL, gpu, renderer, sceneBuffer, mainDescriptorSetLayout);
-
     Array<const char*> cubemapsImage;
     cubemapsImage.init(allocator, 6);
     cubemapsImage.push("Assets/Textures/1.png");
@@ -249,6 +254,16 @@ int main(int argc, char** argv)
     uint32_t totalDucks = 1111;
     Array<mat4s> drawMatrices;
     drawMatrices.init(allocator, totalDucks, totalDucks);
+    Array<Entity> entities;
+    entities.init(allocator, totalDucks, totalDucks);
+
+    constexpr uint32_t rockModelIndex = 0;
+    constexpr uint32_t duckModelIndex = 1;
+    Array<Model> models;
+    models.init(allocator, 2, 2);
+    models[rockModelIndex].loadModel(DEFAULT_3D_MODEL, gpu, renderer, sceneBuffer, mainDescriptorSetLayout);
+    models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, renderer, sceneBuffer, mainDescriptorSetLayout);
+
     float sceneRadius = 5000.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
     {
@@ -268,6 +283,16 @@ int main(int argc, char** argv)
         vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
         drawMatrices[i] = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(postion));
+
+        entities[i].positionIndex = i;
+        if (i % 2 == 0)
+        {
+            entities[i].modelIndex = rockModelIndex;
+        }
+        else 
+        {
+            entities[i].modelIndex = duckModelIndex;
+        }
     }
 
     PushConstants pushConstants{};
@@ -318,6 +343,7 @@ int main(int argc, char** argv)
     MapBufferParameters skyboxMaterialMap = { skyboxMaterialBuffer, 0, 0 };
     SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
+    vec3s newPosition{ 0 };
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -401,8 +427,6 @@ int main(int argc, char** argv)
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
 
-            gpuCommands->bindlessDescriptorSet(1);
-
             //Update the perspective matrix for the skybox.
             if (skyboxCBData)
             {
@@ -427,6 +451,8 @@ int main(int argc, char** argv)
             }
 
             gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
+            //Only do this once.
+            gpuCommands->bindlessDescriptorSet(1);
 
             gpuCommands->draw(36, 1, 0, 0);
 
@@ -434,6 +460,9 @@ int main(int argc, char** argv)
             gpuCommands->bindPipeline(cubePipeline);
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
+
+            //Only do this once.
+            gpuCommands->bindlessDescriptorSet(1);
 
             mat4s globalModel{};
             //Update rotating cube data.
@@ -453,18 +482,22 @@ int main(int argc, char** argv)
                 memcpy(cbData, &uniformData, sizeof(UniformData));
             }
 
-            for (uint32_t i = 0; i < totalDucks; ++i)
+            newPosition.z += 10 * deltaTime;
+
+            Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
+            pushConstants.modelPositionAddress = positionBuf->bufferAddress;
+            for (uint32_t entityIndex = 0; entityIndex < entities.size; ++entityIndex)
             {
-                Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
+                const Entity& entity = entities[entityIndex];
+                mat4s newPositionMat = drawMatrices[entity.positionIndex];
 
-                pushConstants.modelPositionAddress = positionBuf->bufferAddress;
-                pushConstants.index = i;
+                newPositionMat = glms_translate(newPositionMat, newPosition);
+                memcpy(((mat4s*)positionBuf->mappedMemory + entity.positionIndex), &newPositionMat, sizeof(mat4s));
 
-                //TODO find away to loop through all the models.
-                //We need some kind of index.
-                for (uint32_t meshIndex = 0; meshIndex < rock.meshDraws.size; ++meshIndex)
+                pushConstants.index = entity.positionIndex;
+                for (uint32_t meshIndex = 0; meshIndex < models[entity.modelIndex].meshDraws.size; ++meshIndex)
                 {
-                    MeshDraw meshDraw = rock.meshDraws[meshIndex];
+                    MeshDraw meshDraw = models[entity.modelIndex].meshDraws[meshIndex];
 
                     MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
                     MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
@@ -508,14 +541,19 @@ int main(int argc, char** argv)
     gpu.unmapBuffer(skyboxCBMap);
 
     gpu.destroyBuffer(positionalBuffer);
-
-    drawMatrices.shutdown();
+    //gpu.destroyTexture(skyboxTextureResource->handle);
 
     gpu.destroyDescriptorSet(skyboxDescriptorSet);
     gpu.destroyBuffer(skyboxMaterialBuffer);
     gpu.destroyBuffer(skyboxUniformBuffer);
 
-    rock.shutdownModel(gpu, renderer);
+    for (uint32_t i = 0; i < models.size; ++i)
+    {
+        models[i].shutdownModel(gpu, renderer);
+    }
+    models.shutdown();
+    drawMatrices.shutdown();
+    entities.shutdown();
 
     gpu.destroySampler(skyboxSampler);
 

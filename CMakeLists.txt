@@ -25,10 +25,12 @@ set(SPRIV_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/SPIRV-Reflect")
 set(MESHOP_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/meshoptimizer/src/")
 #Set the location of the engine source.
 set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(JOLT_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/JoltPhysics/Jolt")
 
 if(MSVC)
     set(VULKAN_LIB "$ENV{VULKAN_SDK}/Lib/vulkan-1.lib")
     set(SDL_LIB "${CMAKE_CURRENT_SOURCE_DIR}/libs/Win/SDL3/x64/SDL3.lib")
+    set(JOLT_LIB "${CMAKE_CURRENT_SOURCE_DIR}/vender/JoltPhysics/Build/VS2026_CL/Debug/Jolt.lib")
 endif()
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES "src/Shaders/*.vert" "src/Shaders/*.frag" "src/Shaders/*.comp" "src/Shaders/*.mesh" "src/Shaders/*.task")
@@ -88,7 +90,8 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${IMGUI_INCLUDE}
                                                ${CGLTF_INCLUDE}
                                                ${SPRIV_INCLUDE}
-                                               ${MESHOP_INCLUDE})
+                                               ${MESHOP_INCLUDE}
+											   ${JOLT_INCLUDE})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
@@ -154,7 +157,8 @@ target_include_directories(Foundation SYSTEM PRIVATE
 
 if (WIN32)
     target_link_libraries(Void PRIVATE
-                          ${SDL_LIB})
+                          ${SDL_LIB}
+						  ${VOLD_LIB})
 else()
     target_link_libraries(Void PRIVATE
                           dl
