@@ -20,9 +20,9 @@ struct BufferResource : public Resource
 
 struct TextureResource : public Resource 
 {
-    TextureHandle handle;
-    uint32_t poolIndex;
-    TextureDescription textureDescription;
+    TextureHandle handle{UINT32_MAX};
+    uint32_t poolIndex{UINT32_MAX};
+    TextureDescription textureDescription{};
 
     static constexpr const char* TYPE = "Void_Texture_Type";
     static uint64_t TYPE_HASH;

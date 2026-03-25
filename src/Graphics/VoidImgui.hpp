@@ -43,16 +43,16 @@ struct ImguiService
 };
 
 //Application log
-static void imguiPrint(const char* text);
-static void imguiLogInit();
-static void imguiLogShutdown();
+// static void imguiPrint(const char* text);
+// static void imguiLogInit();
+// static void imguiLogShutdown();
 
-static void imguiLogDraw();
+// static void imguiLogDraw();
 
 //FPS graph
-static void imguiFPSInit();
-static void imguiFPSShutdown();
-static void imguiFPSAdd(float deltaTime);
-static void imguiFPSDraw();
+// static void imguiFPSInit();
+// static void imguiFPSShutdown();
+// static void imguiFPSAdd(float deltaTime);
+// static void imguiFPSDraw();
 
 #endif // !AIR_IMGUI_HDR

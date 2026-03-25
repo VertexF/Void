@@ -28,7 +28,6 @@
 #include <SDL3/SDL.h>
 #include <stb_image.h>
 
-#include <spirv_reflect.h>
 #include <meshoptimizer.h>
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
@@ -305,12 +304,15 @@ int main(int argc, char** argv)
             int y;
             uint8_t* textureData = stbi_load_from_memory(rawBufferData, int(image.buffer_view->size), &x, &y, &comp, 4);
 
+            char buffer[50];
+            snprintf(buffer, sizeof(buffer), "NoName.ImageIndex%d", imageIndex);
+
             TextureCreation textureCreation{};
             textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
                 .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
                 .setData(textureData)
                 .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                .setName(nullptr);
+                .setName(buffer);
 
             TextureResource* textureResource = renderer.createTexture(textureCreation);
             VOID_ASSERT(textureResource != nullptr);
@@ -578,7 +580,7 @@ int main(int argc, char** argv)
                         }
                         else
                         {
-                            meshDraw.diffuseTextureIndex = INVALID_INDEX;
+                            meshDraw.diffuseTextureIndex = UINT16_MAX;
                         }
 
                         if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
@@ -601,7 +603,7 @@ int main(int argc, char** argv)
                         }
                         else
                         {
-                            meshDraw.roughnessTextureIndex = INVALID_INDEX;
+                            meshDraw.roughnessTextureIndex = UINT16_MAX;
                         }
                     }
 
@@ -631,7 +633,7 @@ int main(int argc, char** argv)
                     else
                     {
                         meshDraw.metallicRoughnessOcclusionFactor.z = 1.f;
-                        meshDraw.occlusionTextureIndex = INVALID_INDEX;
+                        meshDraw.occlusionTextureIndex = UINT16_MAX;
                     }
 
                     if (material->emissive_texture.texture != nullptr)
@@ -662,7 +664,7 @@ int main(int argc, char** argv)
                     }
                     else
                     {
-                        meshDraw.emisiveTextureIndex = INVALID_INDEX;
+                        meshDraw.emisiveTextureIndex = UINT16_MAX;
                     }
 
                     if (material->normal_texture.texture != nullptr)
@@ -685,7 +687,7 @@ int main(int argc, char** argv)
                     }
                     else
                     {
-                        meshDraw.normalTextureIndex = INVALID_INDEX;
+                        meshDraw.normalTextureIndex = UINT16_MAX;
                     }
 
                     const cgltf_accessor* positionAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_position, 0);
@@ -835,8 +837,6 @@ int main(int argc, char** argv)
     int64_t beginFrameTick = timeNow();
 
     vec3s eye = vec3s{ 0.f, 2.5f, 2.f };
-    vec3s look = vec3s{ 0.f, 0.f, -1.f };
-    vec3s right = vec3s{ 1.f, 0.f, 0.f };
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
@@ -844,7 +844,6 @@ int main(int argc, char** argv)
 
     float modelScale = 0.1f;
     bool fullscreen = false;
-    versors rotation = glms_quat_identity();
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -1018,18 +1017,22 @@ int main(int argc, char** argv)
     meshDraws.shutdown();
 
     gpu.destroyBuffer(cubeCB);
-    gpu.destroyPipeline(cubePipeline);
     gpu.destroyDescriptorSetLayout(cubeDSL);
+    gpu.destroyPipeline(cubePipeline);
 
     imgui->shutdown();
 
     gpuProfiler.shutdown();
     resourceManager.shutdown();
 
-    //This is here to solve a bug that happens when allocating image from a .glb file. 
     for (uint32_t i = 0; i < images.size; ++i)
     {
         renderer.destroyTexture(&images[i]);
+    }
+
+    for (uint32_t i = 0; i < samplers.size; ++i)
+    {
+        renderer.destroySampler(&samplers[i]);
     }
 
     renderer.shutdown();

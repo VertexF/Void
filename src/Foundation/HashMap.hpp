@@ -85,7 +85,7 @@ namespace
     //General notes of capacity/growth methods below:
     //We use 7/8th as a maximum load factor. For 16-wide groups, that gives an average of two empty slots per group.
     //For (capacity + 1) >= Group::WIDTH, growth 7/8 * capacity.
-    //For (capacity + 1) <  Group::WIFTH, growth == capacity. - In this case, we never need to probe (the whole table fits in one group)
+    //For (capacity + 1) <  Group::WIDTH, growth == capacity. - In this case, we never need to probe (the whole table fits in one group)
     //so we don't need a load factor less than 1
 
     //Give 'capacity' of the table, returns the size (i.e. number of full slots) at which we should grow the capacity.
@@ -138,7 +138,7 @@ namespace
         return rapidhash_withSeed(data, lenght, seed);
     }
 
-    const uint64_t ITERATOR_END = UINT64_MAX;
+    static constexpr uint64_t ITERATOR_END = UINT64_MAX;
 }//TED
 
 struct GroupSse2Impl
