@@ -304,15 +304,12 @@ int main(int argc, char** argv)
             int y;
             uint8_t* textureData = stbi_load_from_memory(rawBufferData, int(image.buffer_view->size), &x, &y, &comp, 4);
 
-            char buffer[50];
-            snprintf(buffer, sizeof(buffer), "NoName.ImageIndex%d", imageIndex);
-
             TextureCreation textureCreation{};
             textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
                 .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
                 .setData(textureData)
                 .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                .setName(buffer);
+                .setName(nullptr);
 
             TextureResource* textureResource = renderer.createTexture(textureCreation);
             VOID_ASSERT(textureResource != nullptr);
@@ -361,10 +358,6 @@ int main(int argc, char** argv)
 
     Array<MeshDraw> meshDraws;
     meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
-
-    //We have no idea if it's 
-    Array<void*> meshIndices;
-    meshIndices.init(allocator, 256);
 
     cgltf_component_type componentType = cgltf_component_type_max_enum;
     Array<Vertices> vertices;
@@ -1038,7 +1031,6 @@ int main(int argc, char** argv)
     renderer.shutdown();
 
     vertices.shutdown();
-    meshIndices.shutdown();
     samplers.shutdown();
     images.shutdown();
 

@@ -33,26 +33,10 @@ struct ImguiService
     void newFrame();
     void render(CommandBuffer& commands);
 
-    //Removes the Texture from the cache and destroy the associated resource list.
-    void removeCachedTexture(TextureHandle& texture);
-
     void setStyle(ImguiStyles style);
 
     GPUDevice* gpu;
     ImFont* font;
 };
-
-//Application log
-// static void imguiPrint(const char* text);
-// static void imguiLogInit();
-// static void imguiLogShutdown();
-
-// static void imguiLogDraw();
-
-//FPS graph
-// static void imguiFPSInit();
-// static void imguiFPSShutdown();
-// static void imguiFPSAdd(float deltaTime);
-// static void imguiFPSDraw();
 
 #endif // !AIR_IMGUI_HDR

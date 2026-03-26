@@ -345,6 +345,7 @@ namespace
         gpu->destroyBuffer(vertexBufferHandle);
         gpu->destroyBuffer(indexBufferHandle);
         gpu->destroyBuffer(uiBufferUniformHandle);
+        gpu->destroyDescriptorSet(uiDescriptorSet);
         gpu->destroyDescriptorSetLayout(sDescriptorSetLayout);
 
         gpu->destroyPipeline(imguiPipelineHandle);
@@ -465,10 +466,6 @@ namespace
 
         //Render command lists.
         int counts = drawData->CmdListsCount;
-        //TextureHandle lastTexture = fontTextureHandle;
-
-        //TODO: set up the mapping with this descriptor set like how you do it with the textures.
-        //DescriptorSetHandle lastDescriptorSet = { textureToDescriptorSet.get(lastTexture.index) };
 
         commands.bindDescriptorSet(&uiDescriptorSet, 1, nullptr, 0, 0);
         commands.bindlessDescriptorSet(1);
@@ -532,12 +529,6 @@ namespace
         }
 
         commands.popMarker();
-    }
-
-    //Removes the Texture from the cache and destroy the associated descriptor set.
-    void ImguiService::removeCachedTexture(TextureHandle& texture)
-    {
-
     }
 
     void ImguiService::setStyle(ImguiStyles style)
@@ -692,113 +683,3 @@ namespace
             ImGui::End();
         }
     };
-
-    static AppLogger IMGUI_LOG;
-    //static bool IMGUI_LOG_OPEN = true;
-
-    // void imguiPrint(const char* text)
-    // {
-    //     IMGUI_LOG.addLog("%s", text);
-    // }
-
-    // void imguiLogInit()
-    // {
-    //     LogService::instance()->setCallback(&imguiPrint);
-    // }
-
-    // void imguiLogShutdown()
-    // {
-    //     LogService::instance()->setCallback(nullptr);
-    // }
-
-    // void imguiLogDraw()
-    // {
-    //     IMGUI_LOG.draw("Log", &IMGUI_LOG_OPEN);
-    // }
-
-    //Plot with a ring buffer
-    //https://github.com/leiradel/ImGuiAl
-    template<typename T, size_t L>
-    class Sparkline
-    {
-    public:
-        Sparkline()
-        {
-            setLimits(0, 1);
-            clear();
-        }
-
-        void setLimits(T const min, T const max)
-        {
-            _min = static_cast<float>(min);
-            _max = static_cast<float>(max);
-        }
-
-        void add(T const value)
-        {
-            _offset = (_offset + 1) % L;
-            _values[_offset] = value;
-        }
-
-        void clear()
-        {
-            memset(_values, 0, L * sizeof(T));
-            _offset = L - 1;
-        }
-
-        void draw(char const* const label = "", ImVec2 const size = ImVec2()) const
-        {
-            char overlay[32];
-            print(overlay, sizeof(overlay), _values[_offset]);
-
-            ImGui::PlotLines(label, getValue, const_cast<Sparkline*>(this), L, 0, overlay, _min, _max, size);
-        }
-
-    private:
-        float _min;
-        float _max;
-        T _values[L];
-        size_t _offset;
-
-        static float getValue(void* const data, int const idx)
-        {
-            Sparkline const* const self = static_cast<Sparkline*>(data);
-            size_t const index = (idx + self->_offset + 1) % L;
-
-            return static_cast<float>(self->_values[index]);
-        }
-
-        static void print(char* const buffer, size_t const bufferLen, int const value)
-        {
-            snprintf(buffer, bufferLen, "%d", value);
-        }
-
-        static void print(char* const buffer, size_t const bufferLen, double const value)
-        {
-            snprintf(buffer, bufferLen, "%f", value);
-        }
-    };
-
-    static Sparkline<float, 100> FPS_LINE;
-
-    // //FPS graph
-    // void imguiFPSInit()
-    // {
-    //     FPS_LINE.clear();
-    //     FPS_LINE.setLimits(0.f, 33.f);
-    // }
-
-    // void imguiFPSShutdown()
-    // {
-    // }
-
-    // void imguiFPSAdd(float deltaTime)
-    // {
-    //     FPS_LINE.add(deltaTime);
-    // }
-
-    // void imguiFPSDraw()
-    // {
-    //     ImVec2 size(0, 100);
-    //     FPS_LINE.draw("FPS", size);
-    // }

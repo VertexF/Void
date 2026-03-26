@@ -192,6 +192,7 @@ void ResourceCache::init(Allocator *allocator)
 void ResourceCache::shutdown(Renderer *renderer)
 {
     FlatHashMapIterator it = textures.iteratorBegin();
+
     while (it.isValid())
     {
         TextureResource *texture = textures.get(it);
@@ -201,18 +202,20 @@ void ResourceCache::shutdown(Renderer *renderer)
     }
 
     it = buffers.iteratorBegin();
+
     while (it.isValid())
     {
-        BufferResource* buffer = buffers.get(it);
+        BufferResource *buffer = buffers.get(it);
         renderer->destroyBuffer(buffer);
 
         buffers.iteratorAdvance(it);
     }
 
     it = samplers.iteratorBegin();
+
     while (it.isValid())
     {
-        SamplerResource* resource = samplers.get(it);
+        SamplerResource *resource = samplers.get(it);
         renderer->destroySampler(resource);
 
         samplers.iteratorAdvance(it);
@@ -288,7 +291,7 @@ void Renderer::resizeSwapchain(uint32_t newWidth, uint32_t newHeight)
 
 float Renderer::aspectRatio() const
 {
-    return gpu->swapchainWidth * 1.f / gpu->swapchainHeight;
+    return gpu->swapchainWidth  *1.f / gpu->swapchainHeight;
 }
 
 // Creation/destruction
@@ -399,7 +402,10 @@ void Renderer::destroyBuffer(BufferResource *buffer)
         return;
     }
 
-    resourceCache.buffers.remove(hashCalculate(buffer->description.name));
+    if (buffer->description.name)
+    {
+        resourceCache.buffers.remove(hashCalculate(buffer->description.name));
+    }
     gpu->destroyBuffer(buffer->handle);
     buffers.release(buffer);
 }
@@ -417,7 +423,7 @@ void Renderer::destroyTexture(TextureResource *texture)
         return;
     }
 
-    // TODO: We likely need another way of access these texture other than by name.
+    //TODO: We likely need another way of access these texture other than by name.
     if (texture->textureDescription.name)
     {
         resourceCache.textures.remove(hashCalculate(texture->textureDescription.name));
@@ -440,7 +446,11 @@ void Renderer::destroySampler(SamplerResource *sampler)
         return;
     }
 
-    resourceCache.samplers.remove(hashCalculate(sampler->samplerDescription.name));
+    if (sampler->samplerDescription.name)
+    {
+        resourceCache.samplers.remove(hashCalculate(sampler->samplerDescription.name));
+    }
+
     gpu->destroySampler(sampler->handle);
     samplers.release(sampler);
 }

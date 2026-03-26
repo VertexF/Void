@@ -39,7 +39,6 @@ void ResourcePool::shutdown() const
         }
     }
 
-    vprint("usedIndices value is %d\n", usedIndices);
     VOID_ASSERT(usedIndices == 0);
 
     allocator->deallocate(memory);
