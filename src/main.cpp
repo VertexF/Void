@@ -324,8 +324,6 @@ int main(int argc, char** argv)
     int64_t beginFrameTick = timeNow();
 
     vec3s eye = vec3s{ 0.f, 2.5f, 2.f };
-    vec3s look = vec3s{ 0.f, 0.f, -1.f };
-    vec3s right = vec3s{ 1.f, 0.f, 0.f };
 
     GameCamera gameCamera;
     gameCamera.internal3DCamera.initPerspective(0.01f, 1000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
@@ -344,6 +342,7 @@ int main(int argc, char** argv)
     SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
     vec3s newPosition{ 0 };
+
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -541,7 +540,6 @@ int main(int argc, char** argv)
     gpu.unmapBuffer(skyboxCBMap);
 
     gpu.destroyBuffer(positionalBuffer);
-    //gpu.destroyTexture(skyboxTextureResource->handle);
 
     gpu.destroyDescriptorSet(skyboxDescriptorSet);
     gpu.destroyBuffer(skyboxMaterialBuffer);
@@ -558,10 +556,10 @@ int main(int argc, char** argv)
     gpu.destroySampler(skyboxSampler);
 
     gpu.destroyBuffer(sceneBuffer);
-    gpu.destroyPipeline(cubePipeline);
-    gpu.destroyPipeline(skyboxPipeline);
     gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
     gpu.destroyDescriptorSetLayout(skyboxDescriptorSetLayout);
+    gpu.destroyPipeline(cubePipeline);
+    gpu.destroyPipeline(skyboxPipeline);
 
     imgui->shutdown();
 

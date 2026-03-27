@@ -7,25 +7,25 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "vender/stb_image.h"
 
-namespace 
+namespace
 {
-    TextureHandle createTextureFromFile(GPUDevice& gpu, const char* filename, const char* name) 
+    TextureHandle createTextureFromFile(GPUDevice &gpu, const char *filename, const char *name)
     {
-        if (filename) 
+        if (filename)
         {
             int comp;
             int width;
             int height;
             uint8_t mipLevels = 1;
 
-            uint8_t* imageData = stbi_load(filename, &width, &height, &comp, 4);
-            if (imageData == nullptr) 
+            uint8_t *imageData = stbi_load(filename, &width, &height, &comp, 4);
+            if (imageData == nullptr)
             {
                 vprint("Error loading texture %s", filename);
                 return INVALID_TEXTURE;
             }
 
-            //TODO: Add mipmap support later.
+            // TODO: Add mipmap support later.
             uint32_t w = width;
             uint32_t h = height;
 
@@ -39,10 +39,10 @@ namespace
 
             TextureCreation creation;
             creation.setData(imageData)
-                    .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-                    .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                    .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
-                    .setName(name);
+                .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+                .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
+                .setName(name);
 
             TextureHandle newTexture = gpu.createTexture(creation);
 
@@ -70,7 +70,7 @@ namespace
                 uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
                 if (imageData == nullptr)
                 {
-                    vprint("Error loading texture %s", images[i]);
+                    VOID_ERROR("Error loading texture %s", images[i]);
                     return INVALID_TEXTURE;
                 }
 
@@ -94,60 +94,60 @@ namespace
     }
 }//Anon
 
-//Resource Loading
-struct TextureLoader : public ResourceLoader 
+// Resource Loading
+struct TextureLoader : public ResourceLoader
 {
     virtual ~TextureLoader() = default;
 
-    virtual Resource* get(const char* name) override;
-    virtual Resource* get(uint64_t hashedName) override;
+    virtual Resource *get(const char *name) override;
+    virtual Resource *get(uint64_t hashedName) override;
 
-    virtual Resource* unload(const char* name) override;
-    virtual Resource* createFromFile(const char* name, const char* filename, ResourceManager* resourceManager) override;
+    virtual Resource *unload(const char *name) override;
+    virtual Resource *createFromFile(const char *name, const char *filename, ResourceManager *resourceManager) override;
 
-    Renderer* renderer;
+    Renderer *renderer;
 };
 
 struct BufferLoader : public ResourceLoader
 {
     virtual ~BufferLoader() = default;
 
-    virtual Resource* get(const char* name) override;
-    virtual Resource* get(uint64_t hashedName) override;
+    virtual Resource *get(const char *name) override;
+    virtual Resource *get(uint64_t hashedName) override;
 
-    virtual Resource* unload(const char* name) override;
+    virtual Resource *unload(const char *name) override;
 
-    Renderer* renderer;
+    Renderer *renderer;
 };
 
 struct SamplerLoader : public ResourceLoader
 {
     virtual ~SamplerLoader() = default;
 
-    virtual Resource* get(const char* name) override;
-    virtual Resource* get(uint64_t hashedName) override;
+    virtual Resource *get(const char *name) override;
+    virtual Resource *get(uint64_t hashedName) override;
 
-    virtual Resource* unload(const char* name) override;
+    virtual Resource *unload(const char *name) override;
 
-    Renderer* renderer;
+    Renderer *renderer;
 };
 
-Resource* TextureLoader::get(const char* name) 
+Resource *TextureLoader::get(const char *name)
 {
     const uint64_t hashedName = hashCalculate(name);
     return renderer->resourceCache.textures.get(hashedName);
 }
 
-Resource* TextureLoader::get(uint64_t hashedName) 
+Resource *TextureLoader::get(uint64_t hashedName)
 {
     return renderer->resourceCache.textures.get(hashedName);
 }
 
-Resource* TextureLoader::unload(const char* name) 
+Resource *TextureLoader::unload(const char *name)
 {
     const uint64_t hashedName = hashCalculate(name);
-    TextureResource* texture = renderer->resourceCache.textures.get(hashedName);
-    if (texture) 
+    TextureResource *texture = renderer->resourceCache.textures.get(hashedName);
+    if (texture)
     {
         renderer->destroyTexture(texture);
     }
@@ -155,26 +155,26 @@ Resource* TextureLoader::unload(const char* name)
     return nullptr;
 }
 
-Resource* TextureLoader::createFromFile(const char* name, const char* filename, ResourceManager* /*resourceManager*/) 
+Resource *TextureLoader::createFromFile(const char *name, const char *filename, ResourceManager * /*resourceManager*/)
 {
     return renderer->createTexture(name, filename);
 }
 
-Resource* BufferLoader::get(const char* name) 
+Resource *BufferLoader::get(const char *name)
 {
     const uint64_t hashedName = hashCalculate(name);
     return renderer->resourceCache.buffers.get(hashedName);
 }
 
-Resource* BufferLoader::get(uint64_t hashedName) 
+Resource *BufferLoader::get(uint64_t hashedName)
 {
     return renderer->resourceCache.buffers.get(hashedName);
 }
 
-Resource* BufferLoader::unload(const char* name) 
+Resource *BufferLoader::unload(const char *name)
 {
     const uint64_t hashedName = hashCalculate(name);
-    BufferResource* buffer = renderer->resourceCache.buffers.get(hashedName);
+    BufferResource *buffer = renderer->resourceCache.buffers.get(hashedName);
     if (buffer)
     {
         renderer->destroyBuffer(buffer);
@@ -183,21 +183,21 @@ Resource* BufferLoader::unload(const char* name)
     return nullptr;
 }
 
-Resource* SamplerLoader::get(const char* name)
+Resource *SamplerLoader::get(const char *name)
 {
     const uint64_t hashedName = hashCalculate(name);
     return renderer->resourceCache.samplers.get(hashedName);
 }
 
-Resource* SamplerLoader::get(uint64_t hashedName)
+Resource *SamplerLoader::get(uint64_t hashedName)
 {
     return renderer->resourceCache.samplers.get(hashedName);
 }
 
-Resource* SamplerLoader::unload(const char* name)
+Resource *SamplerLoader::unload(const char *name)
 {
     const uint64_t hashedName = hashCalculate(name);
-    SamplerResource* sampler = renderer->resourceCache.samplers.get(hashedName);
+    SamplerResource *sampler = renderer->resourceCache.samplers.get(hashedName);
     if (sampler)
     {
         renderer->destroySampler(sampler);
@@ -214,27 +214,27 @@ static TextureLoader TEXTURE_LOADER;
 static BufferLoader BUFFER_LOADER;
 static SamplerLoader SAMPLER_LOADER;
 
-Renderer* Renderer::instance() 
+Renderer *Renderer::instance()
 {
     static Renderer renderer;
     return &renderer;
 }
 
-void ResourceCache::init(Allocator* allocator) 
+void ResourceCache::init(Allocator *allocator)
 {
-    //Init resources caching
+    // Init resources caching
     textures.init(allocator, 16);
     buffers.init(allocator, 16);
     samplers.init(allocator, 16);
 }
 
-void ResourceCache::shutdown(Renderer* renderer) 
+void ResourceCache::shutdown(Renderer *renderer)
 {
     FlatHashMapIterator it = textures.iteratorBegin();
 
-    while (it.isValid()) 
+    while (it.isValid())
     {
-        TextureResource* texture = textures.get(it);
+        TextureResource *texture = textures.get(it);
         renderer->destroyTexture(texture);
 
         textures.iteratorAdvance(it);
@@ -244,7 +244,7 @@ void ResourceCache::shutdown(Renderer* renderer)
 
     while (it.isValid())
     {
-        BufferResource* buffer = buffers.get(it);
+        BufferResource *buffer = buffers.get(it);
         renderer->destroyBuffer(buffer);
 
         buffers.iteratorAdvance(it);
@@ -254,7 +254,7 @@ void ResourceCache::shutdown(Renderer* renderer)
 
     while (it.isValid())
     {
-        SamplerResource* resource = samplers.get(it);
+        SamplerResource *resource = samplers.get(it);
         renderer->destroySampler(resource);
 
         samplers.iteratorAdvance(it);
@@ -265,7 +265,7 @@ void ResourceCache::shutdown(Renderer* renderer)
     samplers.shutdown();
 }
 
-void Renderer::init(const RenderCreation& creation) 
+void Renderer::init(const RenderCreation &creation)
 {
     vprint("Renderer init.\n");
 
@@ -290,7 +290,7 @@ void Renderer::init(const RenderCreation& creation)
     SAMPLER_LOADER.renderer = this;
 }
 
-void Renderer::shutdown() 
+void Renderer::shutdown()
 {
     resourceCache.shutdown(this);
 
@@ -303,19 +303,19 @@ void Renderer::shutdown()
     gpu->shutdown();
 }
 
-void Renderer::setLoaders(ResourceManager* manager) 
+void Renderer::setLoaders(ResourceManager *manager)
 {
     manager->setLoader(TextureResource::TYPE, &TEXTURE_LOADER);
     manager->setLoader(BufferResource::TYPE, &BUFFER_LOADER);
     manager->setLoader(SamplerResource::TYPE, &SAMPLER_LOADER);
 }
 
-void Renderer::beginFrame() 
+void Renderer::beginFrame()
 {
     gpu->newFrame();
 }
 
-void Renderer::endFrame() 
+void Renderer::endFrame()
 {
     gpu->present();
 }
@@ -328,23 +328,23 @@ void Renderer::resizeSwapchain(uint32_t newWidth, uint32_t newHeight)
     height = gpu->swapchainHeight;
 }
 
-float Renderer::aspectRatio() const 
+float Renderer::aspectRatio() const
 {
-    return gpu->swapchainWidth * 1.f / gpu->swapchainHeight;
+    return gpu->swapchainWidth  *1.f / gpu->swapchainHeight;
 }
 
-//Creation/destruction
-BufferResource* Renderer::createBuffer(const BufferCreation& creation) 
+// Creation/destruction
+BufferResource *Renderer::createBuffer(const BufferCreation &creation)
 {
-    BufferResource* buffer = buffers.obtain();
-    if (buffer) 
+    BufferResource *buffer = buffers.obtain();
+    if (buffer)
     {
         BufferHandle handle = gpu->createBuffer(creation);
         buffer->handle = handle;
         buffer->name = creation.name;
         gpu->queryBuffer(handle, buffer->description);
 
-        if (creation.name != nullptr) 
+        if (creation.name != nullptr)
         {
             resourceCache.buffers.insert(hashCalculate(creation.name), buffer);
         }
@@ -357,25 +357,25 @@ BufferResource* Renderer::createBuffer(const BufferCreation& creation)
     return nullptr;
 }
 
-BufferResource* Renderer::createBuffer(VkBufferUsageFlags type,
-                                        uint32_t size, void* data, const char* name) 
+BufferResource *Renderer::createBuffer(VkBufferUsageFlags type,
+                                       uint32_t size, void *data, const char *name)
 {
-    BufferCreation creation = { type, size, data, name };
+    BufferCreation creation = {type, size, data, name};
     return createBuffer(creation);
 }
 
-TextureResource* Renderer::createTexture(const TextureCreation& creation) 
+TextureResource *Renderer::createTexture(const TextureCreation &creation)
 {
-    TextureResource* texture = textures.obtain();
+    TextureResource *texture = textures.obtain();
 
-    if (texture) 
+    if (texture)
     {
         TextureHandle handle = gpu->createTexture(creation);
         texture->handle = handle;
         texture->name = creation.name;
         gpu->queryTexture(handle, texture->textureDescription);
 
-        if (creation.name != nullptr) 
+        if (creation.name != nullptr)
         {
             resourceCache.textures.insert(hashCalculate(creation.name), texture);
         }
@@ -387,11 +387,11 @@ TextureResource* Renderer::createTexture(const TextureCreation& creation)
     return nullptr;
 }
 
-TextureResource* Renderer::createTexture(const char* name, const char* filename) 
+TextureResource *Renderer::createTexture(const char *name, const char *filename)
 {
-    TextureResource* texture = textures.obtain();
+    TextureResource *texture = textures.obtain();
 
-    if (texture) 
+    if (texture)
     {
         TextureHandle handle = createTextureFromFile(*gpu, filename, name);
         texture->handle = handle;
@@ -426,8 +426,8 @@ TextureResource* Renderer::createSkybox(const Array<const char*>& images, const 
 
 SamplerResource* Renderer::createSampler(const SamplerCreation& creation) 
 {
-    SamplerResource* sampler = samplers.obtain();
-    if (sampler) 
+    SamplerResource *sampler = samplers.obtain();
+    if (sampler)
     {
         SamplerHandle handle = gpu->createSampler(creation);
         sampler->handle = handle;
@@ -446,25 +446,28 @@ SamplerResource* Renderer::createSampler(const SamplerCreation& creation)
     return nullptr;
 }
 
-void Renderer::destroyBuffer(BufferResource* buffer) 
+void Renderer::destroyBuffer(BufferResource *buffer)
 {
-    if (buffer == nullptr) 
+    if (buffer == nullptr)
     {
         return;
     }
 
     buffer->removeReference();
-    if (buffer->references) 
+    if (buffer->references)
     {
         return;
     }
 
-    resourceCache.buffers.remove(hashCalculate(buffer->description.name));
+    if (buffer->description.name)
+    {
+        resourceCache.buffers.remove(hashCalculate(buffer->description.name));
+    }
     gpu->destroyBuffer(buffer->handle);
     buffers.release(buffer);
 }
 
-void Renderer::destroyTexture(TextureResource* texture) 
+void Renderer::destroyTexture(TextureResource *texture)
 {
     if (texture == nullptr)
     {
@@ -477,7 +480,7 @@ void Renderer::destroyTexture(TextureResource* texture)
         return;
     }
 
-    //TODO: We likely need another way of access these texture other than by name. 
+    //TODO: We likely need another way of access these texture other than by name.
     if (texture->textureDescription.name)
     {
         resourceCache.textures.remove(hashCalculate(texture->textureDescription.name));
@@ -487,7 +490,7 @@ void Renderer::destroyTexture(TextureResource* texture)
     textures.release(texture);
 }
 
-void Renderer::destroySampler(SamplerResource* sampler) 
+void Renderer::destroySampler(SamplerResource *sampler)
 {
     if (sampler == nullptr)
     {
@@ -500,33 +503,37 @@ void Renderer::destroySampler(SamplerResource* sampler)
         return;
     }
 
-    resourceCache.samplers.remove(hashCalculate(sampler->samplerDescription.name));
+    if (sampler->samplerDescription.name)
+    {
+        resourceCache.samplers.remove(hashCalculate(sampler->samplerDescription.name));
+    }
+
     gpu->destroySampler(sampler->handle);
     samplers.release(sampler);
 }
 
-//Update resource
-void* Renderer::mapBuffer(BufferResource* buffer, uint32_t offset/* = 0*/, uint32_t size/* = 0*/) 
+// Update resource
+void *Renderer::mapBuffer(BufferResource *buffer, uint32_t offset /* = 0*/, uint32_t size /* = 0*/)
 {
-    MapBufferParameters cbMap = { buffer->handle, offset, size };
+    MapBufferParameters cbMap = {buffer->handle, offset, size};
     return gpu->mapBuffer(cbMap);
 }
 
-void Renderer::upmapBuffer(BufferResource* buffer) 
+void Renderer::upmapBuffer(BufferResource *buffer)
 {
-    if (buffer->description.parentHandle.index == INVALID_INDEX) 
+    if (buffer->description.parentHandle.index == INVALID_INDEX)
     {
-        MapBufferParameters cbMap = { buffer->handle, 0, 0 };
+        MapBufferParameters cbMap = {buffer->handle, 0, 0};
         gpu->unmapBuffer(cbMap);
     }
 }
 
-CommandBuffer* Renderer::getCommandBuffer(VkQueueFlagBits type, bool begin)
+CommandBuffer *Renderer::getCommandBuffer(VkQueueFlagBits type, bool begin)
 {
     return gpu->getCommandBuffer(type, begin);
 }
 
-void Renderer::queueCommandBuffer(CommandBuffer* commands)
+void Renderer::queueCommandBuffer(CommandBuffer *commands)
 {
     gpu->queueCommandBuffer(commands);
 }

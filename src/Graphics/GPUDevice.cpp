@@ -99,20 +99,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     }
 #endif //VULKAN_DEBUG_REPORT
 
-    void checkResult(VkResult result)
-    {
-        if (result == VK_SUCCESS)
-        {
-            return;
-        }
-
-        vprint("Vulkan error: code: code(%u)", result);
-        if (result < 0)
-        {
-            VOID_ASSERTM(false, "Vulkan error: aborting.");
-        }
-    }
-
 #define check(result) VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Asset Code %u", result)
 
     SDL_Window* SDLWindow;
@@ -188,6 +174,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+        {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         }
 
         vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
@@ -714,6 +708,7 @@ void GPUDevice::init(const DeviceCreation& creation)
 #endif //VULKAN_SYNCHRONIZATION_VALIDATION
 #endif //VULKAN_DEBUG_REPORT
 
+vprint("Instance created.\n");
     result = vkCreateInstance(&createInfo, vulkanAllocationCallbacks, &vulkanInstance);
     check(result);
 
@@ -769,6 +764,7 @@ void GPUDevice::init(const DeviceCreation& creation)
 
     SDLWindow = window;
 
+    vprint("SDL window created\n");
     VkPhysicalDevice discreteGPU = VK_NULL_HANDLE;
     VkPhysicalDevice integrateGPU = VK_NULL_HANDLE;
     for (uint32_t i = 0; i < numPhysicalDevice; ++i)
@@ -870,6 +866,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
     deviceCreateInfo.pNext = &physicalDeviceFeature2;
 
+    vprint("Local Device created\n");
     result = vkCreateDevice(vulkanPhysicalDevice, &deviceCreateInfo, vulkanAllocationCallbacks, &vulkanDevice);
     check(result);
 
@@ -1026,6 +1023,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     renderFinishSemaphore.init(allocator, swapchainImageCount, swapchainImageCount);
     framesInFlight.init(allocator, swapchainImageCount, swapchainImageCount);
 
+    vprint("Semaphores created.\n");
     for (uint32_t i = 0; i < swapchainImageCount; ++i)
     {
         vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &imageAvailableSemaphore[i]);
@@ -1069,6 +1067,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     fullscreenBufferVbCreation.name = "FullscreenVB";
     fullscreenVertexBuffer = createBuffer(fullscreenBufferVbCreation);
 
+    vprint("TODO: Move this transition.\n");
     //Create depth image
     TextureCreation depthTextureCreation{};
     depthTextureCreation.initialData = nullptr;
@@ -1082,6 +1081,29 @@ void GPUDevice::init(const DeviceCreation& creation)
     depthTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
     depthTextureCreation.name = "DepthImage_Texture";
     depthTexture = createTexture(depthTextureCreation);
+
+    Texture* depthTex = accessTexture(depthTexture);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    CommandBuffer* commandBuffer = getInstantCommandBuffer();
+    vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
+
+    transitionImageLayout(commandBuffer->vkCommandBuffer, depthTex->vkImage, depthTex->vkFormat,
+                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
+
+    vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
+
+    //Submit command buffer
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
+
+    vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(vulkanQueue);
 
     dymanicRenderingData.depth(VK_FORMAT_D32_SFLOAT);
 
@@ -1097,6 +1119,7 @@ void GPUDevice::init(const DeviceCreation& creation)
     dummyTextureCreation.format = VK_FORMAT_R8G8B8A8_SRGB;
     dummyTextureCreation.imageType = VK_IMAGE_TYPE_2D;
     dummyTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
+    dummyTextureCreation.name = "DummyTexture";
     dummyTexture = createTexture(dummyTextureCreation);
 
     DescriptorSetLayoutCreation bindlessLayoutCreation{};
@@ -1188,6 +1211,9 @@ void GPUDevice::shutdown()
         case ResourceUpdateType::TEXTURE:
             destroyTextureInstant(resourceDeletion.handle);
             break;
+        default:
+            VOID_ERROR("You're trying to delete a type that doesn't exist\n.");
+        break;
         }
     }
 
@@ -1910,7 +1936,7 @@ ShaderStateHandle GPUDevice::createShaderState(const ShaderStateCreation& creati
 {
     ShaderStateHandle handle = { INVALID_INDEX };
 
-    if (creation.stagesCount == 0 || creation.stages == nullptr)
+    if (creation.stagesCount == 0)
     {
         vprint("Shader %s does not contain shader.\n", creation.name);
         return handle;
@@ -2518,7 +2544,7 @@ void GPUDevice::present()
             Texture* texture = accessTexture({ textureToUpdate.handle });
 
             VkWriteDescriptorSet& descriptorWrite = bindlessDescriptorWrites[currentWriteIndex];
-            descriptorWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+            descriptorWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
             descriptorWrite.descriptorCount = 1;
             descriptorWrite.dstArrayElement = textureToUpdate.handle;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2672,6 +2698,9 @@ void GPUDevice::present()
                     break;
                 case ResourceUpdateType::TEXTURE:
                     destroyTextureInstant(resourceDeletion.handle);
+                    break;
+                default:
+                    VOID_ERROR("You can delete what you're trying to delete.\n");
                     break;
                 }
 

@@ -13,7 +13,11 @@ if(UNIX)
 endif()
 
 set(SDL3_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/vender/SDL/include")
-set(VULKAN_INCLUDE_DIR "$ENV{VULKAN_SDK}/Include")
+if(WIN32)
+    set(VULKAN_INCLUDE_DIR "$ENV{VULKAN_SDK}/Include")
+else(UNIX)
+    set(VULKAN_INCLUDE_DIR "$ENV{VULKAN_SDK}/include")
+endif()
 set(CGLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/cglm/include")
 set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf")
 set(STACK_WALKER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/StackWalker/Main/StackWalker")
@@ -26,6 +30,8 @@ set(MESHOP_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/meshoptimizer/src/")
 #Set the location of the engine source.
 set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(JOLT_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/JoltPhysics/Jolt")
+
+message(STATUS ${VULKAN_INCLUDE_DIR})
 
 if(MSVC)
     set(VULKAN_LIB "$ENV{VULKAN_SDK}/Lib/vulkan-1.lib")
@@ -158,6 +164,7 @@ target_include_directories(Foundation SYSTEM PRIVATE
 if (WIN32)
     target_link_libraries(Void PRIVATE
                           ${SDL_LIB}
+                          ${VULKAN_LIB}
 						  ${VOLD_LIB})
 else()
     target_link_libraries(Void PRIVATE
@@ -186,9 +193,6 @@ add_library(External STATIC
     vender/imgui/imstb_textedit.h
     vender/imgui/imstb_truetype.h
     
-    vender/SPIRV-Reflect/spirv_reflect.c
-    vender/SPIRV-Reflect/spirv_reflect.h
-
     #vender/tracy/tracy/Tracy.hpp
     #vender/tracy/tracy/TracyVulkan.hpp
     #vender/tracy/TracyClient.cpp
@@ -245,8 +249,6 @@ target_link_libraries(Void PRIVATE Foundation External)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES} ${FOUNDATION_SOURCE})
 
-target_link_libraries(Void PRIVATE ${VULKAN_LIB})
-
 target_compile_options(Void PRIVATE
                        $<$<CXX_COMPILER_ID:MSVC>:/W4>
                        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic>
@@ -266,6 +268,9 @@ else(UNIX)
     list(APPEND THINGS_TO_COPY "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so.0.2.28"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so.0"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libSDL3.so"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so.1.4.341"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so.1"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/run_game.sh"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/install.sh")
 endif()
