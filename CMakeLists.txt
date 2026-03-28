@@ -178,8 +178,6 @@ add_library(External STATIC
     vender/tlsf/tlsf.c
     vender/tlsf/tlsf.h
 
-    vender/json.hpp
-
     vender/imgui/imconfig.h
     vender/imgui/imgui_draw.cpp
     vender/imgui/backends/imgui_impl_sdl3.cpp

@@ -304,6 +304,10 @@ int main(int argc, char** argv)
         .setData(drawMatrices.data);
     positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
+    uint32_t positionalMatrixSize = drawMatrices.size;
+
+    drawMatrices.shutdown();
+
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
         .setName("SkyboxData");
@@ -340,6 +344,9 @@ int main(int argc, char** argv)
 
     MapBufferParameters skyboxMaterialMap = { skyboxMaterialBuffer, 0, 0 };
     SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
+
+    MapBufferParameters positionMap = { .buffer = positionalBuffer, .offset = 0, .size = sizeof(mat4s) * positionalMatrixSize };
+    mat4s* positionBufferData = reinterpret_cast<mat4s*>(gpu.mapBuffer(positionMap));
 
     vec3s newPosition{ 0 };
 
@@ -481,18 +488,18 @@ int main(int argc, char** argv)
                 memcpy(cbData, &uniformData, sizeof(UniformData));
             }
 
-            newPosition.z += 10 * deltaTime;
-
+            newPosition.z += deltaTime;
             Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
+
+            for (uint32_t i = 0; i < positionalMatrixSize; ++i)
+            {
+                ((mat4s*)positionBuf->mappedMemory)[i] = glms_translate(((mat4s*)positionBuf->mappedMemory)[i], newPosition);
+            }
+           
             pushConstants.modelPositionAddress = positionBuf->bufferAddress;
             for (uint32_t entityIndex = 0; entityIndex < entities.size; ++entityIndex)
             {
                 const Entity& entity = entities[entityIndex];
-                mat4s newPositionMat = drawMatrices[entity.positionIndex];
-
-                newPositionMat = glms_translate(newPositionMat, newPosition);
-                memcpy(((mat4s*)positionBuf->mappedMemory + entity.positionIndex), &newPositionMat, sizeof(mat4s));
-
                 pushConstants.index = entity.positionIndex;
                 for (uint32_t meshIndex = 0; meshIndex < models[entity.modelIndex].meshDraws.size; ++meshIndex)
                 {
@@ -538,6 +545,7 @@ int main(int argc, char** argv)
     gpu.unmapBuffer(cbMap);
     gpu.unmapBuffer(skyboxMaterialMap);
     gpu.unmapBuffer(skyboxCBMap);
+    gpu.unmapBuffer(positionMap);
 
     gpu.destroyBuffer(positionalBuffer);
 
@@ -550,7 +558,6 @@ int main(int argc, char** argv)
         models[i].shutdownModel(gpu, renderer);
     }
     models.shutdown();
-    drawMatrices.shutdown();
     entities.shutdown();
 
     gpu.destroySampler(skyboxSampler);
