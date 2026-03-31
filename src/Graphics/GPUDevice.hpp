@@ -134,6 +134,8 @@ struct GPUDevice
     void destroySwapchain();
     void resizeSwapchain();
 
+    void transitionDepthImage(TextureHandle depthResource);
+
     //Map/Unmap
     void* mapBuffer(const MapBufferParameters& parameters);
     void  unmapBuffer(const MapBufferParameters& parameters);

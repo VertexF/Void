@@ -368,16 +368,16 @@ int main(int argc, char** argv)
     float modelScale = 0.1f;
     bool fullscreen = false;
 
-    MapBufferParameters skyboxCBMap = { skyboxUniformBuffer, 0, 0 };
+    MapBufferParameters skyboxCBMap = { .buffer = skyboxUniformBuffer, .offset = 0, .size = 0 };
     void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
 
-    MapBufferParameters cbMap = { sceneBuffer, 0, 0 };
+    MapBufferParameters cbMap = { .buffer = sceneBuffer, .offset = 0, .size = 0 };
     void* cbData = gpu.mapBuffer(cbMap);
 
-    MapBufferParameters skyboxMaterialMap = { skyboxMaterialBuffer, 0, 0 };
+    MapBufferParameters skyboxMaterialMap = { .buffer = skyboxMaterialBuffer, .offset = 0, .size = 0 };
     SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
-    MapBufferParameters positionMap = { .buffer = positionalBuffer, .offset = 0, .size = sizeof(mat4s) * positionalMatrixSize };
+    MapBufferParameters positionMap = { .buffer = positionalBuffer, .offset = 0, .size = 0 };
     mat4s* positionBufferData = reinterpret_cast<mat4s*>(gpu.mapBuffer(positionMap));
 
     vec3s newPosition{ 0 };

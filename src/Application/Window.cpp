@@ -29,6 +29,8 @@ void Window::init(uint32_t inWidth, uint32_t inHeight, const char* title)
         return;
     }
 
+    SDL_SetHint(SDL_HINT_SHUTDOWN_DBUS_ON_QUIT, "1");
+
     sdlWindow = SDL_CreateWindow(title, inWidth, inHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
     if (!sdlWindow)
     {
@@ -53,6 +55,7 @@ void Window::init(uint32_t inWidth, uint32_t inHeight, const char* title)
 void Window::shutdown() 
 {
     SDL_DestroyWindow(sdlWindow);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
     SDL_Quit();
 }
 

@@ -427,6 +427,8 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
     case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
         destinationBufferAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
         break;
+    default:
+        break;
     }
 
     switch (barrier.sourcePipelineStage) 
@@ -441,6 +443,8 @@ void CommandBuffer::barrier(const ExecutionBarrier& barrier)
         break;
     case VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT:
         sourceBufferAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+        break;
+    default:
         break;
     }
 

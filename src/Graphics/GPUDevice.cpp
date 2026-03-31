@@ -1067,7 +1067,6 @@ vprint("Instance created.\n");
     fullscreenBufferVbCreation.name = "FullscreenVB";
     fullscreenVertexBuffer = createBuffer(fullscreenBufferVbCreation);
 
-    vprint("TODO: Move this transition.\n");
     //Create depth image
     TextureCreation depthTextureCreation{};
     depthTextureCreation.initialData = nullptr;
@@ -1082,28 +1081,7 @@ vprint("Instance created.\n");
     depthTextureCreation.name = "DepthImage_Texture";
     depthTexture = createTexture(depthTextureCreation);
 
-    Texture* depthTex = accessTexture(depthTexture);
-
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    CommandBuffer* commandBuffer = getInstantCommandBuffer();
-    vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
-
-    transitionImageLayout(commandBuffer->vkCommandBuffer, depthTex->vkImage, depthTex->vkFormat,
-                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
-
-    vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
-
-    //Submit command buffer
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
-
-    vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(vulkanQueue);
+    transitionDepthImage(depthTexture);
 
     dymanicRenderingData.depth(VK_FORMAT_D32_SFLOAT);
 
@@ -2309,7 +2287,7 @@ void GPUDevice::createSwapchain()
 
     swapchainWidth = static_cast<uint16_t>(Window::instance()->width);
     swapchainHeight = static_cast<uint16_t>(Window::instance()->height);
-
+    
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = vulkanWindowSurface;
@@ -2394,7 +2372,35 @@ void GPUDevice::resizeSwapchain()
     Texture* vkDepthTexture = accessTexture(depthTexture);
     vulkanResizeTexture(*this, vkDepthTexture, vkTextureToDelete, swapchainWidth, swapchainHeight, 1);
 
+    transitionDepthImage(depthTexture);
+
     destroyTexture(textureToDelete);
+}
+
+void GPUDevice::transitionDepthImage(TextureHandle texture)
+{
+    Texture* vkDepthTexture = accessTexture(texture);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    CommandBuffer* commandBuffer = getInstantCommandBuffer();
+    vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
+
+    transitionImageLayout(commandBuffer->vkCommandBuffer, vkDepthTexture->vkImage, vkDepthTexture->vkFormat,
+                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
+
+    vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
+
+    //Submit command buffer
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
+
+    vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(vulkanQueue);
 }
 
 //Map/Unmap
@@ -2542,12 +2548,15 @@ void GPUDevice::present()
             Texture* texture = accessTexture({ textureToUpdate.handle });
 
             VkWriteDescriptorSet& descriptorWrite = bindlessDescriptorWrites[currentWriteIndex];
-            descriptorWrite = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.pNext = nullptr;
             descriptorWrite.descriptorCount = 1;
             descriptorWrite.dstArrayElement = textureToUpdate.handle;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrite.dstSet = bindlessDescriptorSet;
             descriptorWrite.dstBinding = BINDLESS_TEXTURE_BINDING;
+            descriptorWrite.pBufferInfo = nullptr;
+            descriptorWrite.pTexelBufferView = nullptr;
 
             //Handles should be the same.
             VOID_ASSERT(texture->handle.index == textureToUpdate.handle);
