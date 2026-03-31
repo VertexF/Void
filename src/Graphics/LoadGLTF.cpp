@@ -215,9 +215,6 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
 
     meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
 
-    //We have no idea if it's 
-    meshIndices.init(allocator, 256);
-
     vertices.init(allocator, 256);
 
     //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
@@ -635,7 +632,6 @@ void Model::shutdownModel(GPUDevice& gpu)
     }
 
     vertices.shutdown();
-    meshIndices.shutdown();
     samplers.shutdown();
     images.shutdown();
 

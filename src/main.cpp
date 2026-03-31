@@ -603,6 +603,8 @@ int main(int argc, char** argv)
 
     gpuProfiler.shutdown();
 
+    gpu.shutdown();
+
     inputHandler.shutdown();
     Window::instance()->shutdown();
 

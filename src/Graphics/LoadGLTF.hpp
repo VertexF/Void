@@ -75,7 +75,6 @@ struct Model
     void shutdownModel(GPUDevice& gpu);
 
     Array<Vertices> vertices;
-    Array<void*> meshIndices;
     Array<SamplerHandle> samplers;
     Array<TextureHandle> images;
     StringBuffer resourceNameBuffer;
