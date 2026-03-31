@@ -62,8 +62,6 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/GPUProfiler.cpp
                 src/Graphics/GPUResources.hpp
                 src/Graphics/GPUResources.cpp
-                src/Graphics/Renderer.hpp
-                src/Graphics/Renderer.cpp
                 src/Graphics/LoadGLTF.hpp
                 src/Graphics/LoadGLTF.cpp
 )
@@ -128,8 +126,6 @@ set(FOUNDATION_SOURCE src/Foundation/Array.hpp
                       src/Foundation/RelativeDataStructures.hpp
                       src/Foundation/ResourcePool.cpp
                       src/Foundation/ResourcePool.hpp
-                      src/Foundation/ResourceManager.cpp
-                      src/Foundation/ResourceManager.hpp
                       src/Foundation/String.cpp
                       src/Foundation/String.hpp
                       src/Foundation/Time.cpp
@@ -249,8 +245,10 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${VOID_SOURCE} ${GLSL_SOURCE
 
 target_compile_options(Void PRIVATE
                        $<$<CXX_COMPILER_ID:MSVC>:/W4>
-                       $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic>
+                       $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic -fsanitize=address -fno-omit-frame-pointer>
 )
+
+target_link_options(Void PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>: -fsanitize=address>)
 
 if(MSVC)
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Void)

@@ -4,7 +4,6 @@
 
 #include "Graphics/GPUDevice.hpp"
 #include "Graphics/CommandBuffer.hpp"
-#include "Graphics/Renderer.hpp"
 #include "Graphics/VoidImgui.hpp"
 #include "Graphics/GPUProfiler.hpp"
 #include "Graphics/LoadGLTF.hpp"
@@ -19,11 +18,11 @@
 
 #include "Foundation/File.hpp"
 #include "Foundation/Numerics.hpp"
-#include "Foundation/ResourceManager.hpp"
 #include "Foundation/Time.hpp"
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
+#include <vender/stb_image.h>
 
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/2.0/Sponza/glTF/Sponza.gltf";
 //static const char* DEFAULT_3D_MODEL = "Assets/Models/out/Sponza5.glb";
@@ -107,6 +106,46 @@ namespace
     }
 
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
+
+    //TODO: Move this to a place that make sense.
+    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, const char* name)
+    {
+        Array<uint8_t*> skyboxImageArray;
+        skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
+        int comp;
+        int width;
+        int height;
+
+        for (uint32_t i = 0; i < images.size; ++i)
+        {
+            if (images[i])
+            {
+                //Load 6 images.
+                uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
+                if (imageData == nullptr)
+                {
+                    VOID_ERROR("Error loading texture %s", images[i]);
+                    return INVALID_TEXTURE;
+                }
+
+                skyboxImageArray.push(imageData);
+                free(imageData);
+            }
+        }
+
+        //Create the single texture.
+        TextureCreation creation{};
+        creation.setData(skyboxImageArray.data)
+            .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
+            .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+            .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(width), 1)
+            .setName(name);
+        creation.layerCount = 6;
+        TextureHandle newTexture = gpu.createTexture(creation);
+
+        skyboxImageArray.shutdown();
+        return newTexture;
+    }
 }
 
 struct Entity 
@@ -145,15 +184,8 @@ int main(int argc, char** argv)
     GPUDevice gpu;
     gpu.init(deviceCreation);
 
-    ResourceManager resourceManager;
-    resourceManager.init(allocator);
-
     GPUProfiler gpuProfiler;
     gpuProfiler.init(allocator, 100);
-
-    Renderer renderer;
-    renderer.init({ &gpu, allocator });
-    renderer.setLoaders(&resourceManager);
 
     ImguiService* imgui = ImguiService::instance();
     ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
@@ -237,7 +269,7 @@ int main(int argc, char** argv)
     cubemapsImage.push("Assets/Textures/5.png");
     cubemapsImage.push("Assets/Textures/6.png");
 
-    TextureResource* skyboxTextureResource = renderer.createSkybox(cubemapsImage, "SpaceCubeMap");
+    TextureHandle skyboxTextureHandle = createACubemap(gpu, cubemapsImage, "SpaceCubeMap");
     SamplerCreation skyboxSamplerCreation{};
     skyboxSamplerCreation.minFilter = VK_FILTER_LINEAR;
     skyboxSamplerCreation.magFilter = VK_FILTER_LINEAR;
@@ -245,7 +277,7 @@ int main(int argc, char** argv)
     skyboxSamplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     SamplerHandle skyboxSampler = gpu.createSampler(skyboxSamplerCreation);
-    gpu.linkTextureSampler(skyboxTextureResource->handle, skyboxSampler);
+    gpu.linkTextureSampler(skyboxTextureHandle, skyboxSampler);
 
     cubemapsImage.shutdown();
 
@@ -261,8 +293,8 @@ int main(int argc, char** argv)
     constexpr uint32_t duckModelIndex = 1;
     Array<Model> models;
     models.init(allocator, 2, 2);
-    models[rockModelIndex].loadModel(DEFAULT_3D_MODEL, gpu, renderer, sceneBuffer, mainDescriptorSetLayout);
-    models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, renderer, sceneBuffer, mainDescriptorSetLayout);
+    models[rockModelIndex].loadModel(DEFAULT_3D_MODEL, gpu, sceneBuffer, mainDescriptorSetLayout);
+    models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, sceneBuffer, mainDescriptorSetLayout);
 
     float sceneRadius = 5000.f;
     for (uint32_t i = 0; i < totalDucks; ++i)
@@ -451,7 +483,7 @@ int main(int argc, char** argv)
             if (skyboxMaterialBufferData)
             {
                 SkyboxData skyboxData{};
-                skyboxData.skyboxTextureIndex = skyboxTextureResource->handle.index;
+                skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
                 skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
                 memcpy(skyboxMaterialBufferData, &skyboxData, sizeof(SkyboxData));
             }
@@ -553,12 +585,13 @@ int main(int argc, char** argv)
 
     for (uint32_t i = 0; i < models.size; ++i)
     {
-        models[i].shutdownModel(gpu, renderer);
+        models[i].shutdownModel(gpu);
     }
     models.shutdown();
     entities.shutdown();
 
     gpu.destroySampler(skyboxSampler);
+    gpu.destroyTexture(skyboxTextureHandle);
 
     gpu.destroyBuffer(sceneBuffer);
     gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
@@ -569,9 +602,6 @@ int main(int argc, char** argv)
     imgui->shutdown();
 
     gpuProfiler.shutdown();
-    resourceManager.shutdown();
-
-    renderer.shutdown();
 
     inputHandler.shutdown();
     Window::instance()->shutdown();

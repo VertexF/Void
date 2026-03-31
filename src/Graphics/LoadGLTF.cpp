@@ -3,17 +3,16 @@
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 
-#include <stb_image.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <vender/stb_image.h>
 #include <tlsf.h>
 #include <meshoptimizer.h>
 
 #include "Foundation/Memory.hpp"
 #include "Foundation/File.hpp"
 #include "Foundation/Numerics.hpp"
-#include "Foundation/ResourceManager.hpp"
 
 #include "GPUResources.hpp"
-#include "Renderer.hpp"
 
 struct Transform
 {
@@ -38,7 +37,9 @@ struct Transform
     }
 };
 
-void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
+//static char nameBuffer[12];
+
+void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
 {
     HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
     StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
@@ -89,11 +90,46 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
 
         if (image.uri != nullptr)
         {
-            TextureResource* textureResource = renderer.createTexture(image.uri, image.uri);
+            TextureHandle textureResource;
 
-            VOID_ASSERT(textureResource != nullptr);
+            int comp;
+            int width;
+            int height;
+            uint8_t mipLevels = 1;
 
-            images.push(*textureResource);
+            uint8_t *imageData = stbi_load(image.uri, &width, &height, &comp, 4);
+            if (imageData == nullptr)
+            {
+                textureResource = INVALID_TEXTURE;
+                VOID_ERROR("Error loading texture %s", image.uri);
+            }
+
+            // TODO: Add mipmap support later.
+            uint32_t w = width;
+            uint32_t h = height;
+
+            while (w > 1 && h > 1)
+            {
+                w /= 2;
+                h /= 2;
+
+                ++mipLevels;
+            }
+
+            TextureCreation creation;
+            creation.setData(imageData)
+                .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+                .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
+                .setName(image.uri);
+
+            TextureHandle newTexture = gpu.createTexture(creation);
+            
+            VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
+
+            free(imageData);
+
+            images.push(newTexture);
         }
         else
         {
@@ -121,6 +157,10 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
             int y;
             uint8_t* textureData = stbi_load_from_memory(rawBufferData, int(image.buffer_view->size), &x, &y, &comp, 4);
 
+            // snprintf(nameBuffer, 12, "noName_%d", imageIndex); // puts string into buffer
+
+            // vprint(nameBuffer);
+
             TextureCreation textureCreation{};
             textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
                 .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
@@ -128,10 +168,10 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                 .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                 .setName(nullptr);
 
-            TextureResource* textureResource = renderer.createTexture(textureCreation);
-            VOID_ASSERT(textureResource != nullptr);
+            TextureHandle newTexture = gpu.createTexture(textureCreation);
+            VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
 
-            images.push(*textureResource);
+            images.push(newTexture);
 
             stbi_image_free(textureData);
         }
@@ -161,10 +201,11 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
         creation.magFilter = sampler.mag_filter == cgltf_filter_type_linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
         creation.name = samplerName;
 
-        SamplerResource* samplerResource = renderer.createSampler(creation);
-        VOID_ASSERT(samplerResource != nullptr);
+        SamplerHandle newSampler = gpu.createSampler(creation);
 
-        samplers.push(*samplerResource);
+        VOID_ASSERT(newSampler.index != INVALID_SAMPLER.index);
+
+        samplers.push(newSampler);
     }
 
     //NOTE: resource working directory
@@ -335,17 +376,17 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                         SamplerHandle samplerHandle = dummySampler;
 
                         uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images[imageIndex];
+                        TextureHandle& textureGPU = images[imageIndex];
 
                         if (textureInfo->sampler)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                            samplerHandle = samplerGPU.handle;
+                            SamplerHandle& samplerGPU = samplers[sampleIndex];
+                            gpu.linkTextureSampler(textureGPU, samplerGPU);
+                            samplerHandle = samplerGPU;
                         }
 
-                        meshDraw.diffuseTextureIndex = (uint16_t)textureGPU.handle.index;
+                        meshDraw.diffuseTextureIndex = (uint16_t)textureGPU.index;
                     }
                     else
                     {
@@ -358,17 +399,17 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                         SamplerHandle samplerHandle = dummySampler;
 
                         uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                        TextureResource& textureGPU = images[imageIndex];
+                        TextureHandle& textureGPU = images[imageIndex];
 
                         if (textureInfo->sampler)
                         {
                             uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                            SamplerResource& samplerGPU = samplers[sampleIndex];
-                            gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                            samplerHandle = samplerGPU.handle;
+                            SamplerHandle& samplerGPU = samplers[sampleIndex];
+                            gpu.linkTextureSampler(textureGPU, samplerGPU);
+                            samplerHandle = samplerGPU;
                         }
 
-                        meshDraw.roughnessTextureIndex = (uint16_t)textureGPU.handle.index;
+                        meshDraw.roughnessTextureIndex = (uint16_t)textureGPU.index;
                     }
                     else
                     {
@@ -382,14 +423,14 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                     SamplerHandle samplerHandle = dummySampler;
 
                     uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                    TextureResource& textureGPU = images[imageIndex];
+                    TextureHandle& textureGPU = images[imageIndex];
 
                     if (textureInfo->sampler)
                     {
                         uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                        SamplerResource& samplerGPU = samplers[sampleIndex];
-                        gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                        samplerHandle = samplerGPU.handle;
+                        SamplerHandle& samplerGPU = samplers[sampleIndex];
+                        gpu.linkTextureSampler(textureGPU, samplerGPU);
+                        samplerHandle = samplerGPU;
                     }
 
                     meshDraw.metallicRoughnessOcclusionFactor.z = material->occlusion_texture.scale !=
@@ -397,7 +438,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                         material->occlusion_texture.scale :
                         1.f;
 
-                    meshDraw.occlusionTextureIndex = (uint16_t)textureGPU.handle.index;
+                    meshDraw.occlusionTextureIndex = (uint16_t)textureGPU.index;
                 }
                 else
                 {
@@ -411,17 +452,17 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                     SamplerHandle samplerHandle = dummySampler;
 
                     uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                    TextureResource& textureGPU = images[imageIndex];
+                    TextureHandle& textureGPU = images[imageIndex];
 
                     if (textureInfo->sampler)
                     {
                         uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                        SamplerResource& samplerGPU = samplers[sampleIndex];
-                        gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                        samplerHandle = samplerGPU.handle;
+                        SamplerHandle& samplerGPU = samplers[sampleIndex];
+                        gpu.linkTextureSampler(textureGPU, samplerGPU);
+                        samplerHandle = samplerGPU;
                     }
 
-                    meshDraw.emisiveTextureIndex = (uint16_t)textureGPU.handle.index;
+                    meshDraw.emisiveTextureIndex = (uint16_t)textureGPU.index;
 
                     //TODO: Is this always tide to the emissive texture?
                     meshDraw.emissiveFactor = vec3s
@@ -442,17 +483,17 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
                     SamplerHandle samplerHandle = dummySampler;
 
                     uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
-                    TextureResource& textureGPU = images[imageIndex];
+                    TextureHandle& textureGPU = images[imageIndex];
 
                     if (textureInfo->sampler)
                     {
                         uint32_t sampleIndex = uint32_t(cgltf_sampler_index(cgltfData, textureInfo->sampler));
-                        SamplerResource& samplerGPU = samplers[sampleIndex];
-                        gpu.linkTextureSampler(textureGPU.handle, samplerGPU.handle);
-                        samplerHandle = samplerGPU.handle;
+                        SamplerHandle& samplerGPU = samplers[sampleIndex];
+                        gpu.linkTextureSampler(textureGPU, samplerGPU);
+                        samplerHandle = samplerGPU;
                     }
 
-                    meshDraw.normalTextureIndex = (uint16_t)textureGPU.handle.index;
+                    meshDraw.normalTextureIndex = (uint16_t)textureGPU.index;
                 }
                 else
                 {
@@ -567,7 +608,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer,
     cgltf_free(cgltfData);
 }
 
-void Model::shutdownModel(GPUDevice& gpu, Renderer& renderer)
+void Model::shutdownModel(GPUDevice& gpu)
 {
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
@@ -585,12 +626,12 @@ void Model::shutdownModel(GPUDevice& gpu, Renderer& renderer)
     //This is here to solve a bug that happens when allocating image from a .glb file. 
     for (uint32_t i = 0; i < images.size; ++i)
     {
-        renderer.destroyTexture(&images[i]);
+        gpu.destroyTexture(images[i]);
     }
 
     for (uint32_t i = 0; i < samplers.size; ++i)
     {
-        renderer.destroySampler(&samplers[i]);
+        gpu.destroySampler(samplers[i]);
     }
 
     vertices.shutdown();

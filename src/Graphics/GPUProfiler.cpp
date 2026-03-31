@@ -4,8 +4,6 @@
 #include "Foundation/Numerics.hpp"
 #include "Foundation/Colour.hpp"
 
-#include "Renderer.hpp"
-
 #include "vender/imgui/imgui.h"
 
 #include "Application/Window.hpp"

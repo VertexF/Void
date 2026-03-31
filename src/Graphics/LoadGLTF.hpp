@@ -4,7 +4,6 @@
 #include "Foundation/Array.hpp"
 
 #include "GPUDevice.hpp"
-#include "Renderer.hpp"
 
 #include "cglm/struct/mat3.h"
 #include "cglm/struct/mat4.h"
@@ -72,13 +71,13 @@ struct Model
 {
     Array<MeshDraw> meshDraws;
 
-    void loadModel(const char* modelPath, GPUDevice& gpu, Renderer& renderer, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
-    void shutdownModel(GPUDevice& gpu, Renderer& renderer);
+    void loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
+    void shutdownModel(GPUDevice& gpu);
 
     Array<Vertices> vertices;
     Array<void*> meshIndices;
-    Array<SamplerResource> samplers;
-    Array<TextureResource> images;
+    Array<SamplerHandle> samplers;
+    Array<TextureHandle> images;
     StringBuffer resourceNameBuffer;
 
     SamplerHandle dummySampler;
