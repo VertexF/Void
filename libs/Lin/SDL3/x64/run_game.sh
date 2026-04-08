@@ -1,3 +1,4 @@
 #!/bin/bash
-export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+cwd="$(pwd)"
+export LD_LIBRARY_PATH=$cwd:$LD_LIBRARY_PATH
 ./Void

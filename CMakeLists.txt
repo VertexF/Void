@@ -663,23 +663,8 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/TriangleSplitter/TriangleSplitterMean.h
 )
 
-# Compute shaders
-set(JOLT_PHYSICS_SHADERS
-	${JOLT_PHYSICS_ROOT}/Shaders/TestCompute.hlsl
-	${JOLT_PHYSICS_ROOT}/Shaders/TestCompute2.hlsl)
-
 # Ignore shader files for compilation, we'll compile them manually
 set_source_files_properties(${JOLT_PHYSICS_SHADERS} PROPERTIES HEADER_FILE_ONLY ON)
-
-set(JOLT_PHYSICS_SHADER_HEADERS
-	${JOLT_PHYSICS_ROOT}/Shaders/ShaderCore.h
-	${JOLT_PHYSICS_ROOT}/Shaders/ShaderMat44.h
-	${JOLT_PHYSICS_ROOT}/Shaders/ShaderMath.h
-	${JOLT_PHYSICS_ROOT}/Shaders/ShaderPlane.h
-	${JOLT_PHYSICS_ROOT}/Shaders/ShaderQuat.h
-	${JOLT_PHYSICS_ROOT}/Shaders/ShaderVec3.h
-	${JOLT_PHYSICS_ROOT}/Shaders/TestComputeBindings.h
-	${JOLT_PHYSICS_ROOT}/Shaders/TestCompute2Bindings.h)
 
 # TODO - Do we need this?
 
@@ -709,24 +694,6 @@ set(JOLT_PHYSICS_SRC_FILES
 	${JOLT_PHYSICS_ROOT}/Compute/VK/IncludeVK.h
 )
 
-# TODO: For some reason it errors on finding dxc when we specify the dxc component to find_vulkan (and update cmake version)
-# For now, just set it manually
-string(REPLACE "glslc" "dxc" Vulkan_dxc_EXECUTABLE ${Vulkan_GLSLC_EXECUTABLE})
-
-# Compile Vulkan shaders
-foreach(SHADER ${JOLT_PHYSICS_SHADERS})
-	string(REPLACE ".hlsl" ".spv" SPV_SHADER ${SHADER})
-	add_custom_command(OUTPUT ${SPV_SHADER}
-		# We use dxc instead of: ${Vulkan_GLSLC_EXECUTABLE} -fshader-stage=compute ${SHADER} -o ${SPV_SHADER}
-		# The glslc compiler has the following issues:
-		# - All buffers bind to slot 0. We don't want to manually specify registers so this requires going into the SPIRV code and patching it.
-		# - It automatically aligns float3 to 16 byte boundaries which wastes a lot of memory in structs. We only seem to be able to override this alignment when compiling a GLSL shader and not with HLSL.
-		COMMAND ${Vulkan_dxc_EXECUTABLE} -E main -T cs_6_0 -I Jolt/Shaders -WX -O3 -all_resources_bound ${SHADER} -spirv -fvk-use-dx-layout -fspv-debug=vulkan-with-source -Fo ${SPV_SHADER}
-		DEPENDS ${SHADER} ${JOLT_PHYSICS_SHADER_HEADERS} # Currently don't have a way to detect header dependencies, so making dependent on all
-		COMMENT "Compiling Vulkan ${SHADER}")
-	list(APPEND JOLT_PHYSICS_SPV_SHADERS ${SPV_SHADER})
-endforeach()
-
 set (PHYSICS_REPO_ROOT "src/Physics")
 # Group intermediate files
 #source_group(Intermediate FILES ${JOLT_PHYSICS_SPV_SHADERS})
@@ -740,8 +707,6 @@ add_library(Jolt STATIC ${JOLT_PHYSICS_SRC_FILES} ${JOLT_PHYSICS_SHADERS} ${JOLT
 
 add_library(Jolt::Jolt ALIAS Jolt)
 
-target_include_directories(Jolt PRIVATE ${JOLT_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR} ${ENGINE_INCLUDE})
-
 # Use repository as include directory when building, install directory when installing
 #target_include_directories(Jolt PUBLIC
 #	$<BUILD_INTERFACE:${PHYSICS_REPO_ROOT}>
@@ -749,7 +714,7 @@ target_include_directories(Jolt PRIVATE ${JOLT_INCLUDE} ${CMAKE_CURRENT_SOURCE_D
 
 target_compile_definitions(Jolt PUBLIC JPH_USE_VK)
 
-target_include_directories(Jolt PUBLIC ${Vulkan_INCLUDE_DIRS})
+target_include_directories(Jolt PUBLIC ${Vulkan_INCLUDE_DIRS} ${JOLT_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR} ${ENGINE_INCLUDE})
 target_link_libraries(Jolt LINK_PUBLIC ${Vulkan_LIBRARIES})
 
 target_compile_definitions(Jolt PUBLIC JPH_USE_CPU_COMPUTE)
@@ -868,8 +833,7 @@ else(UNIX)
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so.1.4.341"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so.1"
                                "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/libvulkan.so"
-                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/run_game.sh"
-                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/install.sh")
+                               "${CMAKE_CURRENT_SOURCE_DIR}/libs/Lin/SDL3/x64/run_game.sh")
 endif()
 
 file(COPY ${THINGS_TO_COPY} DESTINATION ${CMAKE_BINARY_DIR})

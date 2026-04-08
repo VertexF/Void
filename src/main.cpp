@@ -388,6 +388,8 @@ int main(int argc, char** argv)
 
     vec3s newPosition{ 0 };
 
+    physics.updatePhysics();
+
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -455,8 +457,6 @@ int main(int argc, char** argv)
             inputHandler.update();
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
-
-            physics.updatePhysics();
 
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
