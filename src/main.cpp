@@ -70,8 +70,8 @@ namespace
 
     struct UniformData
     {
-        mat4s globalModel;
         mat4s viewPerspective;
+        mat4s globalModel;
         vec4s eye;
         vec4s light;
     };
@@ -435,14 +435,14 @@ int main(int argc, char** argv)
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
     physics.bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(-400.f, 0.0f, 0.0f));
 
-    debugData[0].colour = { 1.f, 0.f, 1.f, 1.f};
-    debugData[0].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make({ 0.f, 0.f, 0.f }));
+    debugData[0].colour = { 1.f, 0.f, 1.f, 1.f };
+    debugData[0].pos = glms_mat4_identity();//glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make({ 0.f, 0.f, 0.f }));
     debugData[0].model = glms_mat4_identity();
     debugData[0].viewPerspective = glms_mat4_identity();
     debugData[0].globalModel = glms_mat4_identity();
 
     debugData[1].colour = { 1.f, 0.f, 1.f, 1.f };
-    debugData[1].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make({ 10.f, 0.f, 0.f }));
+    debugData[1].pos = glms_mat4_identity();//glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make({ 10.f, 0.f, 0.f }));
     debugData[1].model = glms_mat4_identity();
     debugData[1].viewPerspective = glms_mat4_identity();
     debugData[1].globalModel = glms_mat4_identity();
@@ -580,7 +580,7 @@ int main(int argc, char** argv)
             beginFrameTick = currentTick;
 
             physics.updatePhysics();
-            
+
             inputHandler.newFrame();
             inputHandler.update();
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
@@ -592,7 +592,7 @@ int main(int argc, char** argv)
             gpu.beginRenderingTransition(gpuCommands);
 
             //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
-            gpuCommands->clear(1.f, 0.f, 1.f, 1.f);
+            gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
             gpuCommands->beginRendering();
 
@@ -636,8 +636,9 @@ int main(int argc, char** argv)
 
             gpuCommands->bindlessDescriptorSet(1);
 
-            mat4s globalModel{};
             //Update rotating cube data.
+            //mat4s globalModel;
+            mat4s globalModel{};
             if (cbData)
             {
                 globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
@@ -686,6 +687,45 @@ int main(int argc, char** argv)
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
+
+                    gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+                }
+            }
+
+            //Debug
+            gpuCommands->bindPipeline(debugPipeline);
+            gpuCommands->setScissor(nullptr);
+            gpuCommands->setViewport(nullptr);
+
+            Buffer* debugDataBufferf = gpu.accessBuffer(debugDataBuffer);
+            for (uint32_t i = 0; i < positionalMatrixSize; ++i)
+            {
+                if (i == 1 || i == 0)
+                {
+                    globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
+
+                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(entities[i].bodyID);
+                    debugDataGPU[i].pos = convertToMat4(newPos);
+                    debugDataGPU[i].globalModel = globalModel;
+                    debugDataGPU[i].viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                }
+            }
+
+            pushConstants.modelPositionAddress = debugDataBufferf->bufferAddress;
+            for (uint32_t colliderIndex = 0; colliderIndex < totalColliders; ++colliderIndex)
+            {
+                const Entity& entity = entities[colliderIndex];
+                pushConstants.index = entity.positionIndex;
+                for (uint32_t meshIndex = 0; meshIndex < models[entity.modelIndex].meshDraws.size; ++meshIndex)
+                {
+                    MeshDraw meshDraw = models[debugSphereIndex].meshDraws[meshIndex];
+
+                    Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
                     gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
                 }

@@ -39,8 +39,8 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Mod
 
 layout(scalar, push_constant) uniform entityIndex
 {
-    ModelPositionData modelPositionsReference;
     VertexData vertexDataReference;
+    ModelPositionData modelPositionsReference;
     uint index;
 };
 

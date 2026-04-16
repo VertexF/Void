@@ -24,8 +24,8 @@ struct ModelPosition
 
 layout(scalar, set = 0, binding = 0) uniform LocalConstants
 {
-    mat4 globalModel;
     mat4 viewPerspective;
+    mat4 globalModel;
     vec4 eye;
     vec4 light;
 };
