@@ -19,7 +19,7 @@ struct ModelPosition
 {
     mat4 pos;
     vec4 colour;
-    float padd[12];
+    float padd[4];
 };
 
 layout(scalar, set = 0, binding = 0) uniform LocalConstants

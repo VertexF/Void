@@ -71,6 +71,9 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/GPUResources.cpp
                 src/Graphics/LoadGLTF.hpp
                 src/Graphics/LoadGLTF.cpp
+
+				src/Scene.hpp
+				src/Scene.cpp
 )
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})

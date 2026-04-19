@@ -24,7 +24,7 @@ struct ModelPosition
     mat4 viewPerspective;
     //Colour will be used as a key for various different objects.
     vec4 colour;
-    float pad[12];
+    float pad[4];
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer VertexData

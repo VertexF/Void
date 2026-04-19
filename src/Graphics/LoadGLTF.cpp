@@ -335,9 +335,6 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
 
                 meshDraw.indexBuffer = currentIndexBuffer;
 
-                cgltf_material* material = meshPrimitive.material;
-                VOID_ASSERTM(material != nullptr, "The model mesh materials can't be null.\n");
-
                 //Here we are adding the scene buffer (that effect every model) into the descriptor set layout.
                 DescriptorSetCreation dsCreation{};
                 dsCreation.buffer(sceneBuffer, 0);
@@ -348,6 +345,9 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
                 meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
                 dsCreation.buffer(meshDraw.materialBuffer, 1)
                     .setLayout(descriptorSetLayout);
+
+                cgltf_material* material = meshPrimitive.material;
+                VOID_ASSERTM(material != nullptr, "The model mesh materials can't be null.\n");
 
                 meshDraw.alphaCutoff = material->alpha_cutoff != FLT_MAX ? material->alpha_cutoff : 1.f;
 
