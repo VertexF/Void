@@ -1263,7 +1263,7 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
     VmaAllocationInfo allocationInfo{};
@@ -1274,7 +1274,7 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
 
     if (creation.initialData)
     {
-        memcpy(allocationInfo.pMappedData, creation.initialData, static_cast<size_t>(creation.size));
+        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, buffer->vmaAllocation, 0, creation.size);
     }
 
     return handle;
@@ -1304,7 +1304,7 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
     VmaAllocationInfo allocationInfo{};
@@ -1315,7 +1315,7 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
 
     if (creation.initialData)
     {
-        memcpy(allocationInfo.pMappedData, creation.initialData, static_cast<size_t>(creation.size));
+        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, buffer->vmaAllocation, 0, creation.size);
     }
 
     VkBufferDeviceAddressInfo bufferBDAInfo{};
@@ -1352,7 +1352,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         bufferInfo.size = imageSize;
 
         VmaAllocationCreateInfo memoryInfo{};
-        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
         memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
         VmaAllocationInfo allocationInfo{};
@@ -1361,10 +1361,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &stagingBuffer, &stagingAllocation, &allocationInfo));
 
         //Copy buffer data
-        void* destinationData;
-        vmaMapMemory(VMAAllocator, stagingAllocation, &destinationData);
-        memcpy(destinationData, creation.initialData, static_cast<size_t>(imageSize));
-        vmaUnmapMemory(VMAAllocator, stagingAllocation);
+        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, stagingAllocation, 0, imageSize);
 
         //Execute command buffer
         VkCommandBufferBeginInfo beginInfo{};
