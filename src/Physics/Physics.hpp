@@ -187,7 +187,7 @@ struct Physics
         delete JPH::Factory::sInstance;
         JPH::Factory::sInstance = nullptr;
     }
-    JPH::TempAllocatorImpl tempAllocator;
+    JPH::TempAllocatorImpl tempAllocator{10 * 1024 * 1024};
 
     // The main way to interact with the bodies in the physics system is through the body interface. There is a locking and a non-locking
     // variant of this. We're going to use the locking version (even though we're not planning to access bodies from multiple threads)

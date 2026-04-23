@@ -79,10 +79,6 @@ static bool AssertFailedImpl(const char* inExpression, const char* inMessage, co
 
 void Physics::initPhysics()
 {
-    // Register allocation hook. In this example we'll just let Jolt use malloc / free but you can override these if you want (see Memory.h).
-    // This needs to be done before any other Jolt function is called.
-    JPH::RegisterDefaultAllocator();
-
     // Install trace and assert callbacks
     JPH::Trace = TraceImpl;
     JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
@@ -101,7 +97,7 @@ void Physics::initPhysics()
     // B.t.w. 10 MB is way too much for this example but it is a typical value you can use.
     // If you don't want to pre-allocate you can also use TempAllocatorMalloc to fall back to
     // malloc / free.
-    tempAllocator.Init(10 * 1024 * 1024);
+    //tempAllocator.Init(10 * 1024 * 1024);
 
     // We need a job system that will execute physics jobs on multiple threads. Typically
     // you would implement the JobSystem interface yourself and let Jolt Physics run on top
@@ -129,7 +125,7 @@ void Physics::updatePhysics()
     const int cCollisionSteps = 1;
 
     // Step the world
-    //physicsSystem.Update(cDeltaTime, cCollisionSteps, &tempAllocator, &jobSystem);
+    physicsSystem.Update(cDeltaTime, cCollisionSteps, &tempAllocator, &jobSystem);
 }
 
 void Physics::shutdownPhysics()

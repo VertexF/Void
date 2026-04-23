@@ -271,6 +271,10 @@ int main(int argc, char** argv)
 
     cubemapsImage.shutdown();
 
+    // Register allocation hook. In this example we'll just let Jolt use malloc / free but you can override these if you want (see Memory.h).
+    // This needs to be done before any other Jolt function is called.
+    JPH::RegisterDefaultAllocator();
+
     Physics physics;
     physics.initPhysics();
 

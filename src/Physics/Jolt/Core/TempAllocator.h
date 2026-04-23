@@ -47,14 +47,6 @@ public:
 			mBase = static_cast<uint8*>(JPH::Allocate(inSize));
 	}
 
-	void Init(size_t inSize) 
-	{
-		if constexpr (needs_aligned_allocate)
-			mBase = static_cast<uint8*>(AlignedAllocate(inSize, JPH_RVECTOR_ALIGNMENT));
-		else
-			mBase = static_cast<uint8*>(JPH::Allocate(inSize));
-	}
-
 	/// Destructor, frees the block
 	virtual							~TempAllocatorImpl() override
 	{
