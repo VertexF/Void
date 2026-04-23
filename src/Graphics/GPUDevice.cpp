@@ -250,12 +250,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         info.subresourceRange.layerCount = creation.layerCount;
         check(vkCreateImageView(gpu.vulkanDevice, &info, gpu.vulkanAllocationCallbacks, &texture->vkImageView));
 
-        VkDebugUtilsObjectNameInfoEXT nameInfo{};
-        nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-        nameInfo.objectHandle = std::bit_cast<uint64_t>(texture->vkImageView);
-        nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
-        nameInfo.pObjectName = creation.name;
-
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(texture->vkImageView), creation.name);
         texture->vkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -1263,7 +1257,7 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
+    memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
     VmaAllocationInfo allocationInfo{};

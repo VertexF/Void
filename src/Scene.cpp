@@ -33,9 +33,9 @@ void Scene::buildScene(Physics& physics)
     JPH::ShapeSettings::ShapeResult duckShapeResult = duckSphereSettings.Create();
     JPH::ShapeRefC duckShapeRef = duckShapeResult.Get();
 
-    vec3s position{ 0.f, 0.f, 0.f };
+    vec3s position{0.f, 0.f, 0.f};
     sphereSettings.SetShape(rockShapeRef);
-    sphereSettings.mPosition = convertToJPHVec3(position);
+    sphereSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
     sphereSettings.mRotation = JPH::Quat::sIdentity();
     sphereSettings.mMotionType = JPH::EMotionType::Static;
     sphereSettings.mObjectLayer = Layers::MOVING;
@@ -43,7 +43,7 @@ void Scene::buildScene(Physics& physics)
 
     vec3s position2{ 20.f, 10.f, 10.f };
     sphereSettings.SetShape(rockShapeRef);
-    sphereSettings.mPosition = convertToJPHVec3(position2);
+    sphereSettings.mPosition = JPH::Vec3Arg{ position2.x, position2.y, position2.z };
     sphereSettings.mRotation = JPH::Quat::sIdentity();
     sphereSettings.mMotionType = JPH::EMotionType::Static;
     sphereSettings.mObjectLayer = Layers::MOVING;
@@ -51,7 +51,7 @@ void Scene::buildScene(Physics& physics)
 
     vec3s position1{ 10.f, 59.f, 0.f };
     sphereSettings2.SetShape(duckShapeRef);
-    sphereSettings2.mPosition = convertToJPHVec3(position1);
+    sphereSettings2.mPosition = JPH::Vec3Arg{ position1.x, position1.y, position1.z };
     sphereSettings2.mRotation = JPH::Quat::sIdentity();
     sphereSettings2.mMotionType = JPH::EMotionType::Dynamic;
     sphereSettings2.mObjectLayer = Layers::MOVING;
@@ -59,7 +59,7 @@ void Scene::buildScene(Physics& physics)
 
     vec3s position3{ 0.f, 0.f, 120.f };
     sphereSettings2.SetShape(duckShapeRef);
-    sphereSettings2.mPosition = convertToJPHVec3(position3);
+    sphereSettings2.mPosition = JPH::Vec3Arg{ position3.x, position3.y, position3.z };
     sphereSettings2.mRotation = JPH::Quat::sIdentity();
     sphereSettings2.mMotionType = JPH::EMotionType::Dynamic;
     sphereSettings2.mObjectLayer = Layers::MOVING;
@@ -75,6 +75,7 @@ void Scene::buildScene(Physics& physics)
     float sceneRadius = 500.f;
     for (uint32_t i = 4; i < totalEntities; ++i)
     {
+        vec3s position;
         position.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
         position.y = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
         position.z = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;

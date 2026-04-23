@@ -129,7 +129,7 @@ void Physics::updatePhysics()
     const int cCollisionSteps = 1;
 
     // Step the world
-    physicsSystem.Update(cDeltaTime, cCollisionSteps, &tempAllocator, &jobSystem);
+    //physicsSystem.Update(cDeltaTime, cCollisionSteps, &tempAllocator, &jobSystem);
 }
 
 void Physics::shutdownPhysics()

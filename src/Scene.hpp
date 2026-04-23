@@ -55,9 +55,46 @@ namespace
         JPH::Shape* shape;
     };
 
-    inline mat4s& convertToMat4(JPH::RMat44& jphMat) { return *reinterpret_cast<mat4s*>(&jphMat); }
-    inline vec3s& convertToVec3(JPH::Vec3& jphVec3) { return *reinterpret_cast<vec3s*>(&jphVec3); }
-    inline JPH::Vec3& convertToJPHVec3(vec3s& jphVec3) { return *reinterpret_cast<JPH::Vec3*>(&jphVec3); }
+    inline mat4s convertToMat4(JPH::RMat44& jphMat) 
+    { 
+        JPH::Vec4 col1 = jphMat.mCol[0];
+        JPH::Vec4 col2 = jphMat.mCol[1];
+        JPH::Vec4 col3 = jphMat.mCol[2];
+        JPH::Vec4 col4 = jphMat.mCol[3];
+        
+        mat4s positionMatrix;
+        positionMatrix.m00 = col1.GetX();
+        positionMatrix.m01 = col1.GetY();
+        positionMatrix.m02 = col1.GetZ();
+        positionMatrix.m03 = col1.GetW();
+
+        positionMatrix.m10 = col2.GetX();
+        positionMatrix.m11 = col2.GetY();
+        positionMatrix.m12 = col2.GetZ();
+        positionMatrix.m13 = col2.GetW();
+
+        positionMatrix.m20 = col3.GetX();
+        positionMatrix.m21 = col3.GetY();
+        positionMatrix.m22 = col3.GetZ();
+        positionMatrix.m23 = col3.GetW();
+
+        positionMatrix.m30 = col4.GetX();
+        positionMatrix.m31 = col4.GetY();
+        positionMatrix.m32 = col4.GetZ();
+        positionMatrix.m33 = col4.GetW();
+
+        return positionMatrix;
+    }
+
+    inline vec3s convertToVec3(JPH::Vec3& jphVec3) 
+    {
+        vec3s vector;
+        vector.x = jphVec3.GetX();
+        vector.y = jphVec3.GetY();
+        vector.z = jphVec3.GetZ(); 
+        return vector;
+    }
+    //inline JPH::Vec3& convertToJPHVec3(vec3s& jphVec3) { return *reinterpret_cast<JPH::Vec3*>(&jphVec3); }
 }
 
 struct Scene

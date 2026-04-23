@@ -298,8 +298,6 @@ int main(int argc, char** argv)
         .setData(scene.debugRendererData.data);
     debugRendererDataBuffer = gpu.createBindlessBuffer(bufferCreation);
 
-    scene.entityData.shutdown();
-
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
         .setName("SkyboxData");
@@ -335,15 +333,8 @@ int main(int argc, char** argv)
     void* cbData = gpu.mapBuffer(cbMap);
 
     MapBufferParameters skyboxMaterialMap = { .buffer = skyboxMaterialBuffer, .offset = 0, .size = 0 };
-    SkyboxData* skyboxMaterialBufferData = reinterpret_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
+    SkyboxData* skyboxMaterialBufferData = static_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
-    MapBufferParameters positionMap = { .buffer = positionalBuffer, .offset = 0, .size = 0 };
-    EntityData* positionBufferData = reinterpret_cast<EntityData*>(gpu.mapBuffer(positionMap));
-
-    MapBufferParameters debugRendererDataMap = { .buffer = debugRendererDataBuffer, .offset = 0, .size = 0 };
-    DebugRendererData* debugRendererDataGPU = reinterpret_cast<DebugRendererData*>(gpu.mapBuffer(debugRendererDataMap));
-
-    vec3s newPosition{ 0 };
     bool debugRenderer = true;
     while (Window::instance()->exitRequested == false)
     {
@@ -485,17 +476,27 @@ int main(int argc, char** argv)
                 memcpy(cbData, &uniformData, sizeof(UniformData));
             }
 
-            Buffer* positionBuf = gpu.accessBuffer(positionalBuffer);
+            Buffer* positionBuff = gpu.accessBuffer(positionalBuffer);
+            pushConstants.modelPositionAddress = positionBuff->bufferAddress;
 
-            pushConstants.modelPositionAddress = positionBuf->bufferAddress;
+            uint32_t physicsMarker = scratchAllocator.getMarker();
+            Array<EntityData> physicsUpdateDataArray;
+            physicsUpdateDataArray.init(&scratchAllocator, 4);
+
             for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
             {
                 const Entity& entity = scene.entities[entityIndex];
                 pushConstants.index = entityIndex;
+
                 if (entity.debugRendererIndex != UINT32_MAX)
                 {
                     JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
-                    positionBufferData[entity.debugRendererIndex].pos = convertToMat4(newPos);
+
+                    EntityData physicsPosition{};
+                    physicsPosition.pos = convertToMat4(newPos);
+                    physicsPosition.colour = scene.entityData[entityIndex].colour;
+
+                    physicsUpdateDataArray.push(physicsPosition);
                 }
 
                 for (uint32_t meshIndex = 0; meshIndex < scene.models[entity.modelIndex].meshDraws.size; ++meshIndex)
@@ -519,6 +520,9 @@ int main(int argc, char** argv)
                     gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
                 }
             }
+            
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
+            scratchAllocator.freeMarker(physicsMarker);
 
             if (debugRenderer)
             {
@@ -527,8 +531,13 @@ int main(int argc, char** argv)
                 gpuCommands->setScissor(nullptr);
                 gpuCommands->setViewport(nullptr);
 
-                Buffer* debugRendererDataBufferf = gpu.accessBuffer(debugRendererDataBuffer);
-                pushConstants.modelPositionAddress = debugRendererDataBufferf->bufferAddress;
+                uint32_t debugRendererMarker = scratchAllocator.getMarker();
+
+                Array<DebugRendererData> debugRenderingDataArray;
+                debugRenderingDataArray.init(&scratchAllocator, 4);
+
+                Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
+                pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
                 for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
                 {
                     const Entity& entity = scene.entities[entityIndex];
@@ -537,9 +546,13 @@ int main(int argc, char** argv)
                         globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
                         JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                        debugRendererDataGPU[entityIndex].position = convertToMat4(newPos);
-                        debugRendererDataGPU[entityIndex].globalModel = globalModel;
-                        debugRendererDataGPU[entityIndex].viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                        
+                        DebugRendererData debugRenderData{};
+                        debugRenderData.position = convertToMat4(newPos);
+                        debugRenderData.globalModel = globalModel;
+                        debugRenderData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+                        debugRenderData.model = scene.debugRendererData[entityIndex].model;
+                        debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
 
                         pushConstants.index = entity.positionIndex;
                         VOID_ASSERTM(scene.models[entity.modelIndex].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
@@ -554,8 +567,13 @@ int main(int argc, char** argv)
                         gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
                         gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+
+                        debugRenderingDataArray.push(debugRenderData);
                     }
                 }
+
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
+                scratchAllocator.freeMarker(debugRendererMarker);
             }
             imgui->render(*gpuCommands);
 
@@ -576,11 +594,11 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    gpu.unmapBuffer(debugRendererDataMap);
+    //gpu.unmapBuffer(debugRendererDataMap);
+    //gpu.unmapBuffer(positionMap);
     gpu.unmapBuffer(cbMap);
     gpu.unmapBuffer(skyboxMaterialMap);
     gpu.unmapBuffer(skyboxCBMap);
-    gpu.unmapBuffer(positionMap);
 
     gpu.destroyBuffer(positionalBuffer);
 
