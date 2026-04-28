@@ -102,7 +102,7 @@ void Physics::initPhysics()
     // We need a job system that will execute physics jobs on multiple threads. Typically
     // you would implement the JobSystem interface yourself and let Jolt Physics run on top
     // of your own job scheduler. JobSystemThreadPool is an example implementation.
-    jobSystem.Init(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, 1);
+    jobSystem.Init(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::thread::hardware_concurrency() - 1);
 
     physicsSystem.Init(cMaxBodies, cNumBodyMutexes, cMaxBodyPairs, cMaxContactConstraints, broadPhaseLayerInterface, objectVsBroadphaseLayerFilter, objectVsObjectLayerFilter);
 
@@ -119,10 +119,11 @@ void Physics::initPhysics()
     step = 0;
 }
 
-void Physics::updatePhysics()
+void Physics::updatePhysics(float delta)
 {
-    // If you take larger steps than 1 / 60th of a second you need to do multiple collision steps in order to keep the simulation stable. Do 1 collision step per 1 / 60th of a second (round up).
-    const int cCollisionSteps = 1;
+    // If you take larger steps than 1 / 60th of a second you need to do multiple collision steps in order to keep the simulation stable. 
+    // Do 1 collision step per 1 / 60th of a second (round up).
+    int cCollisionSteps = 1;
 
     // Step the world
     physicsSystem.Update(cDeltaTime, cCollisionSteps, &tempAllocator, &jobSystem);

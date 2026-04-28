@@ -230,7 +230,7 @@ struct Physics
     static constexpr float cDeltaTime = 1.0f / 60.0f;
 
 	void initPhysics();
-	void updatePhysics();
+	void updatePhysics(float delta);
 	void shutdownPhysics();
 };
 

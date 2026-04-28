@@ -102,6 +102,8 @@ struct Model
     BufferHandle currentIndexBuffer = INVALID_BUFFER;
 
     SamplerHandle dummySampler;
+    //This value tracks how many of the same model we have. This is to support instance rendering. 
+    uint32_t countOfModelType;
     bool isModel;
 };
 #endif // !LOAD_GLTF_HDR

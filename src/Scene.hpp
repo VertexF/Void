@@ -53,6 +53,8 @@ namespace
         JPH::BodyID bodyID;
         //This only exists if debugRendererIndex != UINT32_MAX. 
         JPH::Shape* shape;
+
+        bool isDynamic;
     };
 
     inline mat4s convertToMat4(JPH::RMat44& jphMat) 
@@ -94,7 +96,6 @@ namespace
         vector.z = jphVec3.GetZ(); 
         return vector;
     }
-    //inline JPH::Vec3& convertToJPHVec3(vec3s& jphVec3) { return *reinterpret_cast<JPH::Vec3*>(&jphVec3); }
 }
 
 struct Scene

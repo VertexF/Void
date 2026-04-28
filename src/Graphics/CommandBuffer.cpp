@@ -85,7 +85,7 @@ void CommandBuffer::beginRendering()
     depthAttachment.resolveImageView = VK_NULL_HANDLE;
     depthAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.clearValue = clears[1];
 
     VkRenderingInfo renderingInfo{};

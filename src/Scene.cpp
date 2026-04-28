@@ -92,7 +92,7 @@ void Scene::buildScene(Physics& physics)
         rockShapeSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
         rockShapeSettings.mRotation = JPH::Quat(rotx, roty, rotz, rotx).Normalized();
         rockShapeSettings.mMotionType = JPH::EMotionType::Static;
-        rockShapeSettings.mObjectLayer = Layers::MOVING;
+        rockShapeSettings.mObjectLayer = Layers::NON_MOVING;
         buildRigidBodyEntity(physics, rockModelIndex, position, axis, angle, rockShapeSettings, { 1.f, 0.f, 0.f, 1.f });
     }
 
@@ -106,6 +106,7 @@ void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, co
     JPH::BodyID bodyID = physics.bodyInterface->CreateBody(shapeSetting)->GetID();
     bodiesToBeAdded.push(bodyID);
     entities[currentLastEntity].bodyID = bodyID;
+    entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Dynamic;
 
     JPH::EShapeSubType shapeType = shapeSetting.GetShape()->GetSubType();
     JPH::RMat44 shapeModel;
@@ -129,12 +130,11 @@ void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, co
 
     entities[currentLastEntity].debugRendererIndex = currentDebugRendererIndex;
 
-    vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
-
-    entityData[currentLastEntity].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(position));
+    entityData[currentLastEntity].pos = convertToMat4(shapePosition);
     entityData[currentLastEntity].colour = colour;
     entities[currentLastEntity].positionIndex = currentLastEntity;
     entities[currentLastEntity].modelIndex = modelIndex;
+    models[modelIndex].countOfModelType++;
 
     currentLastEntity++;
     currentDebugRendererIndex++;

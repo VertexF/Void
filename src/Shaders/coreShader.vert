@@ -85,8 +85,8 @@ void main()
 
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
-    gl_Position = viewPerspective * globalModel * modelPositionsReference.modelPositions[index].pos * model * vec4(position, 1.0);
-    vPosition  =  globalModel * model * modelPositionsReference.modelPositions[index].pos * vec4(position, 1.0);
+    gl_Position = viewPerspective * globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
+    vPosition  =  globalModel * model * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * vec4(position, 1.0);
 
     vTexcoord0 = texcoord;
     vNormal = mat3(modelInv) * normal;

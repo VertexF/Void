@@ -2509,7 +2509,7 @@ bool GPUDevice::newFrame()
     }
 
     //Command pool rest.
-    commandBufferRing.resetPools(currentFrame);
+    //commandBufferRing.resetPools(currentFrame);
 
     //Descriptor set update.
     if (descriptorSetUpdates.size)
@@ -2538,10 +2538,8 @@ void GPUDevice::present()
 
         vkCmdEndRendering(commandBuffer->vkCommandBuffer);
 
-        //transitionImageLayout(commandBuffer->vkCommandBuffer, vulkanSwapchainImages[vulkanImageIndex], vulkanSurfaceFormat.format, VK_IMAGE_LAYOUT_ATTACHMENT_COLOR_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, false);
-
         VkImageMemoryBarrier2 barrier{}; 
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
         barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -2623,9 +2621,7 @@ void GPUDevice::present()
     }
 
     //Subit command buffer.
-    VkSemaphore waitSemaphores[] = { imageAvailableSemaphore[currentFrame] };
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
-    VkSemaphore* signalSemaphores = &renderFinishSemaphore[vulkanImageIndex];
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -2635,18 +2631,16 @@ void GPUDevice::present()
     submitInfo.commandBufferCount = numQueuedCommandBuffers;
     submitInfo.pCommandBuffers = enqueuedCommandBuffers;
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
+    submitInfo.pSignalSemaphores = &renderFinishSemaphore[vulkanImageIndex];
 
     vkQueueSubmit(vulkanQueue, 1, &submitInfo, framesInFlight[currentFrame]);
 
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapchains[] = { vulkanSwapchain };
+    presentInfo.pWaitSemaphores = &renderFinishSemaphore[vulkanImageIndex];
     presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapchains;
+    presentInfo.pSwapchains = &vulkanSwapchain;
     presentInfo.pImageIndices = &vulkanImageIndex;
 
     VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);

@@ -402,7 +402,7 @@ int main(int argc, char** argv)
             float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             beginFrameTick = currentTick;
 
-            physics.updatePhysics();
+            physics.updatePhysics(deltaTime);
             
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
@@ -411,11 +411,10 @@ int main(int argc, char** argv)
             gpuCommands->pushMarker("Frame");
 
             gpu.beginRenderingTransition(gpuCommands);
-
+            gpuCommands->beginRendering();
             //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
             gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
-            gpuCommands->beginRendering();
 
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
@@ -486,18 +485,20 @@ int main(int argc, char** argv)
 
                 if (entity.debugRendererIndex != UINT32_MAX)
                 {
-                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
-
                     EntityData physicsPosition{};
+                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
                     physicsPosition.pos = convertToMat4(newPos);
                     physicsPosition.colour = scene.entityData[entityIndex].colour;
 
                     physicsUpdateDataArray.push(physicsPosition);
                 }
+            }
 
-                for (uint32_t meshIndex = 0; meshIndex < scene.models[entity.modelIndex].meshDraws.size; ++meshIndex)
+            for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size - 1; ++modelIndexType)
+            {
+                for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
                 {
-                    MeshDraw meshDraw = scene.models[entity.modelIndex].meshDraws[meshIndex];
+                    MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[meshIndex];
 
                     MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
                     MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
@@ -513,7 +514,14 @@ int main(int argc, char** argv)
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
 
-                    gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
+                    if (modelIndexType == scene.models.size - 2)
+                    {
+                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
+                    }
+                    else 
+                    {
+                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
+                    }
                 }
             }
             
@@ -540,33 +548,43 @@ int main(int argc, char** argv)
                     {
                         globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
-                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                        
                         DebugRendererData debugRenderData{};
+                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
                         debugRenderData.position = convertToMat4(newPos);
                         debugRenderData.globalModel = globalModel;
                         debugRenderData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                         debugRenderData.model = scene.debugRendererData[entityIndex].model;
                         debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
 
-                        pushConstants.index = entity.positionIndex;
-                        VOID_ASSERTM(scene.models[entity.modelIndex].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
-
-                        MeshDraw meshDraw = scene.models[scene.debugSphereIndex].meshDraws[0];
-
-                        Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
-                        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
-
-                        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
-
-                        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
-
-                        gpuCommands->drawIndexed(meshDraw.count, 1, 0, 0, 0);
-
                         debugRenderingDataArray.push(debugRenderData);
+                        pushConstants.index = entity.positionIndex;
                     }
                 }
 
+                for (uint32_t modelIndexType = 2; modelIndexType < scene.models.size; ++modelIndexType)
+                {
+                    VOID_ASSERTM(scene.models[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
+
+                    MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[0];
+
+                    Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+                    gpuCommands->drawIndexed(meshDraw.count, scene.entities.size, 0, 0, 0);
+
+                    //TODO: Add the data structures needed to allow for this.
+                    //if (modelIndexType == scene.models.size - 1)
+                    //{
+                    //    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
+                    //}
+                    //else
+                    //{
+                    //    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
+                    //}
+                }
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
                 scratchAllocator.freeMarker(debugRendererMarker);
             }
@@ -589,8 +607,6 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    //gpu.unmapBuffer(debugRendererDataMap);
-    //gpu.unmapBuffer(positionMap);
     gpu.unmapBuffer(cbMap);
     gpu.unmapBuffer(skyboxMaterialMap);
     gpu.unmapBuffer(skyboxCBMap);
