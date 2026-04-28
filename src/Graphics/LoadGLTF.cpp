@@ -287,8 +287,6 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
     {
         for (uint32_t nodeIndex = 0; nodeIndex < cgltfData->nodes_count; ++nodeIndex)
         {
-            cgltf_node currentNode = nodeStack[nodeIndex];
-
             cgltf_mesh* mesh = nodeStack[nodeIndex].mesh;
             if (mesh == nullptr)
             {

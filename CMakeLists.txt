@@ -664,8 +664,6 @@ set(JOLT_PHYSICS_SRC_FILES
 # Ignore shader files for compilation, we'll compile them manually
 set_source_files_properties(${JOLT_PHYSICS_SHADERS} PROPERTIES HEADER_FILE_ONLY ON)
 
-# TODO - Do we need this?
-
 if (WIN32)
 	# Add natvis file
 	set(JOLT_PHYSICS_SRC_FILES ${JOLT_PHYSICS_SRC_FILES} ${JOLT_PHYSICS_ROOT}/Jolt.natvis)
@@ -809,7 +807,7 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${VOID_SOURCE} ${GLSL_SOURCE
 
 target_compile_options(Void PRIVATE
                        $<$<CXX_COMPILER_ID:MSVC>:/W4>
-                       $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic -fsanitize=address -fno-omit-frame-pointer>
+                       $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -fsanitize=address -fno-omit-frame-pointer>
 )
 
 target_link_options(Void PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>: -fsanitize=address>)

@@ -29,14 +29,6 @@ void Scene::buildScene(Physics& physics)
     JPH::ShapeSettings::ShapeResult duckShapeResult = duckSphereSettings.Create();
     JPH::ShapeRefC duckShapeRef = duckShapeResult.Get();
 
-    //vec3s position{ 0.f, 0.f, 0.f };
-    //sphereSettings.SetShape(rockShapeRef);
-    //sphereSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
-    //sphereSettings.mRotation = JPH::Quat::sIdentity();
-    //sphereSettings.mMotionType = JPH::EMotionType::Static;
-    //sphereSettings.mObjectLayer = Layers::MOVING;
-    //buildRigidBodyEntity(physics, rockModelIndex, position, { 0.f, 0.f, 0.f }, 0.f, sphereSettings, { 1.f, 0.f, 1.f, 1.f });
-
     vec3s position1{ 20.f, 59.f, 0.f };
     sphereSettings2.SetShape(duckShapeRef);
     sphereSettings2.mPosition = JPH::Vec3Arg{ position1.x, position1.y, position1.z };
@@ -58,9 +50,6 @@ void Scene::buildScene(Physics& physics)
     physics.bodyInterface->SetLinearVelocity(entities[0].bodyID, JPH::Vec3(0.f, -64.f, 0.f));
     physics.bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(0.f, 0.f, -64.f));
 
-    uint32_t maxBodies = physics.physicsSystem.GetMaxBodies();
-    uint32_t numBodies = physics.physicsSystem.GetNumBodies();
-
     srand(time(0));
 
     float sceneRadius = 1000.f;
@@ -77,9 +66,6 @@ void Scene::buildScene(Physics& physics)
 
         vec3s axis = glms_normalize({ rotx, roty, rotz });
         float angle = (float(rand()) / RAND_MAX) * M_PI_4;
-
-        float sinHalfAngle = std::sin((angle / 2) * M_PI / 180);
-        float cosHalfAngle = std::cos((angle / 2) * M_PI / 180);
 
         JPH::SphereShapeSettings rockSphereSetting2{ 13.5f };
         rockSphereSetting2.SetEmbedded();
