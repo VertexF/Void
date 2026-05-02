@@ -22,7 +22,7 @@ struct ModelPosition
     float padd[4];
 };
 
-layout(scalar, set = 0, binding = 0) uniform LocalConstants
+struct SceneData
 {
     mat4 viewPerspective;
     mat4 globalModel;
@@ -55,11 +55,16 @@ layout(buffer_reference, buffer_reference_align = 8, scalar) readonly buffer Mod
     ModelPosition modelPositions[];
 };
 
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
+{
+    SceneData sceneData;
+};
+
 layout(scalar, push_constant) uniform entityIndex
 {
     VertexData vertexDataReference;
     ModelPositionData modelPositionsReference;
-    uint index;
+    SceneBufferData sceneBufferReference;
 };
 
 layout(location = 0) out vec2 vTexcoord0;
@@ -85,8 +90,8 @@ void main()
 
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
-    gl_Position = viewPerspective * globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
-    vPosition  =  globalModel * model * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * vec4(position, 1.0);
+    gl_Position = sceneBufferReference.sceneData.viewPerspective * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
+    vPosition  =  sceneBufferReference.sceneData.globalModel * model * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * vec4(position, 1.0);
 
     vTexcoord0 = texcoord;
     vNormal = mat3(modelInv) * normal;

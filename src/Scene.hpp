@@ -18,16 +18,13 @@ namespace
     struct DebugRendererData
     {
         mat4s position;
-        //We also need the global scale to be the same as the regular geometry other wise things will be too small.
-        mat4s globalModel;
         //We need this because the final matrix that comes out the glb after multiplying 
         //all local nodes together needs to be the same as the collision geometry.
         //Meaning that model matrix we get out of the actual geometry needs to be given to the debug geometry if they tied together when creating the buffer.
         mat4s model;
-        mat4s viewPerspective;
         //Colour will be used as a key for various different objects.
         vec4s colour;
-        float pad[4];
+        float padd[4];
     };
 
     struct EntityData

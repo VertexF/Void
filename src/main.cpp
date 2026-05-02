@@ -44,6 +44,7 @@ namespace
 
     BufferHandle positionalBuffer;
     BufferHandle debugRendererDataBuffer;
+    BufferHandle debugGlobalBuffer;
 
     struct SkyboxData
     {
@@ -63,7 +64,7 @@ namespace
     {
         VkDeviceAddress vertexDataAddress;
         VkDeviceAddress modelPositionAddress;
-        uint32_t index;
+        VkDeviceAddress sceneAddress;
     };
 
     void uploadMaterial(MaterialData& meshData, const MeshDraw& meshDraw)
@@ -184,7 +185,7 @@ int main(int argc, char** argv)
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation cubeRLLCreation{};
-    cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
+    cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "LocalConstants" })
         .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
         .setSetIndex(0);
     cubeRLLCreation.bindless = false;
@@ -297,10 +298,15 @@ int main(int argc, char** argv)
     positionalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
     bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugRendererData) * scene.totalColliders)
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugRendererData) * scene.debugRendererData.size)
         .setName("debugRenderer")
         .setData(scene.debugRendererData.data);
     debugRendererDataBuffer = gpu.createBindlessBuffer(bufferCreation);
+
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(UniformData))
+        .setName("debugRenderer");
+    debugGlobalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(SkyboxData))
@@ -340,6 +346,7 @@ int main(int argc, char** argv)
     SkyboxData* skyboxMaterialBufferData = static_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
     bool debugRenderer = true;
+    UniformData globalDebugData{};
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -377,20 +384,20 @@ int main(int argc, char** argv)
                 debugRenderer = !debugRenderer;
             }
 
-            ////NOTE: This must be after the OS messages.
-            //imgui->newFrame();
+            //NOTE: This must be after the OS messages.
+            imgui->newFrame();
 
-            //if (ImGui::Begin("Void ImGui"))
-            //{
-            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            //}
-            //ImGui::End();
+            if (ImGui::Begin("Void ImGui"))
+            {
+                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            }
+            ImGui::End();
 
-            //if (ImGui::Begin("GPU"))
-            //{
-            //    gpuProfiler.imguiDraw();
-            //}
-            //ImGui::End();
+            if (ImGui::Begin("GPU"))
+            {
+                gpuProfiler.imguiDraw();
+            }
+            ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -477,13 +484,19 @@ int main(int argc, char** argv)
             uint32_t physicsMarker = scratchAllocator.getMarker();
             Array<EntityData> physicsUpdateDataArray;
             physicsUpdateDataArray.init(&scratchAllocator, scene.totalEntities);
+            Buffer* debugGlobalData = gpu.accessBuffer(debugGlobalBuffer);
+            pushConstants.sceneAddress = debugGlobalData->bufferAddress;
+
+            globalDebugData.globalModel = globalModel;
+            globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
             for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
             {
                 const Entity& entity = scene.entities[entityIndex];
-                pushConstants.index = entityIndex;
 
-                if (entity.debugRendererIndex != UINT32_MAX)
+                if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
                 {
                     EntityData physicsPosition{};
                     JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
@@ -528,7 +541,6 @@ int main(int argc, char** argv)
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
             scratchAllocator.freeMarker(physicsMarker);
 
-            //mat4s globalModel{};
             if (debugRenderer)
             {
                 //Debug
@@ -541,23 +553,27 @@ int main(int argc, char** argv)
 
                 Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
                 pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
+
+                globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
+                globalDebugData.globalModel = globalModel;
+                globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+
+                pushConstants.sceneAddress = debugGlobalData->bufferAddress;
+
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
+
                 for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
                 {
                     const Entity& entity = scene.entities[entityIndex];
-                    if (entity.debugRendererIndex != UINT32_MAX)
+                    if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
                     {
-                        globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
-
                         DebugRendererData debugRenderData{};
                         JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
                         debugRenderData.position = convertToMat4(newPos);
-                        debugRenderData.globalModel = globalModel;
-                        debugRenderData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
                         debugRenderData.model = scene.debugRendererData[entityIndex].model;
                         debugRenderData.colour = scene.debugRendererData[entityIndex].colour;
 
                         debugRenderingDataArray.push(debugRenderData);
-                        pushConstants.index = entity.positionIndex;
                     }
                 }
 
@@ -588,7 +604,7 @@ int main(int argc, char** argv)
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
                 scratchAllocator.freeMarker(debugRendererMarker);
             }
-            //imgui->render(*gpuCommands);
+            imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
@@ -599,7 +615,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            //ImGui::Render();
+            ImGui::Render();
         }
 
         //FrameMark;
@@ -617,6 +633,8 @@ int main(int argc, char** argv)
     gpu.destroyBuffer(skyboxMaterialBuffer);
     gpu.destroyBuffer(skyboxUniformBuffer);
     gpu.destroyBuffer(debugRendererDataBuffer);
+    gpu.destroyBuffer(debugGlobalBuffer);
+    //gpu.destroyBuffer(debugModelBuffer);
 
     scene.shutdownScene(gpu, physics);
 

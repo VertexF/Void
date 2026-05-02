@@ -14,34 +14,48 @@ struct Vertices
 //Here we are going to attempt full bindless for the debug renderer to make this as painless as possible in the future.
 struct ModelPosition
 {
-    mat4 pos;
-    //We also need the global scale to be the same as the regular geometry other wise things will be too small.
-    mat4 globalModel;
-    //We need this because the final matrix that comes out the glb after multiplying 
+    mat4 pos; 
     //all local nodes together needs to be the same as the collision geometry.
     //Meaning that model matrix we get out of the actual geometry needs to be given to the debug geometry if they tied together when creating the buffer.
     mat4 model;
-    mat4 viewPerspective;
     //Colour will be used as a key for various different objects.
     vec4 colour;
-    float pad[4];
+    float padd[4];
 };
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer VertexData
+struct SceneData
+{
+    mat4 viewPerspective;
+    mat4 globalModel;
+    vec4 eye;
+    vec4 light;
+};
+
+struct DebugModel
+{
+    mat4 model;
+};
+
+layout(scalar, buffer_reference) readonly buffer VertexData
 {
     Vertices vertexData[];
 };
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer ModelPositionData
+layout(scalar, buffer_reference) readonly buffer ModelPositionData
 {
     ModelPosition modelPositions[];
+};
+
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
+{
+    SceneData sceneData;
 };
 
 layout(scalar, push_constant) uniform entityIndex
 {
     VertexData vertexDataReference;
     ModelPositionData modelPositionsReference;
-    uint index;
+    SceneBufferData sceneBufferReference;
 };
 
 //Pipeline layout needs changing over the default one.
@@ -53,6 +67,6 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].py, 
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
-    gl_Position = modelPositionsReference.modelPositions[gl_InstanceIndex].viewPerspective * modelPositionsReference.modelPositions[gl_InstanceIndex].globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * modelPositionsReference.modelPositions[gl_InstanceIndex].model * vec4(position, 1.0);
+    gl_Position = sceneBufferReference.sceneData.viewPerspective * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * modelPositionsReference.modelPositions[gl_InstanceIndex].model * vec4(position, 1.0);
     vColour = modelPositionsReference.modelPositions[gl_InstanceIndex].colour;
 }

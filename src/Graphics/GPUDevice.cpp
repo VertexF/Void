@@ -21,6 +21,7 @@
 namespace 
 {
 #define VULKAN_DEBUG_REPORT
+#define VULKAN_SYNCHRONIZATION_VALIDATION
     const char* REQUESTED_EXTENSIONS[] =
     {
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -2509,7 +2510,7 @@ bool GPUDevice::newFrame()
     }
 
     //Command pool rest.
-    //commandBufferRing.resetPools(currentFrame);
+    commandBufferRing.resetPools(currentFrame);
 
     //Descriptor set update.
     if (descriptorSetUpdates.size)
@@ -2544,8 +2545,8 @@ void GPUDevice::present()
         barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
         barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+        barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_2_NONE;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = vulkanSwapchainImages[vulkanImageIndex];
@@ -2757,7 +2758,7 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     barrierColour.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrierColour.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrierColour.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrierColour.srcStageMask = VK_PIPELINE_STAGE_NONE;
+    barrierColour.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     barrierColour.srcAccessMask = VK_ACCESS_NONE;
     barrierColour.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     barrierColour.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
