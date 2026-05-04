@@ -329,7 +329,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                     .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
                     .setName("material");
                 meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
-                dsCreation.buffer(meshDraw.materialBuffer, 1)
+                dsCreation.buffer(meshDraw.materialBuffer, 0)
                     .setLayout(descriptorSetLayout);
 
                 cgltf_material* material = meshPrimitive.material;

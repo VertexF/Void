@@ -1797,9 +1797,6 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
 
         vkBinding.binding = binding.start;
         vkBinding.descriptorType = inputBinding.type;
-                vkBinding.descriptorType = vkBinding.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
-                                                               VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC :
-                                                               vkBinding.descriptorType;
         vkBinding.descriptorCount = inputBinding.count;
 
         vkBinding.stageFlags = inputBinding.stage;

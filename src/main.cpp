@@ -182,10 +182,16 @@ int main(int argc, char** argv)
         .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
+    VkDescriptorType type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    uint16_t binding = 0;
+    uint16_t count = 0;
+    VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    const char* name = nullptr;
+
     //Descriptor set layout.
     DescriptorSetLayoutCreation cubeRLLCreation{};
     cubeRLLCreation
-        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
+        .addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL, .name = "MaterialConstant" })
         .setSetIndex(0);
     cubeRLLCreation.bindless = false;
 
@@ -201,6 +207,7 @@ int main(int argc, char** argv)
     //Depth
     PipelineCreation skyboxPipelineCreation{};
     skyboxPipelineCreation.depthStencil.depthEnable = false;
+    skyboxPipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
     //Shader state
     FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
@@ -214,7 +221,7 @@ int main(int argc, char** argv)
     //Descriptor set layout.
     DescriptorSetLayoutCreation skyboxSetLayout{};
     skyboxSetLayout
-        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "SkyboxMaterial" })
+        .addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL, .name = "SkyboxMaterial" })
         .setSetIndex(0);
     skyboxSetLayout.bindless = false;
 
@@ -256,9 +263,9 @@ int main(int argc, char** argv)
     SamplerCreation skyboxSamplerCreation{};
     skyboxSamplerCreation.minFilter = VK_FILTER_LINEAR;
     skyboxSamplerCreation.magFilter = VK_FILTER_LINEAR;
-    skyboxSamplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    skyboxSamplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    skyboxSamplerCreation.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    skyboxSamplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     SamplerHandle skyboxSampler = gpu.createSampler(skyboxSamplerCreation);
     gpu.linkTextureSampler(skyboxTextureHandle, skyboxSampler);
 
@@ -305,14 +312,8 @@ int main(int argc, char** argv)
         .setName("SkyboxData");
     skyboxMaterialBuffer = gpu.createBuffer(bufferCreation);
 
-    //bufferCreation.reset()
-    //    .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
-    //    .setName("skyboxUniformDescriptor");
-    //skyboxUniformBuffer = gpu.createBuffer(bufferCreation);
-
     DescriptorSetCreation dsCreation{};
-    //dsCreation.buffer(skyboxUniformBuffer, 0);
-    dsCreation.buffer(skyboxMaterialBuffer, 1);
+    dsCreation.buffer(skyboxMaterialBuffer, 0);
     dsCreation.setLayout(skyboxDescriptorSetLayout);
 
     skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
@@ -405,7 +406,7 @@ int main(int argc, char** argv)
             gpu.beginRenderingTransition(gpuCommands);
             gpuCommands->beginRendering();
             //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
-            gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
+            gpuCommands->clear(1.f, 1.f, 1.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
 
             gpuCommands->setScissor(nullptr);
@@ -420,27 +421,6 @@ int main(int argc, char** argv)
             globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
             globalDebugData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
             globalDebugData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
-
-            //Skybox!
-            gpuCommands->bindPipeline(skyboxPipeline);
-
-            //Maybe we can make this non-dymanic after things are working?
-            Buffer* skyboxMaterialDataBuffer = gpu.accessBuffer(skyboxMaterialBuffer);
-
-            SkyboxData skyboxData{};
-            skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
-            skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
-
-            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &skyboxData, skyboxMaterialDataBuffer->vmaAllocation, 0, sizeof(SkyboxData));
-
-            vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
-
-            gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
-            gpuCommands->bindlessDescriptorSet(1);
-
-            gpuCommands->draw(36, 1, 0, 0);
-
-            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
             //Scene
             gpuCommands->bindPipeline(cubePipeline);
@@ -567,6 +547,28 @@ int main(int argc, char** argv)
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
                 scratchAllocator.freeMarker(debugRendererMarker);
             }
+
+            //Skybox!
+            gpuCommands->bindPipeline(skyboxPipeline);
+
+            //Maybe we can make this non-dymanic after things are working?
+            Buffer* skyboxMaterialDataBuffer = gpu.accessBuffer(skyboxMaterialBuffer);
+
+            SkyboxData skyboxData{};
+            skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
+            skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
+
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &skyboxData, skyboxMaterialDataBuffer->vmaAllocation, 0, sizeof(SkyboxData));
+
+            vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+            gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
+            gpuCommands->bindlessDescriptorSet(1);
+
+            gpuCommands->draw(36, 1, 0, 0);
+
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
+
             imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();

@@ -39,7 +39,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Sce
     SceneData sceneData;
 };
 
-layout(scalar, set = 0, binding = 1) uniform MaterialConstant
+layout(scalar, set = 0, binding = 0) uniform MaterialConstant
 {
     mat4 model;
     mat4 modelInv;

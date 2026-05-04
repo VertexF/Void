@@ -30,7 +30,7 @@ struct SceneData
     vec4 light;
 };
 
-layout(scalar, set = 0, binding = 1) uniform MaterialConstant
+layout(scalar, set = 0, binding = 0) uniform MaterialConstant
 {
     mat4 model;
     mat4 modelInv;

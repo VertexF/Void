@@ -59,7 +59,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Sce
     SceneData sceneData;
 };
 
-layout(scalar, set = 0, binding = 1) uniform SkyboxData
+layout(scalar, set = 0, binding = 0) uniform SkyboxData
 {
     vec3 testColour;
     uint skyboxTextureIndex;
@@ -92,8 +92,11 @@ void main()
 	viewProject[3][2] = 0;
 	viewProject[3][3] = 1;
 
+	//mat4 viewP = mat4(mat3(viewProject));
+
 	int idx = indices[gl_VertexIndex];
     vec4 pos = viewProject * vec4(pos[idx], 1.0);
 	dir = pos.xyz;
-    gl_Position = pos.xyww;
+    //gl_Position = pos.xyww;
+	gl_Position = vec4(pos.x, pos.y, 0.f, pos.w);
 }

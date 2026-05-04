@@ -19,7 +19,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Sce
     SceneData sceneData;
 };
 
-layout(scalar, set = 0, binding = 1) uniform SkyboxData
+layout(scalar, set = 0, binding = 0) uniform SkyboxData
 {
     vec3 testColour;
     uint skyboxTextureIndex;
