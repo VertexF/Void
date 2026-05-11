@@ -77,7 +77,7 @@ void Camera::update()
     //Quaternion based rotation
     const versors pitchRotation = glms_quat(pitch, 1, 0, 0);
     const versors yawRotation = glms_quat(yaw, 0, 1, 0);
-    const versors rotation = glms_quat_normalize(glms_quat_mul(pitchRotation, yawRotation));
+    rotation = glms_quat_normalize(glms_quat_mul(pitchRotation, yawRotation));
 
     const mat4s translation = glms_translate_make(glms_vec3_scale(position, -1.f));
     view = glms_mat4_mul(glms_quat_mat4(rotation), translation);
@@ -108,6 +108,8 @@ void Camera::calculateProjectionMatrix()
     if (perspective) 
     {
         projection = glms_perspective(glm_rad(fieldOfView), aspectRatio, 1000.f, 0.01f);
+        projection.m22 = 0.0f;
+        projection.m23 = -1.0f;
     }
     else 
     {

@@ -35,8 +35,7 @@ namespace
     PipelineHandle cubePipeline;
     PipelineHandle skyboxPipeline;
     PipelineHandle debugPipeline;
-    BufferHandle sceneBuffer;
-    BufferHandle skyboxUniformBuffer;
+    //BufferHandle skyboxUniformBuffer;
     BufferHandle skyboxMaterialBuffer;
     DescriptorSetLayoutHandle mainDescriptorSetLayout;
     DescriptorSetLayoutHandle skyboxDescriptorSetLayout;
@@ -55,6 +54,8 @@ namespace
     struct UniformData
     {
         mat4s viewPerspective;
+        mat4s view;
+        mat4s project;
         mat4s globalModel;
         vec4s eye;
         vec4s light;
@@ -97,10 +98,8 @@ namespace
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
 
     //TODO: Move this to a place that make sense.
-    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, const char* name)
+    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, Array<uint8_t*> &skyboxImageArray, const char* name)
     {
-        Array<uint8_t*> skyboxImageArray;
-        skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
         int comp;
         int width;
         int height;
@@ -109,6 +108,7 @@ namespace
         {
             if (images[i])
             {
+                stbi_set_flip_vertically_on_load(1);
                 //Load 6 images.
                 uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
                 if (imageData == nullptr)
@@ -118,7 +118,7 @@ namespace
                 }
 
                 skyboxImageArray.push(imageData);
-                free(imageData);
+                //free(imageData);
             }
         }
 
@@ -130,9 +130,8 @@ namespace
             .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(width), 1)
             .setName(name);
         creation.layerCount = 6;
-        TextureHandle newTexture = gpu.createTexture(creation);
+        TextureHandle newTexture = gpu.createTextureTEMP(creation, skyboxImageArray);
 
-        skyboxImageArray.shutdown();
         return newTexture;
     }
 }
@@ -183,10 +182,16 @@ int main(int argc, char** argv)
         .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
+    VkDescriptorType type = VK_DESCRIPTOR_TYPE_MAX_ENUM;
+    uint16_t binding = 0;
+    uint16_t count = 0;
+    VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    const char* name = nullptr;
+
     //Descriptor set layout.
     DescriptorSetLayoutCreation cubeRLLCreation{};
-    cubeRLLCreation.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT, "LocalConstants" })
-        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "MaterialConstant" })
+    cubeRLLCreation
+        .addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL, .name = "MaterialConstant" })
         .setSetIndex(0);
     cubeRLLCreation.bindless = false;
 
@@ -201,7 +206,8 @@ int main(int argc, char** argv)
 
     //Depth
     PipelineCreation skyboxPipelineCreation{};
-    skyboxPipelineCreation.depthStencil.depthEnable = false;
+    skyboxPipelineCreation.depthStencil.depthEnable = true;
+    skyboxPipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
     //Shader state
     FileReadResult vertSkybox = fileReadBinary("Assets/Shaders/skybox.vert.spv", &MemoryService::instance()->scratchAllocator);
@@ -214,8 +220,8 @@ int main(int argc, char** argv)
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation skyboxSetLayout{};
-    skyboxSetLayout.addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 0, 1, VK_SHADER_STAGE_ALL, "LocalConstants" })
-        .addBinding({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, 1, VK_SHADER_STAGE_ALL, "SkyboxMaterial" })
+    skyboxSetLayout
+        .addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL, .name = "SkyboxMaterial" })
         .setSetIndex(0);
     skyboxSetLayout.bindless = false;
 
@@ -244,23 +250,19 @@ int main(int argc, char** argv)
 
     debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ false);
 
-    //Constant buffer
-    BufferCreation uniformBufferCreation;
-    uniformBufferCreation.reset()
-        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
-        .setName("sceneBuffer");
-    sceneBuffer = gpu.createBuffer(uniformBufferCreation);
+    Array<uint8_t*> skyboxImageArray;
+    skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
 
     Array<const char*> cubemapsImage;
     cubemapsImage.init(allocator, 6);
-    cubemapsImage.push("Assets/Textures/1.png");
-    cubemapsImage.push("Assets/Textures/2.png");
-    cubemapsImage.push("Assets/Textures/3.png");
     cubemapsImage.push("Assets/Textures/4.png");
-    cubemapsImage.push("Assets/Textures/5.png");
+    cubemapsImage.push("Assets/Textures/2.png");
     cubemapsImage.push("Assets/Textures/6.png");
+    cubemapsImage.push("Assets/Textures/5.png");
+    cubemapsImage.push("Assets/Textures/1.png");
+    cubemapsImage.push("Assets/Textures/3.png");
 
-    TextureHandle skyboxTextureHandle = createACubemap(gpu, cubemapsImage, "SpaceCubeMap");
+    TextureHandle skyboxTextureHandle = createACubemap(gpu, cubemapsImage, skyboxImageArray, "SpaceCubeMap");
     SamplerCreation skyboxSamplerCreation{};
     skyboxSamplerCreation.minFilter = VK_FILTER_LINEAR;
     skyboxSamplerCreation.magFilter = VK_FILTER_LINEAR;
@@ -280,7 +282,7 @@ int main(int argc, char** argv)
     physics.initPhysics();
 
     Scene scene;
-    scene.initScene(allocator, gpu, sceneBuffer, mainDescriptorSetLayout);
+    scene.initScene(allocator, gpu, mainDescriptorSetLayout);
     scene.buildScene(physics);
 
     // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
@@ -313,14 +315,8 @@ int main(int argc, char** argv)
         .setName("SkyboxData");
     skyboxMaterialBuffer = gpu.createBuffer(bufferCreation);
 
-    bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformData))
-        .setName("skyboxUniformDescriptor");
-    skyboxUniformBuffer = gpu.createBuffer(bufferCreation);
-
     DescriptorSetCreation dsCreation{};
-    dsCreation.buffer(skyboxUniformBuffer, 0);
-    dsCreation.buffer(skyboxMaterialBuffer, 1);
+    dsCreation.buffer(skyboxMaterialBuffer, 0);
     dsCreation.setLayout(skyboxDescriptorSetLayout);
 
     skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
@@ -333,17 +329,8 @@ int main(int argc, char** argv)
     gameCamera.internal3DCamera.initPerspective(0.01f, 5000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
     gameCamera.init(7.f, 3.0f, 0.1f);
 
-    float modelScale = 0.1f;
+    float modelScale = 1.0f;
     bool fullscreen = false;
-
-    MapBufferParameters skyboxCBMap = { .buffer = skyboxUniformBuffer, .offset = 0, .size = 0 };
-    void* skyboxCBData = gpu.mapBuffer(skyboxCBMap);
-
-    MapBufferParameters cbMap = { .buffer = sceneBuffer, .offset = 0, .size = 0 };
-    void* cbData = gpu.mapBuffer(cbMap);
-
-    MapBufferParameters skyboxMaterialMap = { .buffer = skyboxMaterialBuffer, .offset = 0, .size = 0 };
-    SkyboxData* skyboxMaterialBufferData = static_cast<SkyboxData*>(gpu.mapBuffer(skyboxMaterialMap));
 
     bool debugRenderer = true;
     UniformData globalDebugData{};
@@ -371,6 +358,8 @@ int main(int argc, char** argv)
                 continue;
             }
 
+            mat4s globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
+
             if (Window::instance()->resizeRequested)
             {
                 Window::instance()->resizeRequested = false;
@@ -384,20 +373,20 @@ int main(int argc, char** argv)
                 debugRenderer = !debugRenderer;
             }
 
-            //NOTE: This must be after the OS messages.
-            imgui->newFrame();
+            ////NOTE: This must be after the OS messages.
+            //imgui->newFrame();
 
-            if (ImGui::Begin("Void ImGui"))
-            {
-                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            }
-            ImGui::End();
+            //if (ImGui::Begin("Void ImGui"))
+            //{
+            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            //}
+            //ImGui::End();
 
-            if (ImGui::Begin("GPU"))
-            {
-                gpuProfiler.imguiDraw();
-            }
-            ImGui::End();
+            //if (ImGui::Begin("GPU"))
+            //{
+            //    gpuProfiler.imguiDraw();
+            //}
+            //ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -420,63 +409,28 @@ int main(int argc, char** argv)
             gpu.beginRenderingTransition(gpuCommands);
             gpuCommands->beginRendering();
             //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
-            gpuCommands->clear(0.f, 0.f, 0.f, 1.f);
+            gpuCommands->clear(1.f, 1.f, 1.f, 1.f);
             gpuCommands->clearDepthStencil(0.f, 0);
 
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
 
-            //Skybox!
-            gpuCommands->bindPipeline(skyboxPipeline);
+            Buffer* debugGlobalData = gpu.accessBuffer(debugGlobalBuffer);
+            pushConstants.sceneAddress = debugGlobalData->bufferAddress;
+            pushConstants.vertexDataAddress = 0;
+            pushConstants.modelPositionAddress = 0;
 
-            //Update the perspective matrix for the skybox.
-            if (skyboxCBData)
-            {
-                //TODO: Match these name with what's in the shader.
-                UniformData uniformData{};
-                uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
-                //It needs to have no translation.
-                uniformData.viewPerspective.m30 = 0;
-                uniformData.viewPerspective.m31 = 0;
-                uniformData.viewPerspective.m32 = 0;
-                uniformData.viewPerspective.m33 = 1;
-                memcpy(skyboxCBData, &uniformData, sizeof(UniformData));
-            }
-
-            //Maybe we can make this non-dymanic after things are working?
-            if (skyboxMaterialBufferData)
-            {
-                SkyboxData skyboxData{};
-                skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
-                skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
-                memcpy(skyboxMaterialBufferData, &skyboxData, sizeof(SkyboxData));
-            }
-
-            gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
-            gpuCommands->bindlessDescriptorSet(1);
-
-            gpuCommands->draw(36, 1, 0, 0);
+            globalDebugData.globalModel = globalModel;
+            globalDebugData.view = gameCamera.internal3DCamera.view;
+            globalDebugData.project = gameCamera.internal3DCamera.projection;
+            globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
+            globalDebugData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
+            globalDebugData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             //Scene
             gpuCommands->bindPipeline(cubePipeline);
 
             gpuCommands->bindlessDescriptorSet(1);
-
-            //Update rotating cube data.
-            mat4s globalModel{};
-            if (cbData)
-            {
-                globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
-
-                //TODO: Match these name with what's in the shader.
-                UniformData uniformData{};
-                uniformData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
-                uniformData.globalModel = globalModel;
-                uniformData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
-                uniformData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
-
-                memcpy(cbData, &uniformData, sizeof(UniformData));
-            }
 
             Buffer* positionBuff = gpu.accessBuffer(positionalBuffer);
             pushConstants.modelPositionAddress = positionBuff->bufferAddress;
@@ -484,11 +438,6 @@ int main(int argc, char** argv)
             uint32_t physicsMarker = scratchAllocator.getMarker();
             Array<EntityData> physicsUpdateDataArray;
             physicsUpdateDataArray.init(&scratchAllocator, scene.totalEntities);
-            Buffer* debugGlobalData = gpu.accessBuffer(debugGlobalBuffer);
-            pushConstants.sceneAddress = debugGlobalData->bufferAddress;
-
-            globalDebugData.globalModel = globalModel;
-            globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
 
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
@@ -496,16 +445,37 @@ int main(int argc, char** argv)
             {
                 const Entity& entity = scene.entities[entityIndex];
 
-                if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                if (entity.isPlayer == false)
                 {
+                    if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                    {
+                        EntityData physicsPosition{};
+                        JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
+                        physicsPosition.pos = convertToMat4(newPos);
+                        physicsPosition.colour = scene.entityData[entityIndex].colour;
+
+                        physicsUpdateDataArray.push(physicsPosition);
+                    }
+                }
+                else
+                {
+                    JPH::RVec3Arg playerPosition{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y - 3.f, gameCamera.internal3DCamera.position.z - 15.f };
+                    JPH::QuatArg playerRotation{ gameCamera.internal3DCamera.rotation.x, gameCamera.internal3DCamera.rotation.y, gameCamera.internal3DCamera.rotation.z, gameCamera.internal3DCamera.rotation.w };
                     EntityData physicsPosition{};
-                    JPH::RMat44 newPos = physics.bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
-                    physicsPosition.pos = convertToMat4(newPos);
-                    physicsPosition.colour = scene.entityData[entityIndex].colour;
+                    physics.bodyInterface->SetPosition(scene.entities[0].bodyID, playerPosition, JPH::EActivation::Activate);
+                    physics.bodyInterface->SetRotation(scene.entities[0].bodyID, playerRotation, JPH::EActivation::Activate);
+
+                    mat4s playerCamera = glms_mat4_mul(gameCamera.internal3DCamera.view, glms_translate_make({ 0.f, 9999.f, 9999.f }));
+
+                    physicsPosition.pos = playerCamera;
+                    physicsPosition.colour = scene.entityData[0].colour;
 
                     physicsUpdateDataArray.push(physicsPosition);
                 }
             }
+
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
+            scratchAllocator.freeMarker(physicsMarker);
 
             for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size; ++modelIndexType)
             {
@@ -522,7 +492,7 @@ int main(int argc, char** argv)
                     Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
@@ -531,15 +501,12 @@ int main(int argc, char** argv)
                     {
                         gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
                     }
-                    else 
+                    else
                     {
                         gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
                     }
                 }
             }
-            
-            vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
-            scratchAllocator.freeMarker(physicsMarker);
 
             if (debugRenderer)
             {
@@ -554,7 +521,6 @@ int main(int argc, char** argv)
                 Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer);
                 pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
 
-                globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
                 globalDebugData.globalModel = globalModel;
                 globalDebugData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
 
@@ -577,6 +543,9 @@ int main(int argc, char** argv)
                     }
                 }
 
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData)* debugRenderingDataArray.size);
+                scratchAllocator.freeMarker(debugRendererMarker);
+
                 for (uint32_t modelIndexType = 0; modelIndexType < scene.debugModels.size; ++modelIndexType)
                 {
                     VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
@@ -586,7 +555,7 @@ int main(int argc, char** argv)
                     Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
@@ -600,11 +569,30 @@ int main(int argc, char** argv)
                         gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].countOfModelType, 0, 0, scene.debugModels[modelIndexType + 1].countOfModelType);
                     }
                 }
-
-                vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
-                scratchAllocator.freeMarker(debugRendererMarker);
             }
-            imgui->render(*gpuCommands);
+
+            //Skybox!
+            gpuCommands->bindPipeline(skyboxPipeline);
+
+            //Maybe we can make this non-dymanic after things are working?
+            Buffer* skyboxMaterialDataBuffer = gpu.accessBuffer(skyboxMaterialBuffer);
+
+            SkyboxData skyboxData{};
+            skyboxData.skyboxTextureIndex = skyboxTextureHandle.index;
+            skyboxData.testColour = vec3s{ 0.f, 1.f, 0.f };
+
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &skyboxData, skyboxMaterialDataBuffer->vmaAllocation, 0, sizeof(SkyboxData));
+
+            vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+            gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
+            gpuCommands->bindlessDescriptorSet(1);
+
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
+
+            gpuCommands->draw(36, 1, 0, 0);
+
+            //imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
@@ -615,7 +603,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            ImGui::Render();
+            //ImGui::Render();
         }
 
         //FrameMark;
@@ -623,25 +611,21 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    gpu.unmapBuffer(cbMap);
-    gpu.unmapBuffer(skyboxMaterialMap);
-    gpu.unmapBuffer(skyboxCBMap);
+    skyboxImageArray.shutdown();
 
     gpu.destroyBuffer(positionalBuffer);
 
     gpu.destroyDescriptorSet(skyboxDescriptorSet);
     gpu.destroyBuffer(skyboxMaterialBuffer);
-    gpu.destroyBuffer(skyboxUniformBuffer);
+    //gpu.destroyBuffer(skyboxUniformBuffer);
     gpu.destroyBuffer(debugRendererDataBuffer);
     gpu.destroyBuffer(debugGlobalBuffer);
-    //gpu.destroyBuffer(debugModelBuffer);
 
     scene.shutdownScene(gpu, physics);
 
     gpu.destroySampler(skyboxSampler);
     gpu.destroyTexture(skyboxTextureHandle);
 
-    gpu.destroyBuffer(sceneBuffer);
     gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
     gpu.destroyDescriptorSetLayout(skyboxDescriptorSetLayout);
     gpu.destroyPipeline(cubePipeline);

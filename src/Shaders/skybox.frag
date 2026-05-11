@@ -4,16 +4,24 @@
 // Bindless support
 // Enable non uniform qualifier extension
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_buffer_reference : require
 
-layout(scalar, set = 0, binding = 0) uniform LocalConstants
+struct SceneData
 {
-    mat4 globalModel;
     mat4 viewPerspective;
+    mat4 view;
+    mat4 project;
+    mat4 globalModel;
     vec4 eye;
     vec4 light;
 };
 
-layout(scalar, set = 0, binding = 1) uniform SkyboxData
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
+{
+    SceneData sceneData;
+};
+
+layout(scalar, set = 0, binding = 0) uniform SkyboxData
 {
     vec3 testColour;
     uint skyboxTextureIndex;
@@ -34,8 +42,12 @@ layout (location = 0) in vec3 dir;
 
 layout (location = 0) out vec4 fragColour;
 
+layout(scalar, push_constant) uniform entityIndex
+{
+    SceneBufferData sceneBufferReference;
+};
+
 void main()
 {
 	fragColour = texture(globalTexturesCube[nonuniformEXT(skyboxTextureIndex)], dir);
-	//fragColour = vec4(testColour, 1.0);
 }

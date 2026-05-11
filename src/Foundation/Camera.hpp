@@ -43,6 +43,8 @@ struct Camera
     vec3s direction{};
     vec3s up{};
 
+    versors rotation;
+
     float yaw = 0.f;
     float pitch = 0.f;
 

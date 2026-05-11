@@ -158,7 +158,7 @@ cgltf_data* Model::setupModel(const char* modelPath)
     return cgltfData;
 }
 
-void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout)
+void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout)
 {
     isModel = true;
     cgltf_data* cgltfData = setupModel(modelPath);
@@ -169,6 +169,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
     {
         cgltf_image image = cgltfData->images[imageIndex];
 
+        stbi_set_flip_vertically_on_load(0);
         if (image.uri != nullptr)
         {
             TextureHandle textureResource;
@@ -325,13 +326,11 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneB
 
                 //Here we are adding the scene buffer (that effect every model) into the descriptor set layout.
                 DescriptorSetCreation dsCreation{};
-                dsCreation.buffer(sceneBuffer, 0);
-
                 bufferCreation.reset()
                     .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
                     .setName("material");
                 meshDraw.materialBuffer = gpu.createBuffer(bufferCreation);
-                dsCreation.buffer(meshDraw.materialBuffer, 1)
+                dsCreation.buffer(meshDraw.materialBuffer, 0)
                     .setLayout(descriptorSetLayout);
 
                 cgltf_material* material = meshPrimitive.material;

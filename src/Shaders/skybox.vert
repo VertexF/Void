@@ -1,6 +1,7 @@
 ﻿#version 460
 
 #extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
 
 const vec3 pos[8] = vec3[8]
 (
@@ -25,15 +26,42 @@ const int indices[36] = int[36]
 	3, 2, 6, 6, 7, 3	// top
 );
 
-layout(scalar, set = 0, binding = 0) uniform LocalConstants
+struct SceneData
 {
-    mat4 globalModel;
     mat4 viewPerspective;
+	mat4 view;
+    mat4 project;
+    mat4 globalModel;
     vec4 eye;
     vec4 light;
 };
 
-layout(scalar, set = 0, binding = 1) uniform SkyboxData
+struct Vertices
+{
+	float pad;
+};
+
+struct ModelPosition
+{
+	float pad;
+};
+
+layout(scalar, buffer_reference) readonly buffer VertexData
+{
+    Vertices vertexData[];
+};
+
+layout(scalar, buffer_reference) readonly buffer ModelPositionData
+{
+    ModelPosition modelPositions[];
+};
+
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
+{
+    SceneData sceneData;
+};
+
+layout(scalar, set = 0, binding = 0) uniform SkyboxData
 {
     vec3 testColour;
     uint skyboxTextureIndex;
@@ -49,13 +77,22 @@ layout(set = 1, binding = 0) uniform samplerCube globalTexturesCube[];
 //Write only image do not need formatting in layout.
 layout(set = 1, binding = 1) writeonly uniform image2D globalImages2D[];
 
-
 layout (location = 0) out vec3 dir;
+
+layout(scalar, push_constant) uniform entityIndex
+{
+    VertexData vertexDataReference;
+    ModelPositionData modelPositionsReference;
+    SceneBufferData sceneBufferReference;
+};
 
 void main()
 {
+	mat4 currentView = sceneBufferReference.sceneData.view;
+	mat4 view = mat4(mat3(sceneBufferReference.sceneData.view));
+
 	int idx = indices[gl_VertexIndex];
-    vec4 pos = viewPerspective * vec4(pos[idx], 1.0);
-	dir = pos.xyz;
-    gl_Position = pos.xyww;
+    vec4 pos1 = sceneBufferReference.sceneData.project * view * vec4(pos[idx], 1.0);
+	dir = pos[idx];
+	gl_Position = vec4(pos1.x, pos1.y, 0.f, pos1.w);
 }

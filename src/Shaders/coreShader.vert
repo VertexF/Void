@@ -25,12 +25,14 @@ struct ModelPosition
 struct SceneData
 {
     mat4 viewPerspective;
+    mat4 view;
+    mat4 project;
     mat4 globalModel;
     vec4 eye;
     vec4 light;
 };
 
-layout(scalar, set = 0, binding = 1) uniform MaterialConstant
+layout(scalar, set = 0, binding = 0) uniform MaterialConstant
 {
     mat4 model;
     mat4 modelInv;
@@ -79,7 +81,7 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].py, 
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
-    vec4 tagent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
+    vec4 tangent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
                        int(vertexDataReference.vertexData[gl_VertexIndex].ty), 
                        int(vertexDataReference.vertexData[gl_VertexIndex].tz), 
                        int(vertexDataReference.vertexData[gl_VertexIndex].tw)) / 127.f - 1.0;
@@ -91,11 +93,11 @@ void main()
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
     gl_Position = sceneBufferReference.sceneData.viewPerspective * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
-    vPosition  =  sceneBufferReference.sceneData.globalModel * model * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * vec4(position, 1.0);
+    vPosition  =  sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
 
     vTexcoord0 = texcoord;
     vNormal = mat3(modelInv) * normal;
 
-    vTangent = tagent;
+    vTangent = tangent;
     vColour = vec4(1.f, 1.f, 1.f, 1.f);//modelPositionsReference.modelPositions[2].colour;
 }

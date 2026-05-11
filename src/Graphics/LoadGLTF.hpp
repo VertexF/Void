@@ -79,7 +79,7 @@ struct cgltf_data;
 struct Model
 {
     cgltf_data* setupModel(const char* modelPath);
-    void loadModel(const char* modelPath, GPUDevice& gpu, BufferHandle sceneBuffer, DescriptorSetLayoutHandle descriptorSetLayout);
+    void loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout);
     void loadCollider(const char* modelPath, GPUDevice& gpu);
     void shutdownModel(GPUDevice& gpu);
 

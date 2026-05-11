@@ -96,6 +96,7 @@ struct GPUDevice
     BufferHandle createBuffer(const BufferCreation& creation);
     BufferHandle createBindlessBuffer(const BufferCreation& creation);
     TextureHandle createTexture(const TextureCreation& creation);
+    TextureHandle createTextureTEMP(const TextureCreation& creation, const Array<uint8_t*>& images);
     PipelineHandle createPipeline(const PipelineCreation& creation, bool debugRendering = false);
     SamplerHandle createSampler(const SamplerCreation& creation);
     DescriptorSetLayoutHandle createDescriptorSetLayout(const DescriptorSetLayoutCreation& creation);

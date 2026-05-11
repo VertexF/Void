@@ -114,7 +114,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     size_t UBO_ALIGNMENT = 256;
     size_t SSBO_ALIGNMENT = 256;
 
-    void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, bool isDepth)
+    void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t layerCount, bool isDepth)
     {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -128,7 +128,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.layerCount = layerCount;
 
         if (isDepth)
         {
@@ -252,7 +252,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         check(vkCreateImageView(gpu.vulkanDevice, &info, gpu.vulkanAllocationCallbacks, &texture->vkImageView));
 
         gpu.setResourceName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)(texture->vkImageView), creation.name);
-        texture->vkImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         //Add defered bindless update
         ResourceUpdate resourceUpdate{};
@@ -1323,6 +1322,149 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
     return handle;
 }
 
+TextureHandle GPUDevice::createTextureTEMP(const TextureCreation& creation, const Array<uint8_t*>& images)
+{
+    uint32_t resourceIndex = textures.obtainResource();
+    TextureHandle handle = { resourceIndex };
+    if (resourceIndex == INVALID_INDEX)
+    {
+        return handle;
+    }
+
+    Texture* texture = accessTexture(handle);
+
+    vulkanCreateTexture(*this, creation, handle, texture);
+
+    //Copy buffer data if present
+    if (creation.initialData)
+    {
+        //Create stating buffer
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+        uint32_t totalBufferSize = (creation.width * creation.height * 4) * creation.layerCount;
+        uint32_t imageSize = (creation.width * creation.height * 4);
+        bufferInfo.size = totalBufferSize;
+
+        VmaAllocationCreateInfo memoryInfo{};
+        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+        memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+        VmaAllocationInfo allocationInfo{};
+        VmaAllocation stagingAllocation;
+        VkBuffer stagingBuffer;
+        check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &stagingBuffer, &stagingAllocation, &allocationInfo));
+
+        for(uint32_t i = 0; i < creation.layerCount; ++i)
+        {
+            //Copy buffer data
+            vmaCopyMemoryToAllocation(VMAAllocator, images[i], stagingAllocation, imageSize * i, imageSize);
+        }
+        //Execute command buffer
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        CommandBuffer* commandBuffer = getInstantCommandBuffer();
+        vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
+
+        //Copy
+        VkImageMemoryBarrier2 barrierStaging{};
+        barrierStaging.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrierStaging.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrierStaging.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrierStaging.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierStaging.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierStaging.srcAccessMask = 0;
+        barrierStaging.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        barrierStaging.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+        barrierStaging.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        barrierStaging.image = texture->vkImage;
+        barrierStaging.subresourceRange.baseMipLevel = 0;
+        barrierStaging.subresourceRange.levelCount = 1;
+        barrierStaging.subresourceRange.baseArrayLayer = 0;
+        barrierStaging.subresourceRange.layerCount = creation.layerCount;
+        barrierStaging.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        VkDependencyInfo barrierStagingDependencyInfo{};
+        barrierStagingDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        barrierStagingDependencyInfo.imageMemoryBarrierCount = 1;
+        barrierStagingDependencyInfo.pImageMemoryBarriers = &barrierStaging;
+
+        vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierStagingDependencyInfo);
+
+        VkBufferImageCopy2 region{};
+        region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = creation.layerCount;
+
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = { creation.width, creation.height, creation.depth };
+
+        VkCopyBufferToImageInfo2 bufferTransfer{};
+        bufferTransfer.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
+        bufferTransfer.pRegions = &region;
+        bufferTransfer.regionCount = 1;
+        bufferTransfer.dstImage = texture->vkImage;
+        bufferTransfer.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        bufferTransfer.srcBuffer = stagingBuffer;
+
+        vkCmdCopyBufferToImage2(commandBuffer->vkCommandBuffer, &bufferTransfer);
+
+        VkImageMemoryBarrier2 barrierImage{};
+        barrierImage.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrierImage.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrierImage.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrierImage.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierImage.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierImage.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        barrierImage.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+        barrierImage.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        barrierImage.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+        barrierImage.image = texture->vkImage;
+        barrierImage.subresourceRange.baseMipLevel = 0;
+        barrierImage.subresourceRange.levelCount = 1;
+        barrierImage.subresourceRange.baseArrayLayer = 0;
+        barrierImage.subresourceRange.layerCount = creation.layerCount;
+        barrierImage.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        VkDependencyInfo barrierImageDependencyInfo{};
+        barrierImageDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        barrierImageDependencyInfo.imageMemoryBarrierCount = 1;
+        barrierImageDependencyInfo.pImageMemoryBarriers = &barrierImage;
+
+        vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierImageDependencyInfo);
+
+        vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
+
+        //Submit command buffer
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
+
+        vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(vulkanQueue);
+
+        //for (uint32_t i = 0; i < 6; ++i)
+        //{
+            vmaDestroyBuffer(VMAAllocator, stagingBuffer, stagingAllocation);
+            //vmaDestroyBuffer(VMAAllocator, stagingBuffer[1], stagingAllocation);
+        //}
+        //TODO: Maybe I need to free the command buffer.
+        vkResetCommandBuffer(commandBuffer->vkCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+    }
+
+    return handle;
+}
+
 TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
 {
     uint32_t resourceIndex = textures.obtainResource();
@@ -1344,7 +1486,8 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-        uint32_t imageSize = creation.width * creation.height * 4;
+        //uint32_t imageSize = (creation.width * creation.height * 4) * creation.layerCount;
+        uint32_t imageSize = (creation.width * creation.height * 4);
         bufferInfo.size = imageSize;
 
         VmaAllocationCreateInfo memoryInfo{};
@@ -1375,20 +1518,20 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         region.imageSubresource.mipLevel = 0;
         region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
+        region.imageSubresource.layerCount = 1;//creation.layerCount;
 
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = { creation.width, creation.height, creation.depth };
 
         //Transition
         transitionImageLayout(commandBuffer->vkCommandBuffer, texture->vkImage, texture->vkFormat,
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, false);
         //Copy
         vkCmdCopyBufferToImage(commandBuffer->vkCommandBuffer, stagingBuffer, texture->vkImage,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
         //Trasition
         transitionImageLayout(commandBuffer->vkCommandBuffer, texture->vkImage, texture->vkFormat,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false);
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, false);
         vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
 
         //Submit command buffer
@@ -1404,7 +1547,6 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
 
         //TODO: Maybe I need to free the command buffer.
         vkResetCommandBuffer(commandBuffer->vkCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-        texture->vkImageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
     return handle;
@@ -1460,7 +1602,7 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation, bool 
     }
 
     VkPushConstantRange range{};
-    range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     range.offset = 0;
     range.size = 128;
 
@@ -1797,9 +1939,6 @@ DescriptorSetLayoutHandle GPUDevice::createDescriptorSetLayout(const DescriptorS
 
         vkBinding.binding = binding.start;
         vkBinding.descriptorType = inputBinding.type;
-                vkBinding.descriptorType = vkBinding.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ?
-                                                               VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC :
-                                                               vkBinding.descriptorType;
         vkBinding.descriptorCount = inputBinding.count;
 
         vkBinding.stageFlags = inputBinding.stage;
@@ -2364,8 +2503,6 @@ void GPUDevice::destroySwapchain()
 
 void GPUDevice::resizeSwapchain()
 {
-    check(vkDeviceWaitIdle(vulkanDevice));
-
     //Destroy swapchain images.
     destroySwapchain();
     vkDestroySurfaceKHR(vulkanInstance, vulkanWindowSurface, vulkanAllocationCallbacks);
@@ -2386,9 +2523,9 @@ void GPUDevice::resizeSwapchain()
     Texture* vkDepthTexture = accessTexture(depthTexture);
     vulkanResizeTexture(*this, vkDepthTexture, vkTextureToDelete, swapchainWidth, swapchainHeight, 1);
 
-    transitionDepthImage(depthTexture);
-
     destroyTexture(textureToDelete);
+
+    check(vkDeviceWaitIdle(vulkanDevice));
 }
 
 void GPUDevice::transitionDepthImage(TextureHandle texture)
@@ -2403,7 +2540,7 @@ void GPUDevice::transitionDepthImage(TextureHandle texture)
     vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
 
     transitionImageLayout(commandBuffer->vkCommandBuffer, vkDepthTexture->vkImage, vkDepthTexture->vkFormat,
-                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, true);
+                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, 1, true);
 
     vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
 
@@ -2636,25 +2773,6 @@ void GPUDevice::present()
 
     vkQueueSubmit(vulkanQueue, 1, &submitInfo, framesInFlight[currentFrame]);
 
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderFinishSemaphore[vulkanImageIndex];
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &vulkanSwapchain;
-    presentInfo.pImageIndices = &vulkanImageIndex;
-
-    VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-    {
-        swapchainIsValid = false;
-    }
-    else if (result != VK_SUCCESS)
-    {
-        VOID_ERROR("Failed or present swapchain image!");
-    }
-
     numQueuedCommandBuffers = 0;
 
     //Resolve GPU Timestamp
@@ -2699,6 +2817,16 @@ void GPUDevice::present()
     }
 
     frameCountersAdvanced();
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &renderFinishSemaphore[vulkanImageIndex];
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = &vulkanSwapchain;
+    presentInfo.pImageIndices = &vulkanImageIndex;
+
+    VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
 
     //Resource deletion  using reverse iteration and swap with last element.
     if (resourceDeletionQueue.size > 0)
@@ -2757,7 +2885,7 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     VkImageMemoryBarrier2 barrierColour{};
     barrierColour.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrierColour.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrierColour.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrierColour.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
     barrierColour.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     barrierColour.srcAccessMask = VK_ACCESS_NONE;
     barrierColour.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -2771,31 +2899,31 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     barrierColour.subresourceRange.layerCount = 1;
     barrierColour.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-    //Texture* depthTextureLocal = accessTexture(depthTexture);
+    Texture* depthTextureLocal = accessTexture(depthTexture);
 
-    //VkImageMemoryBarrier2 barrierDepth{};
-    //barrierDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    //barrierDepth.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    //barrierDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    //barrierDepth.srcStageMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    //barrierDepth.srcAccessMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
-    //barrierDepth.dstStageMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    //barrierDepth.dstAccessMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
-    //barrierDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    //barrierDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    //barrierDepth.image = depthTextureLocal->vkImage;
-    //barrierDepth.subresourceRange.baseMipLevel = 0;
-    //barrierDepth.subresourceRange.levelCount = 1;
-    //barrierDepth.subresourceRange.baseArrayLayer = 0;
-    //barrierDepth.subresourceRange.layerCount = 1;
-    //barrierDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    VkImageMemoryBarrier2 barrierDepth{};
+    barrierDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrierDepth.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrierDepth.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    barrierDepth.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    barrierDepth.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrierDepth.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+    barrierDepth.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrierDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierDepth.image = depthTextureLocal->vkImage;
+    barrierDepth.subresourceRange.baseMipLevel = 0;
+    barrierDepth.subresourceRange.levelCount = 1;
+    barrierDepth.subresourceRange.baseArrayLayer = 0;
+    barrierDepth.subresourceRange.layerCount = 1;
+    barrierDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-    //VkImageMemoryBarrier2 barriers[] = { barrierColour, barrierDepth };
+    VkImageMemoryBarrier2 barriers[] = { barrierColour, barrierDepth };
 
     VkDependencyInfo barrierColourDependencyInfo{};
     barrierColourDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    barrierColourDependencyInfo.imageMemoryBarrierCount = 1;
-    barrierColourDependencyInfo.pImageMemoryBarriers = &barrierColour;
+    barrierColourDependencyInfo.imageMemoryBarrierCount = 2;
+    barrierColourDependencyInfo.pImageMemoryBarriers = barriers;
 
     vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierColourDependencyInfo);
 }

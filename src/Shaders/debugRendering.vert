@@ -26,6 +26,8 @@ struct ModelPosition
 struct SceneData
 {
     mat4 viewPerspective;
+    mat4 view;
+    mat4 project;
     mat4 globalModel;
     vec4 eye;
     vec4 light;
