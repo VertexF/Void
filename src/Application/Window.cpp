@@ -66,14 +66,11 @@ void Window::setFullscreen(bool fullscreen)
 
 void Window::centerMouse(bool dragging) const
 {
-    //SDL_SetWindowRelativeMouseMode(window, true); //TODO check if this is working with the version SDL3 you have compile.
     if (dragging) 
     {
         SDL_WarpMouseInWindow(sdlWindow, (float)roundU32(width / 2.f), (float)roundU32(height / 2.f));
         SDL_SetWindowRelativeMouseMode(sdlWindow, true);
-        #if defined(__WIN32)
         SDL_HideCursor();
-        #endif
     }
     else 
     {

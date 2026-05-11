@@ -457,7 +457,7 @@ int main(int argc, char** argv)
                         physicsUpdateDataArray.push(physicsPosition);
                     }
                 }
-                else 
+                else
                 {
                     JPH::RVec3Arg playerPosition{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y - 3.f, gameCamera.internal3DCamera.position.z - 15.f };
                     JPH::QuatArg playerRotation{ gameCamera.internal3DCamera.rotation.x, gameCamera.internal3DCamera.rotation.y, gameCamera.internal3DCamera.rotation.z, gameCamera.internal3DCamera.rotation.w };
@@ -465,7 +465,7 @@ int main(int argc, char** argv)
                     physics.bodyInterface->SetPosition(scene.entities[0].bodyID, playerPosition, JPH::EActivation::Activate);
                     physics.bodyInterface->SetRotation(scene.entities[0].bodyID, playerRotation, JPH::EActivation::Activate);
 
-                    mat4s playerCamera = glms_mat4_mul(gameCamera.internal3DCamera.view, glms_translate_make({0.f, 9999.f, 9999.f}));
+                    mat4s playerCamera = glms_mat4_mul(gameCamera.internal3DCamera.view, glms_translate_make({ 0.f, 9999.f, 9999.f }));
 
                     physicsPosition.pos = playerCamera;
                     physicsPosition.colour = scene.entityData[0].colour;
@@ -473,6 +473,9 @@ int main(int argc, char** argv)
                     physicsUpdateDataArray.push(physicsPosition);
                 }
             }
+
+            vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
+            scratchAllocator.freeMarker(physicsMarker);
 
             for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size; ++modelIndexType)
             {
@@ -498,15 +501,12 @@ int main(int argc, char** argv)
                     {
                         gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
                     }
-                    else 
+                    else
                     {
                         gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
                     }
                 }
             }
-            
-            vmaCopyMemoryToAllocation(gpu.VMAAllocator, physicsUpdateDataArray.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * physicsUpdateDataArray.size);
-            scratchAllocator.freeMarker(physicsMarker);
 
             if (debugRenderer)
             {
@@ -543,6 +543,9 @@ int main(int argc, char** argv)
                     }
                 }
 
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData)* debugRenderingDataArray.size);
+                scratchAllocator.freeMarker(debugRendererMarker);
+
                 for (uint32_t modelIndexType = 0; modelIndexType < scene.debugModels.size; ++modelIndexType)
                 {
                     VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
@@ -566,9 +569,6 @@ int main(int argc, char** argv)
                         gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].countOfModelType, 0, 0, scene.debugModels[modelIndexType + 1].countOfModelType);
                     }
                 }
-
-                vmaCopyMemoryToAllocation(gpu.VMAAllocator, debugRenderingDataArray.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * debugRenderingDataArray.size);
-                scratchAllocator.freeMarker(debugRendererMarker);
             }
 
             //Skybox!
@@ -588,15 +588,15 @@ int main(int argc, char** argv)
             gpuCommands->bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
             gpuCommands->bindlessDescriptorSet(1);
 
-            gpuCommands->draw(36, 1, 0, 0);
-
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
+
+            gpuCommands->draw(36, 1, 0, 0);
 
             //imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
-            //gpuProfiler.update(gpu);
+            gpuProfiler.update(gpu);
 
             gpu.queueCommandBuffer(gpuCommands);
             gpu.present();

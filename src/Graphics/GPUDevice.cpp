@@ -20,8 +20,8 @@
 
 namespace 
 {
-//#define VULKAN_DEBUG_REPORT
-//#define VULKAN_SYNCHRONIZATION_VALIDATION
+#define VULKAN_DEBUG_REPORT
+#define VULKAN_SYNCHRONIZATION_VALIDATION
     const char* REQUESTED_EXTENSIONS[] =
     {
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -2503,8 +2503,6 @@ void GPUDevice::destroySwapchain()
 
 void GPUDevice::resizeSwapchain()
 {
-    check(vkDeviceWaitIdle(vulkanDevice));
-
     //Destroy swapchain images.
     destroySwapchain();
     vkDestroySurfaceKHR(vulkanInstance, vulkanWindowSurface, vulkanAllocationCallbacks);
@@ -2525,9 +2523,9 @@ void GPUDevice::resizeSwapchain()
     Texture* vkDepthTexture = accessTexture(depthTexture);
     vulkanResizeTexture(*this, vkDepthTexture, vkTextureToDelete, swapchainWidth, swapchainHeight, 1);
 
-    transitionDepthImage(depthTexture);
-
     destroyTexture(textureToDelete);
+
+    check(vkDeviceWaitIdle(vulkanDevice));
 }
 
 void GPUDevice::transitionDepthImage(TextureHandle texture)
@@ -2775,25 +2773,6 @@ void GPUDevice::present()
 
     vkQueueSubmit(vulkanQueue, 1, &submitInfo, framesInFlight[currentFrame]);
 
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderFinishSemaphore[vulkanImageIndex];
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &vulkanSwapchain;
-    presentInfo.pImageIndices = &vulkanImageIndex;
-
-    VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-    {
-        swapchainIsValid = false;
-    }
-    else if (result != VK_SUCCESS)
-    {
-        VOID_ERROR("Failed or present swapchain image!");
-    }
-
     numQueuedCommandBuffers = 0;
 
     //Resolve GPU Timestamp
@@ -2838,6 +2817,16 @@ void GPUDevice::present()
     }
 
     frameCountersAdvanced();
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &renderFinishSemaphore[vulkanImageIndex];
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = &vulkanSwapchain;
+    presentInfo.pImageIndices = &vulkanImageIndex;
+
+    VkResult result = vkQueuePresentKHR(vulkanQueue, &presentInfo);
 
     //Resource deletion  using reverse iteration and swap with last element.
     if (resourceDeletionQueue.size > 0)
@@ -2896,7 +2885,7 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     VkImageMemoryBarrier2 barrierColour{};
     barrierColour.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrierColour.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrierColour.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrierColour.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
     barrierColour.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     barrierColour.srcAccessMask = VK_ACCESS_NONE;
     barrierColour.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -2910,31 +2899,31 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     barrierColour.subresourceRange.layerCount = 1;
     barrierColour.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-    //Texture* depthTextureLocal = accessTexture(depthTexture);
+    Texture* depthTextureLocal = accessTexture(depthTexture);
 
-    //VkImageMemoryBarrier2 barrierDepth{};
-    //barrierDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    //barrierDepth.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    //barrierDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    //barrierDepth.srcStageMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    //barrierDepth.srcAccessMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
-    //barrierDepth.dstStageMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    //barrierDepth.dstAccessMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
-    //barrierDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    //barrierDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    //barrierDepth.image = depthTextureLocal->vkImage;
-    //barrierDepth.subresourceRange.baseMipLevel = 0;
-    //barrierDepth.subresourceRange.levelCount = 1;
-    //barrierDepth.subresourceRange.baseArrayLayer = 0;
-    //barrierDepth.subresourceRange.layerCount = 1;
-    //barrierDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    VkImageMemoryBarrier2 barrierDepth{};
+    barrierDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrierDepth.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrierDepth.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    barrierDepth.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    barrierDepth.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrierDepth.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+    barrierDepth.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrierDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierDepth.image = depthTextureLocal->vkImage;
+    barrierDepth.subresourceRange.baseMipLevel = 0;
+    barrierDepth.subresourceRange.levelCount = 1;
+    barrierDepth.subresourceRange.baseArrayLayer = 0;
+    barrierDepth.subresourceRange.layerCount = 1;
+    barrierDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
-    //VkImageMemoryBarrier2 barriers[] = { barrierColour, barrierDepth };
+    VkImageMemoryBarrier2 barriers[] = { barrierColour, barrierDepth };
 
     VkDependencyInfo barrierColourDependencyInfo{};
     barrierColourDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    barrierColourDependencyInfo.imageMemoryBarrierCount = 1;
-    barrierColourDependencyInfo.pImageMemoryBarriers = &barrierColour;
+    barrierColourDependencyInfo.imageMemoryBarrierCount = 2;
+    barrierColourDependencyInfo.pImageMemoryBarriers = barriers;
 
     vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierColourDependencyInfo);
 }
