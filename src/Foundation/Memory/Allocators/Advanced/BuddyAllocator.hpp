@@ -29,6 +29,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     [[nodiscard]] size_t GetTotalSize() const noexcept { return m_totalSize; }
     [[nodiscard]] size_t GetMinBlockSize() const noexcept { return m_minBlockSize; }
@@ -60,6 +61,7 @@ private:
     IAllocator* m_backingAllocator = nullptr;
     Vector<FreeBlock*> m_freeLists{};
     size_t m_allocatedBytes = 0;
+    AllocatorStatsTracker m_stats;
     mutable Threading::SpinLock m_lock;
 };
 

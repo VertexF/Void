@@ -134,12 +134,14 @@ PoolAllocator& PoolAllocator::operator=(PoolAllocator&& other) noexcept
 void* PoolAllocator::Allocate(size_t size, size_t alignment)
 {
     if (size == 0 || size > m_blockSize) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
         alignment = m_blockAlignment;
     }
     if (alignment > m_blockAlignment) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -147,6 +149,7 @@ void* PoolAllocator::Allocate(size_t size, size_t alignment)
 
     FreeBlock* block = m_freeList.Load(MemoryOrder::Relaxed);
     if (!block) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -163,6 +166,7 @@ void* PoolAllocator::Allocate(size_t size, size_t alignment)
         m_blockTags[index] = GetCurrentMemoryTag();
     }
 
+    m_stats.RecordAllocation(m_blockSize);
     return block;
 }
 
@@ -177,6 +181,7 @@ void* PoolAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -192,6 +197,7 @@ void* PoolAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     // Resizing beyond block size is not supported by PoolAllocator.
     // We could potentially allocate a new block and copy, but usually 
     // pool users expect fixed size. If we return nullptr, user handles it.
+    m_stats.RecordFailedAllocation();
     return nullptr;
 }
 
@@ -219,6 +225,7 @@ void PoolAllocator::Free(void* ptr)
         const size_t byteIndex = index / 8;
         const uint8 mask = static_cast<uint8>(1u << (index % 8));
         if ((m_allocatedBitmap[byteIndex] & mask) == 0) {
+            m_stats.RecordFailedAllocation();
             return;
         }
     }
@@ -235,6 +242,7 @@ void PoolAllocator::Free(void* ptr)
     m_freeList.Store(block, MemoryOrder::Relaxed);
 
     m_allocatedCount.FetchSub(1, MemoryOrder::Relaxed);
+    m_stats.RecordFree(m_blockSize);
 }
 
 size_t PoolAllocator::AllocatedSize() const
@@ -272,6 +280,22 @@ bool PoolAllocator::Owns(void* ptr) const
     const size_t byteIndex = index / 8;
     const uint8 mask = static_cast<uint8>(1u << (index % 8));
     return (m_allocatedBitmap[byteIndex] & mask) != 0;
+}
+
+AllocatorStats PoolAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    const size_t freeBlocks = GetFreeBlockCount();
+    stats.liveBytes = AllocatedSize();
+    stats.liveAllocationCount = GetAllocatedBlockCount();
+    stats.reservedBytes = m_blockSize * m_blockCount;
+    stats.committedBytes = stats.reservedBytes;
+    stats.freeBytes = freeBlocks * m_blockSize;
+    stats.largestFreeBlockBytes = freeBlocks > 0 ? m_blockSize : 0;
+    stats.fragmentationBytes = stats.freeBytes > stats.largestFreeBlockBytes
+        ? stats.freeBytes - stats.largestFreeBlockBytes
+        : 0;
+    return stats;
 }
 
 size_t PoolAllocator::GetBlockSize() const
@@ -313,6 +337,7 @@ void PoolAllocator::Reset()
         }
     }
     m_allocatedCount.Store(0, MemoryOrder::Relaxed);
+    m_stats.ResetLive();
 }
 
 void PoolAllocator::InitializeFreeList()

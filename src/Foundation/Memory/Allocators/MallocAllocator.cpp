@@ -15,6 +15,7 @@ constexpr size_t kMallocMagic = 0x4D414C43u; // MALC
 void* MallocAllocator::Allocate(size_t size, size_t alignment)
 {
     if (size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -26,6 +27,7 @@ void* MallocAllocator::Allocate(size_t size, size_t alignment)
 
     void* raw = malloc(totalSize);
     if (!raw) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -38,6 +40,7 @@ void* MallocAllocator::Allocate(size_t size, size_t alignment)
     header->padding = kMallocMagic;
 
     (void)m_allocated.FetchAdd(size, MemoryOrder::Relaxed);
+    m_stats.RecordAllocation(size);
 
     if (!MemoryManager::IsProfilingSuppressed()) {
         if (MemoryProfiler* profiler = MemoryManager::Profiler()) {
@@ -67,6 +70,7 @@ void* MallocAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 #if !defined(NDEBUG)
     if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 #endif
@@ -84,6 +88,9 @@ void* MallocAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         size_t copySize = (oldSize < newSize) ? oldSize : newSize;
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
+    }
+    if (!newPtr) {
+        m_stats.RecordFailedAllocation();
     }
     return newPtr;
 }
@@ -109,11 +116,13 @@ void MallocAllocator::Free(void* ptr)
     byte* aligned = static_cast<byte*>(ptr);
     auto* header = reinterpret_cast<AllocationHeader*>(aligned - sizeof(AllocationHeader));
     if (header->padding != kMallocMagic) {
+        m_stats.RecordFailedAllocation();
         return;
     }
     size_t size = header->size;
 
     (void)m_allocated.FetchSub(size, MemoryOrder::Relaxed);
+    m_stats.RecordFree(size);
 
     if (!MemoryManager::IsProfilingSuppressed()) {
         if (MemoryProfiler* profiler = MemoryManager::Profiler()) {
@@ -149,6 +158,11 @@ bool MallocAllocator::Owns(void* ptr) const
     const auto* header = reinterpret_cast<const AllocationHeader*>(static_cast<const byte*>(ptr) - sizeof(AllocationHeader));
     return header->padding == kMallocMagic;
 #endif
+}
+
+AllocatorStats MallocAllocator::GetStats() const
+{
+    return m_stats.Snapshot(Name());
 }
 
 } // namespace Engine::Memory

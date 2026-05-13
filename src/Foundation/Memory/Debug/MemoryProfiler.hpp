@@ -2,6 +2,7 @@
 #define FOUNDATION_MEMORY_MEMORY_PROFILER_HDR
 
 #include <Foundation/Containers/Vector.hpp>
+#include <Foundation/Memory/Allocator.hpp>
 #include <Foundation/Memory/MemoryTag.hpp>
 #include <Foundation/Platform.hpp>
 #include <Foundation/Threading/Lock/SpinLock.hpp>
@@ -101,6 +102,9 @@ public:
     Vector<ZombieAllocation> DetectZombies(uint32 minAgeFrames) const;
     void TrackPageCommit(size_t pageSize);
     void TrackPageDecommit(size_t pageSize);
+    void UpdateAllocatorStats(const char* name, const AllocatorStats& stats);
+    [[nodiscard]] bool GetAllocatorStats(const std::string& name, AllocatorStats& outStats) const;
+    [[nodiscard]] Vector<AllocatorStats> GetAllocatorStatsSnapshots() const;
     void UpdateVisualStats(const VisualMemoryStats& stats);
     [[nodiscard]] VisualMemoryStats GetVisualStats() const;
     void Reset();
@@ -137,6 +141,7 @@ private:
     size_t m_missedFrees = 0;
     TagStats m_tagStats[static_cast<size_t>(MemoryTag::Count)]{};
     std::unordered_map<void*, LiveAllocation> m_liveAllocations;
+    std::unordered_map<std::string, AllocatorStats> m_allocatorStats;
     VisualMemoryStats m_visualStats{};
     Vector<VmRegionInfo> m_vmRegions;
     Vector<MemorySnapshot> m_snapshots;

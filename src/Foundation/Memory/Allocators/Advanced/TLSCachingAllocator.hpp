@@ -75,6 +75,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     // ========================================================================
     // TLS Caching Specific
@@ -104,6 +105,7 @@ private:
     size_t m_cacheSize = kDefaultCacheSize;
     Atomic<size_t> m_cacheHits{0};
     Atomic<size_t> m_cacheMisses{0};
+    AllocatorStatsTracker m_stats;
 #if !defined(NDEBUG)
     std::unordered_set<void*> m_liveAllocations;
     mutable Threading::SpinLock m_liveLock;

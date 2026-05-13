@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <cstdint>
 
 namespace Engine::Memory {
@@ -27,6 +28,11 @@ void OnBudgetPressure(MemoryTag tag, size_t requestedSize, size_t currentUsage, 
     BudgetCallbackState::RequestedSize = requestedSize;
     BudgetCallbackState::CurrentUsage = currentUsage;
     BudgetCallbackState::Budget = budget;
+}
+
+StringView MakeView(const char* text)
+{
+    return {const_cast<char*>(text), std::strlen(text)};
 }
 
 struct CountedObject {
@@ -175,6 +181,57 @@ TEST(MemoryManager, DebugAllocatorReportsBudgetPressureBeforeAllocation)
     MemoryManager::Profiler(nullptr);
     MemoryManager::RegisterOOMCallback(nullptr);
     MemoryManager::Budget(MemoryTag::Core, 0);
+    MemoryManager::Shutdown();
+}
+
+TEST(MemoryProfiler, StoresAllocatorStatsSnapshots)
+{
+    MemoryProfiler profiler;
+    MallocAllocator allocator;
+
+    void* ptr = allocator.Allocate(96, 16);
+    ASSERT_NE(ptr, nullptr);
+    allocator.Free(ptr);
+
+    profiler.UpdateAllocatorStats(allocator.Name(), allocator.GetStats());
+
+    AllocatorStats stats{};
+    ASSERT_TRUE(profiler.GetAllocatorStats("MallocAllocator", stats));
+    EXPECT_STREQ(stats.name, "MallocAllocator");
+    EXPECT_EQ(stats.liveBytes, 0u);
+    EXPECT_GE(stats.peakBytes, 96u);
+    EXPECT_EQ(stats.allocationCount, 1u);
+    EXPECT_EQ(stats.freeCount, 1u);
+}
+
+TEST(MemoryManager, CapturesRegisteredAllocatorStatsIntoProfiler)
+{
+    MemoryManager::Shutdown();
+    MemoryProfiler profiler;
+    MallocAllocator allocator;
+
+    MemoryManager::Initialize();
+    MemoryManager::Profiler(&profiler);
+    MemoryManager::RegisterAllocator(MakeView("main-malloc"), &allocator);
+
+    void* ptr = allocator.Allocate(128, 16);
+    ASSERT_NE(ptr, nullptr);
+    EXPECT_TRUE(MemoryManager::CaptureAllocatorStats(MakeView("main-malloc")));
+
+    AllocatorStats stats{};
+    ASSERT_TRUE(MemoryManager::GetAllocatorStats(MakeView("main-malloc"), stats));
+    EXPECT_STREQ(stats.name, "main-malloc");
+    EXPECT_EQ(stats.liveBytes, 128u);
+    EXPECT_GE(stats.peakBytes, 128u);
+
+    allocator.Free(ptr);
+    MemoryManager::CaptureAllAllocatorStats();
+    ASSERT_TRUE(MemoryManager::GetAllocatorStats(MakeView("main-malloc"), stats));
+    EXPECT_EQ(stats.liveBytes, 0u);
+    EXPECT_EQ(stats.freeCount, 1u);
+
+    MemoryManager::UnregisterAllocator(MakeView("main-malloc"));
+    MemoryManager::Profiler(nullptr);
     MemoryManager::Shutdown();
 }
 

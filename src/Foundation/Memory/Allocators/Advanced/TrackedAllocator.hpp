@@ -23,6 +23,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     [[nodiscard]] size_t GetAllocationCount() const noexcept { return m_allocationCount.Load(MemoryOrder::Relaxed); }
     [[nodiscard]] size_t GetPeakAllocatedSize() const noexcept { return m_peakBytes.Load(MemoryOrder::Relaxed); }
@@ -32,6 +33,8 @@ private:
     Atomic<size_t> m_allocatedBytes{0};
     Atomic<size_t> m_peakBytes{0};
     Atomic<size_t> m_allocationCount{0};
+    Atomic<size_t> m_freeCount{0};
+    Atomic<size_t> m_failedAllocationCount{0};
     std::unordered_set<void*> m_liveAllocations;
     mutable Threading::SpinLock m_liveLock;
 };

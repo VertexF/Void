@@ -34,6 +34,7 @@ SecuredAllocator::~SecuredAllocator()
 void* SecuredAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_vm || size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -46,11 +47,13 @@ void* SecuredAllocator::Allocate(size_t size, size_t alignment)
     const size_t pageSize = m_vm->PageSize();
     const size_t alignmentPadding = alignment - 1;
     if (size > (std::numeric_limits<size_t>::max)() - alignmentPadding) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
     const size_t committedSize = RoundUpToPage(size + alignmentPadding, pageSize);
     if (committedSize > (std::numeric_limits<size_t>::max)() - (pageSize * 2)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -58,12 +61,14 @@ void* SecuredAllocator::Allocate(size_t size, size_t alignment)
     const size_t totalSize = committedSize + (pageSize * 2);
     void* base = m_vm->Reserve(totalSize);
     if (!base) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
     void* committedAddress = static_cast<uint8*>(base) + pageSize;
     if (!m_vm->Commit(committedAddress, committedSize)) {
         m_vm->Release(base);
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -71,6 +76,7 @@ void* SecuredAllocator::Allocate(size_t size, size_t alignment)
     Threading::SpinLockGuard guard(m_lock);
     m_allocs[userPtr] = { base, committedAddress, totalSize, committedSize, size, alignment };
     m_allocatedTotal += size;
+    m_stats.RecordAllocation(size);
 
     return userPtr;
 }
@@ -83,6 +89,7 @@ void SecuredAllocator::Free(void* ptr)
     const auto it = m_allocs.find(ptr);
     if (it != m_allocs.end()) {
         m_allocatedTotal -= it->second.userSize;
+        m_stats.RecordFree(it->second.userSize);
         m_vm->Release(it->second.baseAddress);
         m_allocs.erase(it);
     }
@@ -101,6 +108,7 @@ void* SecuredAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         Threading::SpinLockGuard guard(m_lock);
         const auto it = m_allocs.find(ptr);
         if (it == m_allocs.end()) {
+            m_stats.RecordFailedAllocation();
             return nullptr;
         }
         oldSize = it->second.userSize;
@@ -112,6 +120,8 @@ void* SecuredAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         size_t copySize = oldSize < newSize ? oldSize : newSize;
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
+    } else {
+        m_stats.RecordFailedAllocation();
     }
     return newPtr;
 }
@@ -126,6 +136,18 @@ bool SecuredAllocator::Owns(void* ptr) const
 {
     Threading::SpinLockGuard guard(m_lock);
     return m_allocs.find(ptr) != m_allocs.end();
+}
+
+AllocatorStats SecuredAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    Threading::SpinLockGuard guard(m_lock);
+    stats.liveBytes = m_allocatedTotal;
+    for (const auto& entry : m_allocs) {
+        stats.reservedBytes += entry.second.totalSize;
+        stats.committedBytes += entry.second.committedSize;
+    }
+    return stats;
 }
 
 void SecuredAllocator::MakeReadOnly(void* ptr)

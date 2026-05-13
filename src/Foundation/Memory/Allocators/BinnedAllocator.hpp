@@ -29,6 +29,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     [[nodiscard]] void* GetBaseAddress() const noexcept { return m_baseAddress; }
     void RefillBin(Bin& bin, uint32 sizeClass);
@@ -76,6 +77,7 @@ private:
     std::unordered_set<void*> m_largeAllocations;
     void* m_baseAddress = nullptr;
     Atomic<size_t> m_allocatedBytes{0};
+    AllocatorStatsTracker m_stats;
     mutable Threading::SpinLock m_lock;
 };
 

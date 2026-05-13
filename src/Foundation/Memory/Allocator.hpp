@@ -9,6 +9,7 @@
 #include <Foundation/Memory/Alignment.hpp>
 #include <Foundation/Memory/MemoryTag.hpp>
 #include <Foundation/Platform.hpp>
+#include <Foundation/Threading/Atomic.hpp>
 #include <new>
 
 #ifdef GetFreeSpace
@@ -16,6 +17,115 @@
 #endif
 
 namespace Engine::Memory {
+
+#if !defined(NDEBUG) || defined(ENGINE_MEMORY_DIAGNOSTICS)
+    inline constexpr bool kAllocatorDetailedStatsEnabled = true;
+#else
+    inline constexpr bool kAllocatorDetailedStatsEnabled = false;
+#endif
+
+    struct AllocatorStats {
+        const char* name = nullptr;
+        size_t liveBytes = 0;
+        size_t peakBytes = 0;
+        size_t allocationCount = 0;
+        size_t freeCount = 0;
+        size_t failedAllocationCount = 0;
+        size_t liveAllocationCount = 0;
+        size_t reservedBytes = 0;
+        size_t committedBytes = 0;
+        size_t freeBytes = 0;
+        size_t largestFreeBlockBytes = 0;
+        size_t fragmentationBytes = 0;
+    };
+
+    class AllocatorStatsTracker final {
+    public:
+        void RecordAllocation(size_t size) noexcept {
+            if constexpr (!kAllocatorDetailedStatsEnabled) {
+                (void)size;
+                return;
+            }
+            const size_t live = m_liveBytes.FetchAdd(size, MemoryOrder::Relaxed) + size;
+            m_allocationCount.FetchAdd(1, MemoryOrder::Relaxed);
+            m_liveAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
+            UpdatePeak(live);
+        }
+
+        void RecordFree(size_t size) noexcept {
+            if constexpr (!kAllocatorDetailedStatsEnabled) {
+                (void)size;
+                return;
+            }
+            const size_t live = m_liveBytes.Load(MemoryOrder::Relaxed);
+            m_liveBytes.Store(size <= live ? live - size : 0, MemoryOrder::Relaxed);
+            const size_t liveCount = m_liveAllocationCount.Load(MemoryOrder::Relaxed);
+            m_liveAllocationCount.Store(liveCount > 0 ? liveCount - 1 : 0, MemoryOrder::Relaxed);
+            m_freeCount.FetchAdd(1, MemoryOrder::Relaxed);
+        }
+
+        void RecordResize(size_t oldSize, size_t newSize) noexcept {
+            if constexpr (!kAllocatorDetailedStatsEnabled) {
+                (void)oldSize;
+                (void)newSize;
+                return;
+            }
+            if (oldSize == newSize) {
+                return;
+            }
+            if (newSize > oldSize) {
+                const size_t delta = newSize - oldSize;
+                const size_t live = m_liveBytes.FetchAdd(delta, MemoryOrder::Relaxed) + delta;
+                UpdatePeak(live);
+                return;
+            }
+            const size_t delta = oldSize - newSize;
+            const size_t live = m_liveBytes.Load(MemoryOrder::Relaxed);
+            m_liveBytes.Store(delta <= live ? live - delta : 0, MemoryOrder::Relaxed);
+        }
+
+        void RecordFailedAllocation() noexcept {
+            if constexpr (!kAllocatorDetailedStatsEnabled) {
+                return;
+            }
+            m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
+        }
+
+        void ResetLive() noexcept {
+            if constexpr (!kAllocatorDetailedStatsEnabled) {
+                return;
+            }
+            m_liveBytes.Store(0, MemoryOrder::Relaxed);
+            m_liveAllocationCount.Store(0, MemoryOrder::Relaxed);
+        }
+
+        [[nodiscard]] AllocatorStats Snapshot(const char* name) const noexcept {
+            AllocatorStats stats{};
+            stats.name = name;
+            stats.liveBytes = m_liveBytes.Load(MemoryOrder::Relaxed);
+            stats.peakBytes = m_peakBytes.Load(MemoryOrder::Relaxed);
+            stats.allocationCount = m_allocationCount.Load(MemoryOrder::Relaxed);
+            stats.freeCount = m_freeCount.Load(MemoryOrder::Relaxed);
+            stats.failedAllocationCount = m_failedAllocationCount.Load(MemoryOrder::Relaxed);
+            stats.liveAllocationCount = m_liveAllocationCount.Load(MemoryOrder::Relaxed);
+            return stats;
+        }
+
+    private:
+        void UpdatePeak(size_t live) noexcept {
+            size_t peak = m_peakBytes.Load(MemoryOrder::Relaxed);
+            while (live > peak &&
+                   !m_peakBytes.CompareExchangeWeak(peak, live, MemoryOrder::Relaxed, MemoryOrder::Relaxed)) {
+            }
+        }
+
+        Atomic<size_t> m_liveBytes{0};
+        Atomic<size_t> m_peakBytes{0};
+        Atomic<size_t> m_allocationCount{0};
+        Atomic<size_t> m_freeCount{0};
+        Atomic<size_t> m_failedAllocationCount{0};
+        Atomic<size_t> m_liveAllocationCount{0};
+    };
 
     /// @brief Base allocator interface
     class IAllocator {
@@ -59,6 +169,15 @@ namespace Engine::Memory {
 
         /// @brief Check if allocator owns this Pointer
         virtual bool Owns(void* ptr) const = 0;
+
+        /// @brief Snapshot allocator diagnostics. Allocators with richer telemetry override this.
+        virtual AllocatorStats GetStats() const {
+            AllocatorStats stats{};
+            stats.name = Name();
+            stats.liveBytes = AllocatedSize();
+            stats.peakBytes = stats.liveBytes;
+            return stats;
+        }
     };
 
     /// @brief Allocation header stored before each allocation (for tracking)

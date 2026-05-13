@@ -210,6 +210,38 @@ void MemoryProfiler::TrackPageDecommit(size_t pageSize)
     m_visualStats.totalCommitted = pageSize <= m_visualStats.totalCommitted ? (m_visualStats.totalCommitted - pageSize) : 0;
 }
 
+void MemoryProfiler::UpdateAllocatorStats(const char* name, const AllocatorStats& stats)
+{
+    if (!name || name[0] == '\0') {
+        return;
+    }
+    Threading::SpinLockGuard guard(m_lock);
+    m_allocatorStats[name] = stats;
+    m_allocatorStats[name].name = m_allocatorStats.find(name)->first.c_str();
+}
+
+bool MemoryProfiler::GetAllocatorStats(const std::string& name, AllocatorStats& outStats) const
+{
+    Threading::SpinLockGuard guard(m_lock);
+    const auto it = m_allocatorStats.find(name);
+    if (it == m_allocatorStats.end()) {
+        return false;
+    }
+    outStats = it->second;
+    return true;
+}
+
+Vector<AllocatorStats> MemoryProfiler::GetAllocatorStatsSnapshots() const
+{
+    Threading::SpinLockGuard guard(m_lock);
+    Vector<AllocatorStats> stats;
+    stats.reserve(m_allocatorStats.size());
+    for (const auto& entry : m_allocatorStats) {
+        stats.push_back(entry.second);
+    }
+    return stats;
+}
+
 void MemoryProfiler::UpdateVisualStats(const VisualMemoryStats& stats)
 {
     Threading::SpinLockGuard guard(m_lock);
@@ -234,6 +266,7 @@ void MemoryProfiler::Reset()
         stats = {};
     }
     m_liveAllocations.clear();
+    m_allocatorStats.clear();
     m_visualStats = {};
     m_vmRegions.clear();
     m_snapshots.clear();

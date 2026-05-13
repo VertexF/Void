@@ -40,6 +40,7 @@ public:
     size_t AllocatedSize() const override;
     const char* Name() const override;
     bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     // ========================================================================
     // TLSF Specific
@@ -92,6 +93,7 @@ private:
     Block* m_blocks[kFliMax][kSli] = {nullptr};
     
     size_t m_allocatedBytes = 0;
+    AllocatorStatsTracker m_stats;
     mutable Threading::SpinLock m_lock;
 };
 

@@ -40,6 +40,7 @@ BinnedAllocator::~BinnedAllocator()
 void* BinnedAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_backingAllocator || size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -76,6 +77,7 @@ void* BinnedAllocator::AllocateSmall(size_t size, size_t alignment)
     if (!page) {
         page = AllocatePage(sizeClass, blockSize);
         if (!page) {
+            m_stats.RecordFailedAllocation();
             return nullptr;
         }
         page->next = m_pages[sizeClass];
@@ -84,6 +86,7 @@ void* BinnedAllocator::AllocateSmall(size_t size, size_t alignment)
 
     void* block = page->bin.Allocate();
     if (!block) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -99,6 +102,7 @@ void* BinnedAllocator::AllocateSmall(size_t size, size_t alignment)
 
     ++page->activeAllocations;
     m_allocatedBytes.FetchAdd(size, MemoryOrder::Relaxed);
+    m_stats.RecordAllocation(size);
     return user;
 }
 
@@ -107,6 +111,7 @@ void* BinnedAllocator::AllocateLarge(size_t size, size_t alignment)
     const size_t requiredSize = RequiredBlockSize(size, alignment);
     void* raw = m_backingAllocator->Allocate(requiredSize, alignof(MaxAlignT));
     if (!raw) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -127,6 +132,7 @@ void* BinnedAllocator::AllocateLarge(size_t size, size_t alignment)
     }
 
     m_allocatedBytes.FetchAdd(size, MemoryOrder::Relaxed);
+    m_stats.RecordAllocation(size);
     return user;
 }
 
@@ -141,6 +147,7 @@ void* BinnedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -156,6 +163,7 @@ void* BinnedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     if (newSize <= oldSize && RequiredBlockSize(newSize, alignment) <= header->blockSize) {
         header->requestedSize = newSize;
         m_allocatedBytes.FetchSub(oldSize - newSize, MemoryOrder::Relaxed);
+        m_stats.RecordResize(oldSize, newSize);
         return ptr;
     }
 
@@ -163,6 +171,8 @@ void* BinnedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     if (newPtr) {
         MemCopy(newPtr, ptr, oldSize < newSize ? oldSize : newSize);
         Free(ptr);
+    } else {
+        m_stats.RecordFailedAllocation();
     }
     return newPtr;
 }
@@ -180,12 +190,14 @@ void BinnedAllocator::Free(void* ptr)
         Threading::SpinLockGuard guard(m_lock);
         AllocationHeader* header = HeaderFromPointer(ptr);
         if (!header || header->magic != kMagic) {
+            m_stats.RecordFailedAllocation();
             return;
         }
 
         const auto largeIt = m_largeAllocations.find(ptr);
         if (largeIt != m_largeAllocations.end()) {
             if ((header->flags & kLargeAllocationFlag) == 0) {
+                m_stats.RecordFailedAllocation();
                 return;
             }
             m_largeAllocations.erase(largeIt);
@@ -195,6 +207,7 @@ void BinnedAllocator::Free(void* ptr)
         } else {
             Page* page = FindPageContainingPointer(ptr);
             if (!page || header->page != page || !IsPointerInPageBlock(*page, ptr, *header)) {
+                m_stats.RecordFailedAllocation();
                 return;
             }
             size = header->requestedSize;
@@ -207,6 +220,7 @@ void BinnedAllocator::Free(void* ptr)
     }
 
     m_allocatedBytes.FetchSub(size, MemoryOrder::Relaxed);
+    m_stats.RecordFree(size);
 
     if (rawToFree) {
         m_backingAllocator->Free(rawToFree);
@@ -245,6 +259,44 @@ bool BinnedAllocator::Owns(void* ptr) const
         header->magic == kMagic &&
         header->page == page &&
         IsPointerInPageBlock(*page, ptr, *header);
+}
+
+AllocatorStats BinnedAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    stats.liveBytes = m_allocatedBytes.Load(MemoryOrder::Relaxed);
+
+    Threading::SpinLockGuard guard(m_lock);
+    size_t pageCount = 0;
+    size_t freeBytes = 0;
+    size_t largestFreeBlock = 0;
+    const auto accumulatePage = [&](const Page* page) {
+        if (!page) {
+            return;
+        }
+        ++pageCount;
+        const size_t pageFreeBytes = static_cast<size_t>(page->bin.freeCount) * page->blockSize;
+        freeBytes += pageFreeBytes;
+        if (page->bin.freeCount > 0 && page->blockSize > largestFreeBlock) {
+            largestFreeBlock = page->blockSize;
+        }
+    };
+
+    for (const Page* head : m_pages) {
+        for (const Page* page = head; page; page = page->next) {
+            accumulatePage(page);
+        }
+    }
+    for (const Page* page = m_externalPages; page; page = page->next) {
+        accumulatePage(page);
+    }
+
+    stats.reservedBytes = pageCount * kPageSize;
+    stats.committedBytes = stats.reservedBytes;
+    stats.freeBytes = freeBytes;
+    stats.largestFreeBlockBytes = largestFreeBlock;
+    stats.fragmentationBytes = freeBytes > largestFreeBlock ? freeBytes - largestFreeBlock : 0;
+    return stats;
 }
 
 void BinnedAllocator::RefillBin(Bin& bin, uint32 sizeClass)

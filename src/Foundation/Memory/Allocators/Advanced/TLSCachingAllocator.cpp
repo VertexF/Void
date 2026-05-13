@@ -82,6 +82,7 @@ void TLSCachingAllocator::FlushCacheInternal(ThreadLocalCache& cache)
 void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
 {
     if (size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -102,6 +103,7 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
             cache.blocks[cache.count - 1] = {};
             --cache.count;
             m_cacheHits.FetchAdd(1, MemoryOrder::Relaxed);
+            m_stats.RecordAllocation(size);
             return ptr;
         }
     }
@@ -119,6 +121,7 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
     const size_t totalSize = size + kHeaderSize + alignment - 1;
     void* raw = m_backingAllocator->Allocate(totalSize, alignof(MaxAlignT));
     if (!raw) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -133,6 +136,7 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
     RegisterLiveAllocation(aligned);
 #endif
 
+    m_stats.RecordAllocation(size);
     return aligned;
 }
 
@@ -148,12 +152,14 @@ void* TLSCachingAllocator::Reallocate(void* ptr, size_t newSize, size_t alignmen
 
 #if !defined(NDEBUG)
     if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 #endif
 
     auto* header = HeaderFromUserPointer(ptr);
     if (header->magic != kTLSMagic) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     size_t oldSize = header->size;
@@ -168,6 +174,8 @@ void* TLSCachingAllocator::Reallocate(void* ptr, size_t newSize, size_t alignmen
         size_t copySize = (oldSize < newSize) ? oldSize : newSize;
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
+    } else {
+        m_stats.RecordFailedAllocation();
     }
     return newPtr;
 }
@@ -180,6 +188,7 @@ void TLSCachingAllocator::Free(void* ptr)
 
 #if !defined(NDEBUG)
     if (!UnregisterLiveAllocation(ptr)) {
+        m_stats.RecordFailedAllocation();
         return;
     }
 #endif
@@ -187,9 +196,11 @@ void TLSCachingAllocator::Free(void* ptr)
     // Read header to get size
     auto* header = HeaderFromUserPointer(ptr);
     if (header->magic != kTLSMagic) {
+        m_stats.RecordFailedAllocation();
         return;
     }
     size_t size = header->size;
+    m_stats.RecordFree(size);
 
     auto& cache = GetCache();
 
@@ -239,6 +250,20 @@ bool TLSCachingAllocator::Owns(void* ptr) const
     auto* header = HeaderFromUserPointer(ptr);
     return header->magic == kTLSMagic;
 #endif
+}
+
+AllocatorStats TLSCachingAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    if (m_backingAllocator) {
+        const AllocatorStats backing = m_backingAllocator->GetStats();
+        stats.reservedBytes = backing.reservedBytes;
+        stats.committedBytes = backing.committedBytes;
+        stats.freeBytes = backing.freeBytes;
+        stats.largestFreeBlockBytes = backing.largestFreeBlockBytes;
+        stats.fragmentationBytes = backing.fragmentationBytes;
+    }
+    return stats;
 }
 
 void TLSCachingAllocator::FlushCache()

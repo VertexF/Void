@@ -28,6 +28,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     void SetLeakDetector(LeakDetector* detector) noexcept { m_leakDetector = detector; }
     void Profiler(MemoryProfiler* profiler) noexcept { m_profiler = profiler; }
@@ -37,6 +38,7 @@ private:
     LeakDetector* m_leakDetector = nullptr;
     MemoryProfiler* m_profiler = nullptr;
     Atomic<size_t> m_allocatedBytes{0};
+    AllocatorStatsTracker m_stats;
     std::unordered_set<void*> m_liveAllocations;
     mutable Threading::SpinLock m_liveLock;
 };

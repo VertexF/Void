@@ -79,7 +79,11 @@ public:
         const usize blockSize = Max(m_nextBlockSize, required);
         AllocateBlock(blockSize);
 
-        return TryAllocateFromCurrent(size, alignment);
+        void* ptr = TryAllocateFromCurrent(size, alignment);
+        if (!ptr) {
+            m_stats.RecordFailedAllocation();
+        }
+        return ptr;
     }
 
     void Free(void* /*ptr*/) override {
@@ -95,17 +99,20 @@ public:
                 auto* header = reinterpret_cast<AllocationRecord*>(static_cast<uint8*>(ptr) - sizeof(AllocationRecord));
                 if (header->magic == kAllocationMagic && header->generation == m_generation) {
                     m_totalAllocated -= header->size;
+                    m_stats.RecordFree(header->size);
                     header->magic = 0;
                 }
             }
             return nullptr;
         }
         if (!Owns(ptr)) {
+            m_stats.RecordFailedAllocation();
             return nullptr;
         }
 
         auto* header = reinterpret_cast<AllocationRecord*>(static_cast<uint8*>(ptr) - sizeof(AllocationRecord));
         if (header->magic != kAllocationMagic || header->generation != m_generation) {
+            m_stats.RecordFailedAllocation();
             return nullptr;
         }
 
@@ -113,22 +120,39 @@ public:
         if (newSize <= oldSize) {
             header->size = newSize;
             m_totalAllocated -= oldSize - newSize;
+            m_stats.RecordResize(oldSize, newSize);
             return ptr;
         }
 
         void* newPtr = Allocate(newSize, alignment);
         if (!newPtr) {
+            m_stats.RecordFailedAllocation();
             return nullptr;
         }
 
         MemCopy(newPtr, ptr, oldSize);
         m_totalAllocated -= oldSize;
+        m_stats.RecordFree(oldSize);
         header->magic = 0;
         return newPtr;
     }
 
     [[nodiscard]] usize AllocatedSize() const override { return m_totalAllocated; }
     [[nodiscard]] const char* Name() const override { return m_name; }
+    [[nodiscard]] AllocatorStats GetStats() const override {
+        AllocatorStats stats = m_stats.Snapshot(Name());
+        stats.liveBytes = m_totalAllocated;
+        if (m_initialBegin && m_initialEnd > m_initialBegin) {
+            stats.reservedBytes += static_cast<usize>(m_initialEnd - m_initialBegin);
+        }
+        for (Block* block = m_blockList; block; block = block->next) {
+            stats.reservedBytes += block->size;
+        }
+        stats.committedBytes = stats.reservedBytes;
+        stats.freeBytes = GetRemainingCapacity();
+        stats.largestFreeBlockBytes = stats.freeBytes;
+        return stats;
+    }
     [[nodiscard]] bool Owns(void* ptr) const override {
         if (!ptr) {
             return false;
@@ -163,6 +187,7 @@ public:
         m_current = m_initialBegin;
         m_end = m_initialEnd;
         m_totalAllocated = 0;
+        m_stats.ResetLive();
         m_nextBlockSize = kDefaultInitialCapacity;
         AdvanceGeneration();
     }
@@ -236,6 +261,7 @@ private:
 
         m_current = user + size;
         m_totalAllocated += size;
+        m_stats.RecordAllocation(size);
         return user;
     }
 
@@ -244,6 +270,7 @@ private:
         void* raw = m_upstream.Allocate(totalSize, alignof(Block));
         ENGINE_ASSERT_MSG(raw != nullptr, "MonotonicAllocator: upstream allocation failed");
         if (!raw) {
+            m_stats.RecordFailedAllocation();
             return;
         }
 
@@ -269,6 +296,7 @@ private:
     usize       m_nextBlockSize  = kDefaultInitialCapacity;
     uint32      m_generation     = 1;
     const char* m_name;
+    AllocatorStatsTracker m_stats;
 };
 
 /// @brief Always-fail allocator. Useful for testing that a code path doesn't allocate.

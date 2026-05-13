@@ -3,6 +3,7 @@
 
 #include <Foundation/Memory/Allocator.hpp>
 #include <Foundation/Memory/MemoryTag.hpp>
+#include <Foundation/Containers/Vector.hpp>
 #include <Foundation/String.hpp>
 #include <Foundation/Threading/Lock/SpinLock.hpp>
 
@@ -31,6 +32,10 @@ public:
     static void RegisterOOMCallback(OOMCallback callback);
     static void Profiler(MemoryProfiler* profiler);
     static MemoryProfiler* Profiler();
+    static bool CaptureAllocatorStats(StringView name);
+    static void CaptureAllAllocatorStats();
+    static bool GetAllocatorStats(StringView name, AllocatorStats& outStats);
+    static Vector<AllocatorStats> GetAllocatorStatsSnapshots();
     static bool IsProfilingSuppressed() noexcept;
     static void PushProfilingSuppression() noexcept;
     static void PopProfilingSuppression() noexcept;

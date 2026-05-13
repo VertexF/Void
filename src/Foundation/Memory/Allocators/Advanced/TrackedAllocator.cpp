@@ -18,6 +18,7 @@ TrackedAllocator::TrackedAllocator(IAllocator* backingAllocator)
 void* TrackedAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_backingAllocator || size == 0) {
+        m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -28,6 +29,7 @@ void* TrackedAllocator::Allocate(size_t size, size_t alignment)
     const size_t totalSize = size + headerSize + alignment;
     void* raw = m_backingAllocator->Allocate(totalSize, alignment);
     if (!raw) {
+        m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
         return nullptr;
     }
 
@@ -64,6 +66,7 @@ void* TrackedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
+        m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
         return nullptr;
     }
 
@@ -84,6 +87,8 @@ void* TrackedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         size_t copySize = (oldSize < newSize) ? oldSize : newSize;
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
+    } else {
+        m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
     }
     return newPtr;
 }
@@ -98,6 +103,7 @@ void TrackedAllocator::Free(void* ptr)
         Threading::SpinLockGuard guard(m_liveLock);
         const auto it = m_liveAllocations.find(ptr);
         if (it == m_liveAllocations.end()) {
+            m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
             return;
         }
         m_liveAllocations.erase(it);
@@ -112,6 +118,7 @@ void TrackedAllocator::Free(void* ptr)
 
     m_allocatedBytes.FetchSub(size, MemoryOrder::Relaxed);
     m_allocationCount.FetchSub(1, MemoryOrder::Relaxed);
+    m_freeCount.FetchAdd(1, MemoryOrder::Relaxed);
 
     byte* raw = aligned - header->adjustment;
     m_backingAllocator->Free(raw);
@@ -134,6 +141,19 @@ bool TrackedAllocator::Owns(void* ptr) const
     }
     Threading::SpinLockGuard guard(m_liveLock);
     return m_liveAllocations.find(ptr) != m_liveAllocations.end();
+}
+
+AllocatorStats TrackedAllocator::GetStats() const
+{
+    AllocatorStats stats{};
+    stats.name = Name();
+    stats.liveBytes = m_allocatedBytes.Load(MemoryOrder::Relaxed);
+    stats.peakBytes = m_peakBytes.Load(MemoryOrder::Relaxed);
+    stats.allocationCount = m_allocationCount.Load(MemoryOrder::Relaxed) + m_freeCount.Load(MemoryOrder::Relaxed);
+    stats.freeCount = m_freeCount.Load(MemoryOrder::Relaxed);
+    stats.failedAllocationCount = m_failedAllocationCount.Load(MemoryOrder::Relaxed);
+    stats.liveAllocationCount = m_allocationCount.Load(MemoryOrder::Relaxed);
+    return stats;
 }
 
 } // namespace Engine::Memory

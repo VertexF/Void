@@ -50,6 +50,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
     
     // ========================================================================
     // Pool Allocator Specific
@@ -93,6 +94,7 @@ private:
     uint8* m_allocatedBitmap = nullptr;
     size_t m_allocatedBitmapBytes = 0;
     MemoryTag* m_blockTags = nullptr;
+    AllocatorStatsTracker m_stats;
     mutable Threading::SpinLock m_lock;
 };
 

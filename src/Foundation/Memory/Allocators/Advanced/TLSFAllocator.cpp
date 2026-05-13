@@ -73,14 +73,20 @@ namespace Engine::Memory {
 
     void* TLSFAllocator::Allocate(size_t size, size_t alignment)
     {
-        if (size == 0) return nullptr;
+        if (size == 0) {
+            m_stats.RecordFailedAllocation();
+            return nullptr;
+        }
         if (!IsPowerOfTwo(alignment)) {
             alignment = alignof(MaxAlignT);
         }
         if (alignment < alignof(MaxAlignT)) {
             alignment = alignof(MaxAlignT);
         }
-        if (alignment > kMinBlockSize) return nullptr;
+        if (alignment > kMinBlockSize) {
+            m_stats.RecordFailedAllocation();
+            return nullptr;
+        }
 
         if (size < kMinBlockSize) {
             size = kMinBlockSize;
@@ -93,7 +99,10 @@ namespace Engine::Memory {
         Mapping(size, fl, sl);
 
         Block* block = FindSuitableBlock(size, fl, sl);
-        if (!block) return nullptr;
+        if (!block) {
+            m_stats.RecordFailedAllocation();
+            return nullptr;
+        }
 
         RemoveBlock(block);
 
@@ -128,6 +137,7 @@ namespace Engine::Memory {
         }
 
         m_allocatedBytes += block->GetSize();
+        m_stats.RecordAllocation(block->GetSize());
         void* result = reinterpret_cast<void*>(reinterpret_cast<uint8_t*>(block) + sizeof(Block));
 
         return result;
@@ -144,6 +154,7 @@ namespace Engine::Memory {
         }
 
         if (!Owns(ptr)) {
+            m_stats.RecordFailedAllocation();
             return nullptr;
         }
 
@@ -164,6 +175,8 @@ namespace Engine::Memory {
         if (newPtr) {
             MemCopy(newPtr, ptr, oldSize);
             Free(ptr);
+        } else {
+            m_stats.RecordFailedAllocation();
         }
         return newPtr;
     }
@@ -174,6 +187,7 @@ namespace Engine::Memory {
 
         Threading::SpinLockGuard guard(m_lock);
         if (!IsLiveBlock(ptr)) {
+            m_stats.RecordFailedAllocation();
             return;
         }
 
@@ -183,6 +197,7 @@ namespace Engine::Memory {
         size_t blockSize = block->GetSize();
         block->SetFree(true);
         m_allocatedBytes -= blockSize;
+        m_stats.RecordFree(blockSize);
 
         // Coalesce with next physical block
         Block* nextPhysical = reinterpret_cast<Block*>(reinterpret_cast<uint8_t*>(block) + sizeof(Block) + block->GetSize());
@@ -228,6 +243,30 @@ namespace Engine::Memory {
 
         Threading::SpinLockGuard guard(m_lock);
         return IsLiveBlock(ptr);
+    }
+
+    AllocatorStats TLSFAllocator::GetStats() const
+    {
+        AllocatorStats stats = m_stats.Snapshot(Name());
+        Threading::SpinLockGuard guard(m_lock);
+        stats.liveBytes = m_allocatedBytes;
+        stats.reservedBytes = m_poolSize;
+        stats.committedBytes = m_poolSize;
+        for (size_t fl = 0; fl < kFliMax; ++fl) {
+            for (size_t sl = 0; sl < kSli; ++sl) {
+                for (Block* block = m_blocks[fl][sl]; block; block = block->nextFree) {
+                    const size_t blockSize = block->GetSize();
+                    stats.freeBytes += blockSize;
+                    if (blockSize > stats.largestFreeBlockBytes) {
+                        stats.largestFreeBlockBytes = blockSize;
+                    }
+                }
+            }
+        }
+        stats.fragmentationBytes = stats.freeBytes > stats.largestFreeBlockBytes
+            ? stats.freeBytes - stats.largestFreeBlockBytes
+            : 0;
+        return stats;
     }
 
     void TLSFAllocator::Mapping(size_t size, size_t& fl, size_t& sl)

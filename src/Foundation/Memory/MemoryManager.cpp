@@ -159,6 +159,82 @@ MemoryProfiler* MemoryManager::Profiler()
     return instance->m_profiler;
 }
 
+bool MemoryManager::CaptureAllocatorStats(StringView name)
+{
+    Initialize();
+    IAllocator* allocator = nullptr;
+    MemoryProfiler* profiler = nullptr;
+    std::string key;
+    {
+        Threading::SpinLockGuard guard(g_instance->m_lock);
+        key = ToString(name);
+        const auto it = g_instance->m_allocators.find(key);
+        if (it == g_instance->m_allocators.end()) {
+            return false;
+        }
+        allocator = it->second;
+        profiler = g_instance->m_profiler;
+    }
+
+    if (!allocator || !profiler) {
+        return false;
+    }
+
+    AllocatorStats stats = allocator->GetStats();
+    profiler->UpdateAllocatorStats(key.c_str(), stats);
+    return true;
+}
+
+void MemoryManager::CaptureAllAllocatorStats()
+{
+    Initialize();
+    std::unordered_map<std::string, IAllocator*> allocators;
+    MemoryProfiler* profiler = nullptr;
+    {
+        Threading::SpinLockGuard guard(g_instance->m_lock);
+        allocators = g_instance->m_allocators;
+        profiler = g_instance->m_profiler;
+    }
+
+    if (!profiler) {
+        return;
+    }
+
+    for (const auto& entry : allocators) {
+        if (entry.second) {
+            profiler->UpdateAllocatorStats(entry.first.c_str(), entry.second->GetStats());
+        }
+    }
+}
+
+bool MemoryManager::GetAllocatorStats(StringView name, AllocatorStats& outStats)
+{
+    MemoryManager* instance = g_instance;
+    if (!instance) {
+        return false;
+    }
+    MemoryProfiler* profiler = nullptr;
+    {
+        Threading::SpinLockGuard guard(instance->m_lock);
+        profiler = instance->m_profiler;
+    }
+    return profiler ? profiler->GetAllocatorStats(ToString(name), outStats) : false;
+}
+
+Vector<AllocatorStats> MemoryManager::GetAllocatorStatsSnapshots()
+{
+    MemoryManager* instance = g_instance;
+    if (!instance) {
+        return {};
+    }
+    MemoryProfiler* profiler = nullptr;
+    {
+        Threading::SpinLockGuard guard(instance->m_lock);
+        profiler = instance->m_profiler;
+    }
+    return profiler ? profiler->GetAllocatorStatsSnapshots() : Vector<AllocatorStats>{};
+}
+
 bool MemoryManager::IsProfilingSuppressed() noexcept
 {
     return g_profilingSuppressionDepth != 0;

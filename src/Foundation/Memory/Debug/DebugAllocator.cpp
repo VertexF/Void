@@ -45,6 +45,7 @@ DebugAllocator::DebugAllocator(IAllocator* backingAllocator,
 void* DebugAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_backingAllocator || size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -64,6 +65,7 @@ void* DebugAllocator::Allocate(size_t size, size_t alignment)
         raw = m_backingAllocator->Allocate(totalSize, alignof(MaxAlignT));
     }
     if (!raw) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -85,6 +87,7 @@ void* DebugAllocator::Allocate(size_t size, size_t alignment)
     MemSet(aligned, kAllocPattern, size);
 
     m_allocatedBytes.FetchAdd(size, MemoryOrder::Relaxed);
+    m_stats.RecordAllocation(size);
     if (m_leakDetector) {
         m_leakDetector->TrackAlloc(aligned, size, header->tag);
     }
@@ -109,6 +112,7 @@ void* DebugAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -127,6 +131,8 @@ void* DebugAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         size_t copySize = (oldSize < newSize) ? oldSize : newSize;
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
+    } else {
+        m_stats.RecordFailedAllocation();
     }
     return newPtr;
 }
@@ -141,6 +147,7 @@ void DebugAllocator::Free(void* ptr)
         Threading::SpinLockGuard guard(m_liveLock);
         const auto it = m_liveAllocations.find(ptr);
         if (it == m_liveAllocations.end()) {
+            m_stats.RecordFailedAllocation();
             return;
         }
         m_liveAllocations.erase(it);
@@ -174,6 +181,7 @@ void DebugAllocator::Free(void* ptr)
 
     MemSet(aligned, kFreePattern, size);
     m_allocatedBytes.FetchSub(size, MemoryOrder::Relaxed);
+    m_stats.RecordFree(size);
     if (m_leakDetector) {
         m_leakDetector->TrackFree(aligned);
     }
@@ -205,6 +213,11 @@ bool DebugAllocator::Owns(void* ptr) const
     }
     Threading::SpinLockGuard guard(m_liveLock);
     return m_liveAllocations.find(ptr) != m_liveAllocations.end();
+}
+
+AllocatorStats DebugAllocator::GetStats() const
+{
+    return m_stats.Snapshot(Name());
 }
 
 } // namespace Engine::Memory

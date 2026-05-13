@@ -129,6 +129,7 @@ BuddyAllocator& BuddyAllocator::operator=(BuddyAllocator&& other) noexcept
 void* BuddyAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_buffer || size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -140,14 +141,17 @@ void* BuddyAllocator::Allocate(size_t size, size_t alignment)
 
     const size_t headerSize = sizeof(Header);
     if (size > m_totalSize) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     const size_t maxExtra = headerSize + alignment;
     if (size > (std::numeric_limits<size_t>::max)() - maxExtra) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     const size_t requiredSize = size + maxExtra;
     if (requiredSize > m_totalSize) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     size_t order = OrderForSize(requiredSize);
@@ -155,6 +159,7 @@ void* BuddyAllocator::Allocate(size_t size, size_t alignment)
     Threading::SpinLockGuard guard(m_lock);
 
     if (order >= m_levels) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -163,6 +168,7 @@ void* BuddyAllocator::Allocate(size_t size, size_t alignment)
         ++currentOrder;
     }
     if (currentOrder >= m_levels) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -186,6 +192,7 @@ void* BuddyAllocator::Allocate(size_t size, size_t alignment)
     header->padding = kBuddyMagic;
 
     m_allocatedBytes += size;
+    m_stats.RecordAllocation(size);
 
     if (MemoryProfiler* profiler = MemoryManager::Profiler()) {
         profiler->TrackAlloc(aligned, size, header->tag);
@@ -205,6 +212,7 @@ void* BuddyAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -231,6 +239,7 @@ void* BuddyAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
             m_allocatedBytes -= header->size;
             m_allocatedBytes += newSize;
         }
+        m_stats.RecordResize(header->size, newSize);
         header->size = newSize;
         return ptr;
     }
@@ -242,6 +251,8 @@ void* BuddyAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         size_t copySize = (oldSize < newSize) ? oldSize : newSize;
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
+    } else {
+        m_stats.RecordFailedAllocation();
     }
     return newPtr;
 }
@@ -254,6 +265,7 @@ void BuddyAllocator::Free(void* ptr)
 
     Threading::SpinLockGuard guard(m_lock);
     if (!IsLiveAllocation(ptr)) {
+        m_stats.RecordFailedAllocation();
         return;
     }
 
@@ -267,6 +279,7 @@ void BuddyAllocator::Free(void* ptr)
     if (m_allocatedBytes >= header->size) {
         m_allocatedBytes -= header->size;
     }
+    m_stats.RecordFree(header->size);
 
     if (MemoryProfiler* profiler = MemoryManager::Profiler()) {
         profiler->TrackFree(ptr, header->size, header->tag);
@@ -305,6 +318,28 @@ bool BuddyAllocator::Owns(void* ptr) const
 {
     Threading::SpinLockGuard guard(m_lock);
     return IsLiveAllocation(ptr);
+}
+
+AllocatorStats BuddyAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    Threading::SpinLockGuard guard(m_lock);
+    stats.liveBytes = m_allocatedBytes;
+    stats.reservedBytes = m_totalSize;
+    stats.committedBytes = m_totalSize;
+    for (size_t order = 0; order < m_levels; ++order) {
+        const size_t blockSize = SizeForOrder(order);
+        for (FreeBlock* block = m_freeLists[order]; block; block = block->next) {
+            stats.freeBytes += blockSize;
+            if (blockSize > stats.largestFreeBlockBytes) {
+                stats.largestFreeBlockBytes = blockSize;
+            }
+        }
+    }
+    stats.fragmentationBytes = stats.freeBytes > stats.largestFreeBlockBytes
+        ? stats.freeBytes - stats.largestFreeBlockBytes
+        : 0;
+    return stats;
 }
 
 size_t BuddyAllocator::SizeForOrder(size_t order) const noexcept

@@ -29,6 +29,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override { return "SecuredAllocator"; }
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     // ========================================================================
     // Security Operations
@@ -46,6 +47,7 @@ public:
 private:
     UniquePtr<IVirtualMemory> m_vm;
     size_t m_allocatedTotal = 0;
+    AllocatorStatsTracker m_stats;
     
     struct AllocationInfo {
         void* baseAddress; // Including guard pages
