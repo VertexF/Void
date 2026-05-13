@@ -31,6 +31,10 @@
 
 namespace
 {
+    // Default size for procedurally-generated fallback
+    static constexpr int FALLBACK_CUBEMAP_FACE_SIZE = 256;
+    static constexpr int FALLBACK_CHECKER_CELL_SIZE = 32;
+
     //TODO: Figure out if you need this stuff.
     PipelineHandle cubePipeline;
     PipelineHandle skyboxPipeline;
@@ -97,29 +101,112 @@ namespace
 
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
 
+    // Generates a black & white RGBA checkerboard
+    static uint8_t* generateCheckerboardFace(int faceWidth, int faceHeight)
+    {
+        const size_t pixelCount = static_cast<size_t>(faceWidth) * static_cast<size_t>(faceHeight);
+        uint8_t* data = static_cast<uint8_t*>(malloc(pixelCount * 4));
+        if (data == nullptr)
+        {
+            return nullptr;
+        }
+
+        for (int y = 0; y < faceHeight; ++y)
+        {
+            for (int x = 0; x < faceWidth; ++x)
+            {
+                const bool whiteCell =
+                    ((x / FALLBACK_CHECKER_CELL_SIZE) + (y / FALLBACK_CHECKER_CELL_SIZE)) % 2 == 0;
+                const uint8_t value = whiteCell ? 255 : 0;
+                uint8_t* pixel = data + (static_cast<size_t>(y) * faceWidth + x) * 4;
+                pixel[0] = value;
+                pixel[1] = value;
+                pixel[2] = value;
+                pixel[3] = 255;
+            }
+        }
+        return data;
+    }
+
     //TODO: Move this to a place that make sense.
     TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, Array<uint8_t*> &skyboxImageArray, const char* name)
     {
-        int comp;
-        int width;
-        int height;
+        int comp = 4;
+        int width  = -1; // -1 means "not yet known".
+        int height = -1;
 
+        // Pass 1: probe each face's dimensions (cheap header-only read via stbi_info).
+        // The first successfully probed face dictates the cubemap size.
         for (uint32_t i = 0; i < images.size; ++i)
         {
-            if (images[i])
+            if (images[i] == nullptr)
             {
-                stbi_set_flip_vertically_on_load(1);
-                //Load 6 images.
-                uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
+                continue;
+            }
+
+            int probeW = 0;
+            int probeH = 0;
+            int probeComp = 0;
+            if (stbi_info(images[i], &probeW, &probeH, &probeComp) != 0)
+            {
+                if (width < 0)
+                {
+                    width  = probeW;
+                    height = probeH;
+                }
+                else if (probeW != width || probeH != height)
+                {
+                    VOID_ERROR("Cubemap face %s has mismatched dimensions (%dx%d vs %dx%d) - it will be replaced with a checkerboard fallback",
+                        images[i], probeW, probeH, width, height);
+                }
+            }
+        }
+
+        // No face could be probed - fall back to a default size so we still produce a valid cubemap.
+        if (width <= 0 || height <= 0)
+        {
+            width  = FALLBACK_CUBEMAP_FACE_SIZE;
+            height = FALLBACK_CUBEMAP_FACE_SIZE;
+        }
+
+        // Pass 2: load each face, or generate a checkerboard fallback at the agreed size.
+        for (uint32_t i = 0; i < images.size; ++i)
+        {
+            if (images[i] == nullptr)
+            {
+                continue;
+            }
+
+            stbi_set_flip_vertically_on_load(1);
+
+            int imgW = 0;
+            int imgH = 0;
+            uint8_t* imageData = stbi_load(images[i], &imgW, &imgH, &comp, 4);
+
+            // Replace with a default texture if the load failed OR the dimensions don't match the agreed size.
+            const bool dimensionsMismatch = (imageData != nullptr) && (imgW != width || imgH != height);
+            if (imageData == nullptr || dimensionsMismatch)
+            {
                 if (imageData == nullptr)
                 {
-                    VOID_ERROR("Error loading texture %s", images[i]);
-                    return INVALID_TEXTURE;
+                    VOID_WARN("Error loading texture %s - generating checkerboard fallback", images[i]);
+                }
+                else
+                {
+                    // Free the mismatched real image; we'll replace it with a fallback at the correct size.
+                    stbi_image_free(imageData);
                 }
 
-                skyboxImageArray.push(imageData);
-                //free(imageData);
+                imageData = generateCheckerboardFace(width, height);
+                if (imageData == nullptr)
+                {
+                    VOID_ERROR("Failed to allocate checkerboard fallback for %s", images[i]);
+                    return INVALID_TEXTURE;
+                }
             }
+
+            skyboxImageArray.push(imageData);
+            //free(imageData);
         }
 
         //Create the single texture.

@@ -5,6 +5,8 @@ project(Void
         LANGUAGES CXX C
         DESCRIPTION "Void Practice Game Engine")
 
+include(CTest)
+
 #C++ is only "required" to remove warnings for libraries
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -125,6 +127,10 @@ endif()
 ###Foundation
 
 set(FOUNDATION_SOURCE src/Foundation/Array.hpp
+                      src/Foundation/Containers/Array.hpp
+                      src/Foundation/Containers/ChunkedArray.hpp
+                      src/Foundation/Containers/Pair.hpp
+                      src/Foundation/Containers/Vector.hpp
                       src/Foundation/Assert.hpp
                       src/Foundation/Bit.cpp
                       src/Foundation/Bit.hpp
@@ -140,6 +146,64 @@ set(FOUNDATION_SOURCE src/Foundation/Array.hpp
                       src/Foundation/HashMap.hpp
                       src/Foundation/HashMap.cpp
                       src/Foundation/Log.hpp
+                      src/Foundation/Memory/Allocator.cpp
+                      src/Foundation/Memory/Allocator.hpp
+                      src/Foundation/Memory/Alignment.hpp
+                      src/Foundation/Memory/Allocators/AlignedAllocator.hpp
+                      src/Foundation/Memory/Allocators/BinnedAllocator.cpp
+                      src/Foundation/Memory/Allocators/BinnedAllocator.hpp
+                      src/Foundation/Memory/Allocators/FrameAllocator.cpp
+                      src/Foundation/Memory/Allocators/FrameAllocator.hpp
+                      src/Foundation/Memory/Allocators/LinearAllocator.cpp
+                      src/Foundation/Memory/Allocators/LinearAllocator.hpp
+                      src/Foundation/Memory/Allocators/MallocAllocator.cpp
+                      src/Foundation/Memory/Allocators/MallocAllocator.hpp
+                      src/Foundation/Memory/Allocators/MonotonicAllocator.hpp
+                      src/Foundation/Memory/Allocators/PoolAllocator.cpp
+                      src/Foundation/Memory/Allocators/PoolAllocator.hpp
+                      src/Foundation/Memory/Allocators/StackAllocator.cpp
+                      src/Foundation/Memory/Allocators/StackAllocator.hpp
+                      src/Foundation/Memory/Allocators/Advanced/BuddyAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/BuddyAllocator.hpp
+                      src/Foundation/Memory/Allocators/Advanced/SecuredAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/SecuredAllocator.hpp
+                      src/Foundation/Memory/Allocators/Advanced/ThreadLocalLinearAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/ThreadLocalLinearAllocator.hpp
+                      src/Foundation/Memory/Allocators/Advanced/ThreadSafeAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/ThreadSafeAllocator.hpp
+                      src/Foundation/Memory/Allocators/Advanced/ThreadSafeLinearAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/ThreadSafeLinearAllocator.hpp
+                      src/Foundation/Memory/Allocators/Advanced/TLSCachingAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/TLSCachingAllocator.hpp
+                      src/Foundation/Memory/Allocators/Advanced/TrackedAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/TrackedAllocator.hpp
+                      src/Foundation/Memory/Debug/DebugAllocator.cpp
+                      src/Foundation/Memory/Debug/DebugAllocator.hpp
+                      src/Foundation/Memory/Debug/GlobalAllocHooks.cpp
+                      src/Foundation/Memory/Debug/GlobalAllocHooks.hpp
+                      src/Foundation/Memory/Debug/LeakDetector.cpp
+                      src/Foundation/Memory/Debug/LeakDetector.hpp
+                      src/Foundation/Memory/Debug/MemoryProfiler.cpp
+                      src/Foundation/Memory/Debug/MemoryProfiler.hpp
+                      src/Foundation/Memory/MemoryManager.cpp
+                      src/Foundation/Memory/MemoryManager.hpp
+                      src/Foundation/Memory/MemoryTag.cpp
+                      src/Foundation/Memory/MemoryTag.hpp
+                      src/Foundation/Memory/MemoryTagScope.cpp
+                      src/Foundation/Memory/MemoryTagScope.hpp
+                      src/Foundation/Memory/Operations.hpp
+                      src/Foundation/Memory/TLSFAllocator.hpp
+                      src/Foundation/Memory/Binned/Bin.cpp
+                      src/Foundation/Memory/Binned/Bin.hpp
+                      src/Foundation/Memory/Binned/CoreHeap.cpp
+                      src/Foundation/Memory/Binned/CoreHeap.hpp
+                      src/Foundation/Memory/Binned/PageHeap.cpp
+                      src/Foundation/Memory/Binned/PageHeap.hpp
+                      src/Foundation/Memory/Binned/SizeClassTable.cpp
+                      src/Foundation/Memory/Binned/SizeClassTable.hpp
+                      src/Foundation/Memory/Allocators/Advanced/TLSFAllocator.cpp
+                      src/Foundation/Memory/Allocators/Advanced/TLSFAllocator.hpp
+                      src/Foundation/Memory/VirtualMemory.hpp
                       src/Foundation/Memory.cpp
                       src/Foundation/Memory.hpp
                       src/Foundation/Numerics.cpp
@@ -152,11 +216,23 @@ set(FOUNDATION_SOURCE src/Foundation/Array.hpp
                       src/Foundation/ResourcePool.hpp
                       src/Foundation/String.cpp
                       src/Foundation/String.hpp
+                      src/Foundation/Threading/Atomic.hpp
+                      src/Foundation/Threading/Common/Atomic.hpp
+                      src/Foundation/Threading/Common/Mutex.hpp
+                      src/Foundation/Threading/Mutex.hpp
+                      src/Foundation/Threading/Lock/SpinLock.hpp
                       src/Foundation/Time.cpp
                       src/Foundation/Time.hpp
+                      src/Foundation/Types/NumericLimits.hpp
                       src/Foundation/WindowsDeclarations.hpp
 )
 add_library(Foundation STATIC ${FOUNDATION_SOURCE})
+
+if(WIN32)
+    target_sources(Foundation PRIVATE src/Foundation/Memory/VirtualMemoryWin32.cpp)
+else()
+    target_sources(Foundation PRIVATE src/Foundation/Memory/VirtualMemoryPosix.cpp)
+endif()
 
 target_compile_definitions(Foundation PRIVATE
                                       CGLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -180,6 +256,66 @@ target_include_directories(Foundation SYSTEM PRIVATE
                            ${RAPID_HASH_DIR}
                            ${ENGINE_INCLUDE}
                            ${VENDOR_INCLUDE})
+
+if(BUILD_TESTING)
+    include(FetchContent)
+
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+    )
+    FetchContent_MakeAvailable(googletest)
+
+    set(VOID_TEST_SOURCE
+        tests/memory/leak_profiler_tests.cpp
+        tests/memory/mem_alignment_tests.cpp
+        tests/memory/mem_benchmarks.cpp
+        tests/memory/mem_bin_tests.cpp
+        tests/memory/mem_convenience_tests.cpp
+        tests/memory/differential_analysis_tests.cpp
+        tests/memory/mem_manager_tests.cpp
+        tests/memory/mem_rellocation_tests.cpp
+        tests/memory/mem_stress_tests.cpp
+        tests/memory/mem_tagging_tests.cpp
+        tests/memory/size_class_table_tests.cpp
+        tests/memory/virtual_memory_tests.cpp
+        tests/memory/zombie_detection_tests.cpp
+        tests/memory/allocators/binned_allocator_tests.cpp
+        tests/memory/allocators/buddy_allocator_tests.cpp
+        tests/memory/allocators/default_allocator_tests.cpp
+        tests/memory/allocators/malloc_allocator_tests.cpp
+        tests/memory/allocators/secured_monotonic_page_heap_tests.cpp
+        tests/memory/allocators/tls_caching_allocator_tests.cpp
+        tests/memory/allocators/tlsf_allocator_tests.cpp
+        tests/memory/allocators/tracked_thread-safe_debug_allocator_tests.cpp
+        tests/foundation/containers/array_tests.cpp
+        tests/foundation/containers/chunked_array_tests.cpp
+    )
+
+    add_executable(VoidTests ${VOID_TEST_SOURCE})
+    target_link_libraries(VoidTests PRIVATE Foundation GTest::gtest_main)
+    target_include_directories(VoidTests PRIVATE
+                               ${CMAKE_CURRENT_SOURCE_DIR}
+                               ${ENGINE_INCLUDE})
+
+    add_executable(VoidContainerBenchmarks
+        tests/foundation/containers/container_benchmarks.cpp
+        vender/tlsf/tlsf.c
+    )
+    target_link_libraries(VoidContainerBenchmarks PRIVATE Foundation)
+    target_include_directories(VoidContainerBenchmarks PRIVATE
+                               ${CMAKE_CURRENT_SOURCE_DIR}
+                               ${ENGINE_INCLUDE})
+    target_compile_definitions(VoidContainerBenchmarks PRIVATE NDEBUG)
+    target_compile_options(VoidContainerBenchmarks PRIVATE
+                           $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<NOT:$<CONFIG:Debug>>>:/O2 /Ob2>
+                           $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<NOT:$<CONFIG:Debug>>>:-O3>)
+
+    include(GoogleTest)
+    gtest_discover_tests(VoidTests)
+endif()
 
 ###External
 

@@ -7,9 +7,11 @@
 #if defined(_MSC_VER)
 #define VOID_ASSERTM(condition, message, ...) if((condition) == false) { vprint(VOID_FILELINE(VOID_CONCAT(message, "\n")), __VA_ARGS__); VOID_DEBUG_BREAK; }
 #define VOID_ERROR(message, ...)  vprint(VOID_FILELINE(VOID_CONCAT(message, "\n")), __VA_ARGS__); VOID_DEBUG_BREAK;
+#define VOID_WARN(message, ...)   vprint(VOID_FILELINE(VOID_CONCAT(message, "\n")), __VA_ARGS__);
 #else
 #define VOID_ASSERTM(condition, message, ...) if((condition) == false) { vprint(VOID_FILELINE(VOID_CONCAT(message, "\n")), ##__VA_ARGS__); VOID_DEBUG_BREAK; }
 #define VOID_ERROR(message, ...)  vprint(VOID_FILELINE(VOID_CONCAT(message, "\n")), ##__VA_ARGS__); VOID_DEBUG_BREAK;
+#define VOID_WARN(message, ...)   vprint(VOID_FILELINE(VOID_CONCAT(message, "\n")), ##__VA_ARGS__);
 #endif
 
 

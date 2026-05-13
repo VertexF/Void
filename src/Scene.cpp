@@ -11,13 +11,16 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, DescriptorSet
     entityData.init(allocator, totalEntities, totalEntities);
     debugRendererData.init(allocator, totalEntities, totalEntities);
     bodiesToBeAdded.init(allocator, totalEntities);
-    models.init(allocator, 3, 3);
+    models.init(allocator, 2, 2);
     debugModels.init(allocator, 1, 1);
 
     models[rockModelIndex].loadModel("Assets/Models/out/rock.glb", gpu, descriptorSetLayout);
+    //models[rockModelIndex].createCube(gpu, descriptorSetLayout);
     models[duckModelIndex].loadModel("Assets/Models/out/Duck.glb", gpu, descriptorSetLayout);
+    //models[duckModelIndex].createCube(gpu, descriptorSetLayout);
 
-    debugModels[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
+    //debugModels[debugSphereIndex].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
+    debugModels[debugSphereIndex].createColliderSphere(gpu, 64, 64);
 
     currentLastEntity = 0;
     currentDebugRendererIndex = 0;

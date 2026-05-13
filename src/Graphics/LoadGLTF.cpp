@@ -37,6 +37,336 @@ struct Transform
     }
 };
 
+void Model::initProceduralModel(GPUDevice& gpu)
+{
+    isModel = true;
+    allocator = &MemoryService::instance()->systemAllocator;
+    scratchAllocator = &MemoryService::instance()->scratchAllocator;
+
+    finalMatrix = glms_mat4_identity();
+    currentIndexBuffer = INVALID_BUFFER;
+
+    meshDraws.init(allocator, 1);
+    images.init(allocator, 0);
+    samplers.init(allocator, 0);
+    resourceNameBuffer.init(void_kilo(1), allocator);
+
+    SamplerCreation sc{};
+    sc.minFilter = VK_FILTER_LINEAR;
+    sc.magFilter = VK_FILTER_LINEAR;
+    sc.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sc.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    dummySampler = gpu.createSampler(sc);
+}
+
+void Model::buildProceduralMesh(GPUDevice& gpu,
+    DescriptorSetLayoutHandle layout,
+    const Vertices* verts, uint32_t vertexCount,
+    const uint32_t* indices, uint32_t indexCount,
+    const char* debugName)
+{
+    //Resource names. resourceNameBuffer keeps the storage alive for the GPU debug labels.
+    char* idxName = resourceNameBuffer.appendUseF("%s_indices", debugName);
+    char* matName = resourceNameBuffer.appendUseF("%s_material", debugName);
+    char* vertName = resourceNameBuffer.appendUseF("%s_vertices", debugName);
+
+    BufferCreation bc{};
+    bc.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, uint32_t(sizeof(uint32_t) * indexCount))
+        .setName(idxName)
+        .setData(const_cast<uint32_t*>(indices));
+    currentIndexBuffer = gpu.createBuffer(bc);
+
+    MeshDraw md{};
+    md.model = finalMatrix;
+    md.indexBuffer = currentIndexBuffer;
+    md.indexOffset = 0;
+    md.count = indexCount;
+    md.componentType = VK_INDEX_TYPE_UINT32;
+
+    md.baseColourFactor = vec4s{ 1.f, 1.f, 1.f, 1.f };
+    md.metallicRoughnessOcclusionFactor = vec4s{ 1.f, 1.f, 1.f, 1.f };
+    md.alphaCutoff = 1.f;
+    md.diffuseTextureIndex = UINT16_MAX;
+    md.roughnessTextureIndex = UINT16_MAX;
+    md.normalTextureIndex = UINT16_MAX;
+    md.occlusionTextureIndex = UINT16_MAX;
+    md.emisiveTextureIndex = UINT16_MAX;
+
+    MaterialData mat{};
+    mat.model            = md.model;
+    mat.modelInv         = glms_mat4_inv(md.model);
+    mat.textures[0] = mat.textures[1] = mat.textures[2] = mat.textures[3] = UINT16_MAX;
+    mat.baseColourFactor = md.baseColourFactor;
+    mat.metallicRoughnessOcclusionFactor = md.metallicRoughnessOcclusionFactor;
+    mat.alphaCutoff      = md.alphaCutoff;
+    mat.emissiveFactor   = vec3s{0,0,0};
+    mat.emissiveTextureIndex = UINT16_MAX;
+    mat.flags            = 0;
+
+    bc.reset()
+      .set(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(MaterialData))
+      .setName(matName)
+      .setData(&mat);
+    md.materialBuffer = gpu.createBuffer(bc);
+
+    bc.reset()
+      .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, uint32_t(sizeof(Vertices) * vertexCount))
+      .setName(vertName)
+      .setData(const_cast<Vertices*>(verts));
+    md.vertexBuffer = gpu.createBindlessBuffer(bc);
+
+    DescriptorSetCreation ds{};
+    ds.buffer(md.materialBuffer, 0).setLayout(layout);
+    md.descriptorSet = gpu.createDescriptorSet(ds);
+
+    meshDraws.push(md);
+}
+
+namespace {
+
+    inline uint8_t packSnorm8(float f);
+    void generateCubeGeometry(Vertices(&verts)[24], uint32_t(&idx)[36]);
+    void generateSphereGeometry(StackAllocator* scratch, uint32_t stacks, uint32_t slices, Array<Vertices>& outVerts, Array<uint32_t>& outIdx);
+    void generateColliderSphereGeometry(StackAllocator* scratch, uint32_t stacks, uint32_t slices, Array<ColliderVertices>& outVerts, Array<uint32_t>& outIdx);
+}
+
+void Model::createCube(GPUDevice& gpu, DescriptorSetLayoutHandle layout)
+{
+    initProceduralModel(gpu);
+
+    Vertices verts[24]; uint32_t idx[36];
+    generateCubeGeometry(verts, idx);
+
+    buildProceduralMesh(gpu, layout, verts, 24, idx, 36, "cube");
+}
+
+void Model::createSphere(GPUDevice& gpu, DescriptorSetLayoutHandle layout,
+    uint32_t stacks, uint32_t slices)
+{
+    initProceduralModel(gpu);
+
+    size_t marker = scratchAllocator->getMarker();
+    Array<Vertices> verts;
+    Array<uint32_t> idx;
+    generateSphereGeometry(scratchAllocator, stacks, slices, verts, idx);
+
+    buildProceduralMesh(gpu, layout, verts.data, verts.size,
+        idx.data, idx.size, "sphere");
+
+    scratchAllocator->freeMarker(marker);
+}
+
+namespace {
+    //Pack a [-1,1] float as the engine's normal/tangent byte format (matches loadModel).
+    inline uint8_t packSnorm8(float f) { return uint8_t(f * 127.f + 127.5f); }
+
+    void generateCubeGeometry(Vertices(&verts)[24], uint32_t(&idx)[36])
+    {
+        // 6 faces x 4 verts. Layout: +X, -X, +Y, -Y, +Z, -Z.
+        struct Face { float n[3]; float t[3]; float p[4][3]; };
+        static const Face faces[6] = {
+            //+X
+            {{ 1, 0, 0},{ 0, 0,-1},{{ .5f,-.5f, .5f},{ .5f,-.5f,-.5f},{ .5f, .5f,-.5f},{ .5f, .5f, .5f}}},
+            //-X
+            {{-1, 0, 0},{ 0, 0, 1},{{-.5f,-.5f,-.5f},{-.5f,-.5f, .5f},{-.5f, .5f, .5f},{-.5f, .5f,-.5f}}},
+            //+Y
+            {{ 0, 1, 0},{ 1, 0, 0},{{-.5f, .5f, .5f},{ .5f, .5f, .5f},{ .5f, .5f,-.5f},{-.5f, .5f,-.5f}}},
+            //-Y
+            {{ 0,-1, 0},{ 1, 0, 0},{{-.5f,-.5f,-.5f},{ .5f,-.5f,-.5f},{ .5f,-.5f, .5f},{-.5f,-.5f, .5f}}},
+            //+Z
+            {{ 0, 0, 1},{ 1, 0, 0},{{-.5f,-.5f, .5f},{ .5f,-.5f, .5f},{ .5f, .5f, .5f},{-.5f, .5f, .5f}}},
+            //-Z
+            {{ 0, 0,-1},{-1, 0, 0},{{ .5f,-.5f,-.5f},{-.5f,-.5f,-.5f},{-.5f, .5f,-.5f},{ .5f, .5f,-.5f}}},
+        };
+        static const float uv[4][2] = { {0,0},{1,0},{1,1},{0,1} };
+
+        uint32_t v = 0, i = 0;
+        for (const Face& f : faces)
+        {
+            uint32_t base = v;
+            for (uint32_t k = 0; k < 4; ++k, ++v)
+            {
+                verts[v].position[0] = f.p[k][0];
+                verts[v].position[1] = f.p[k][1];
+                verts[v].position[2] = f.p[k][2];
+
+                verts[v].normals[0] = packSnorm8(f.n[0]);
+                verts[v].normals[1] = packSnorm8(f.n[1]);
+                verts[v].normals[2] = packSnorm8(f.n[2]);
+                verts[v].normals[3] = 0;
+
+                verts[v].tangent[0] = packSnorm8(f.t[0]);
+                verts[v].tangent[1] = packSnorm8(f.t[1]);
+                verts[v].tangent[2] = packSnorm8(f.t[2]);
+                verts[v].tangent[3] = packSnorm8(1.f); // handedness
+
+                verts[v].texCoord0[0] = meshopt_quantizeHalf(uv[k][0]);
+                verts[v].texCoord0[1] = meshopt_quantizeHalf(uv[k][1]);
+            }
+            idx[i++] = base + 0; idx[i++] = base + 1; idx[i++] = base + 2;
+            idx[i++] = base + 2; idx[i++] = base + 3; idx[i++] = base + 0;
+        }
+    }
+
+    void generateSphereGeometry(StackAllocator* scratch, uint32_t stacks, uint32_t slices, Array<Vertices>& outVerts, Array<uint32_t>& outIdx)
+    {
+        const float radius = 0.5f;
+        const uint32_t vertexCount = (stacks + 1) * (slices + 1);
+        const uint32_t indexCount = stacks * slices * 6;
+
+        outVerts.init(scratch, vertexCount, vertexCount);
+        outIdx.init(scratch, indexCount, indexCount);
+
+        constexpr float PI = 3.14159265358979323846f;
+
+        for (uint32_t i = 0; i <= stacks; ++i)
+        {
+            float v = float(i) / float(stacks);
+            float phi = v * PI;
+            float sinP = sinf(phi), cosP = cosf(phi);
+
+            for (uint32_t j = 0; j <= slices; ++j)
+            {
+                float u = float(j) / float(slices);
+                float theta = u * 2.f * PI;
+                float sinT = sinf(theta), cosT = cosf(theta);
+
+                float nx = sinP * cosT, ny = cosP, nz = sinP * sinT;
+
+                Vertices& vert = outVerts[i * (slices + 1) + j];
+                vert.position[0] = nx * radius;
+                vert.position[1] = ny * radius;
+                vert.position[2] = nz * radius;
+
+                vert.normals[0] = packSnorm8(nx);
+                vert.normals[1] = packSnorm8(ny);
+                vert.normals[2] = packSnorm8(nz);
+                vert.normals[3] = 0;
+
+                vert.tangent[0] = packSnorm8(-sinT);
+                vert.tangent[1] = packSnorm8(0.f);
+                vert.tangent[2] = packSnorm8(cosT);
+                vert.tangent[3] = packSnorm8(1.f);
+
+                vert.texCoord0[0] = meshopt_quantizeHalf(u);
+                vert.texCoord0[1] = meshopt_quantizeHalf(v);
+            }
+        }
+
+        uint32_t k = 0;
+        for (uint32_t i = 0; i < stacks; ++i)
+        {
+            for (uint32_t j = 0; j < slices; ++j)
+            {
+                uint32_t a = i * (slices + 1) + j;
+                uint32_t b = a + 1;
+                uint32_t c = (i + 1) * (slices + 1) + j;
+                uint32_t d = c + 1;
+
+                outIdx[k++] = a; outIdx[k++] = c; outIdx[k++] = b;
+                outIdx[k++] = b; outIdx[k++] = c; outIdx[k++] = d;
+            }
+        }
+    }
+}
+
+namespace {
+    void generateColliderSphereGeometry(StackAllocator* scratch, uint32_t stacks, uint32_t slices, Array<ColliderVertices>& outVerts, Array<uint32_t>& outIdx)
+    {
+            const float radius = 0.5f;
+            const uint32_t vertexCount = (stacks + 1) * (slices + 1);
+            const uint32_t indexCount = stacks * slices * 6;
+
+            outVerts.init(scratch, vertexCount, vertexCount);
+            outIdx.init(scratch, indexCount, indexCount);
+
+            constexpr float PI = 3.14159265358979323846f;
+
+            for (uint32_t i = 0; i <= stacks; ++i)
+            {
+                float v = float(i) / float(stacks);
+                float phi = v * PI;
+                float sinP = sinf(phi), cosP = cosf(phi);
+
+                for (uint32_t j = 0; j <= slices; ++j)
+                {
+                    float u = float(j) / float(slices);
+                    float theta = u * 2.f * PI;
+                    float sinT = sinf(theta), cosT = cosf(theta);
+
+                    ColliderVertices& vert = outVerts[i * (slices + 1) + j];
+                    vert.position[0] = sinP * cosT * radius;
+                    vert.position[1] = cosP * radius;
+                    vert.position[2] = sinP * sinT * radius;
+                }
+            }
+
+            uint32_t k = 0;
+            for (uint32_t i = 0; i < stacks; ++i)
+            {
+                for (uint32_t j = 0; j < slices; ++j)
+                {
+                    uint32_t a = i * (slices + 1) + j;
+                    uint32_t b = a + 1;
+                    uint32_t c = (i + 1) * (slices + 1) + j;
+                    uint32_t d = c + 1;
+
+                    outIdx[k++] = a; outIdx[k++] = c; outIdx[k++] = b;
+                    outIdx[k++] = b; outIdx[k++] = c; outIdx[k++] = d;
+                }
+            }
+        }
+    }
+
+void Model::buildProceduralCollider(GPUDevice& gpu, const ColliderVertices* verts, uint32_t vertexCount, const uint32_t* indices, uint32_t indexCount, const char* debugName)
+{
+    char* idxName = resourceNameBuffer.appendUseF("%s_indices", debugName);
+    char* vertName = resourceNameBuffer.appendUseF("%s_vertices", debugName);
+
+    BufferCreation bc{};
+    bc.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, uint32_t(sizeof(uint32_t) * indexCount))
+        .setName(idxName)
+        .setData(const_cast<uint32_t*>(indices));
+    currentIndexBuffer = gpu.createBuffer(bc);
+
+    MeshDraw md{};
+    md.model = finalMatrix;
+    md.indexBuffer = currentIndexBuffer;
+    md.indexOffset = 0;
+    md.count = indexCount;
+    md.componentType = VK_INDEX_TYPE_UINT32;
+
+    bc.reset()
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, uint32_t(sizeof(ColliderVertices) * vertexCount))
+        .setName(vertName)
+        .setData(const_cast<ColliderVertices*>(verts));
+    md.vertexBuffer = gpu.createBindlessBuffer(bc);
+
+    meshDraws.push(md);
+}
+
+void Model::createColliderSphere(GPUDevice& gpu, uint32_t stacks, uint32_t slices)
+{
+    isModel = false;
+    allocator = &MemoryService::instance()->systemAllocator;
+    scratchAllocator = &MemoryService::instance()->scratchAllocator;
+
+    finalMatrix = glms_mat4_identity();
+    currentIndexBuffer = INVALID_BUFFER;
+
+    meshDraws.init(allocator, 1);
+    resourceNameBuffer.init(void_kilo(1), allocator);
+
+    size_t marker = scratchAllocator->getMarker();
+    Array<ColliderVertices> verts;
+    Array<uint32_t>         idx;
+    generateColliderSphereGeometry(scratchAllocator, stacks, slices, verts, idx);
+
+    buildProceduralCollider(gpu, verts.data, verts.size, idx.data, idx.size, "collider_sphere");
+
+    scratchAllocator->freeMarker(marker);
+}
+
 cgltf_data* Model::setupModel(const char* modelPath)
 {
     allocator = &MemoryService::instance()->systemAllocator;
@@ -546,7 +876,14 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                 }
                 else
                 {
-                    VOID_ERROR("The model needs tangent model %s", modelPath);
+                    // Tangents are optional in glTF; default them to zero when not provided.
+                    for (uint32_t j = 0; j < vertexCount; ++j)
+                    {
+                        vertex[j].tangent[0] = 0;
+                        vertex[j].tangent[1] = 0;
+                        vertex[j].tangent[2] = 0;
+                        vertex[j].tangent[3] = 0;
+                    }
                 }
 
                 if (textureAccessor)
@@ -591,6 +928,8 @@ void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
     isModel = false;
 
     cgltf_data* cgltfData = setupModel(modelPath);
+
+    resourceNameBuffer.init(void_kilo(1), allocator);
 
     for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
     {
@@ -709,6 +1048,7 @@ void Model::shutdownModel(GPUDevice& gpu)
 
         images.shutdown();
         samplers.shutdown();
-        resourceNameBuffer.shutdown();
     }
+
+    resourceNameBuffer.shutdown();
 }

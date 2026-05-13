@@ -81,6 +81,11 @@ struct Model
     cgltf_data* setupModel(const char* modelPath);
     void loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout);
     void loadCollider(const char* modelPath, GPUDevice& gpu);
+
+    void createCube(GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout);
+    void createSphere(GPUDevice& gpu, DescriptorSetLayoutHandle layout, uint32_t stacks = 16, uint32_t slices = 32);
+    void createColliderSphere(GPUDevice& gpu, uint32_t stacks = 16, uint32_t slices = 32);
+
     void shutdownModel(GPUDevice& gpu);
 
     Array<MeshDraw> meshDraws;
@@ -105,5 +110,18 @@ struct Model
     //This value tracks how many of the same model we have. This is to support instance rendering. 
     uint32_t countOfModelType;
     bool isModel;
+
+private:
+    void initProceduralModel(GPUDevice& gpu);
+    void buildProceduralMesh(GPUDevice& gpu, 
+        DescriptorSetLayoutHandle layout, 
+        const Vertices* verts, uint32_t vertexCount,
+        const uint32_t* indices,uint32_t indexCount,
+        const char* debugName);
+
+    void buildProceduralCollider(GPUDevice& gpu, 
+        const ColliderVertices* verts, uint32_t vertexCount,
+        const uint32_t* indices, uint32_t indexCount,
+        const char* debugName);
 };
 #endif // !LOAD_GLTF_HDR

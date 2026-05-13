@@ -163,11 +163,15 @@ layout(scalar, push_constant) uniform entityIndex
 
 void main()
 {
-    fragColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
     //fragColour *= vColour;
 
     mat3 TBN = mat3(1.0);
-    vec4 baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
+    vec4 baseColour = baseColourFactor;
+    if (textures.x != INVALID_TEXTURE_INDEX)
+    {
+        baseColour *= texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0);
+    }
+    fragColour = baseColour;
 
     //bool useAlphaMask = (flags & DrawFlags_AlphaMask) != 0;
     //if (useAlphaMask && baseColour.a < alphaCutoff)

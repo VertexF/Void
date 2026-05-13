@@ -1,0 +1,175 @@
+#include <Foundation/Memory/Operations.hpp>
+#include <Foundation/Memory/Allocators/Advanced/SecuredAllocator.hpp>
+#include <Foundation/Memory/Alignment.hpp>
+
+#include <limits>
+
+namespace Engine::Memory {
+
+namespace {
+
+[[nodiscard]] size_t RoundUpToPage(size_t value, size_t pageSize) noexcept
+{
+    return (value + pageSize - 1) & ~(pageSize - 1);
+}
+
+} // namespace
+
+SecuredAllocator::SecuredAllocator() noexcept
+    : m_vm(CreateVirtualMemory())
+{
+}
+
+SecuredAllocator::~SecuredAllocator()
+{
+    Threading::SpinLockGuard guard(m_lock);
+    for (auto& [ptr, info] : m_allocs) {
+        (void)ptr;
+        m_vm->Release(info.baseAddress);
+    }
+    m_allocs.clear();
+    m_allocatedTotal = 0;
+}
+
+void* SecuredAllocator::Allocate(size_t size, size_t alignment)
+{
+    if (!m_vm || size == 0) {
+        return nullptr;
+    }
+    if (!IsPowerOfTwo(alignment)) {
+        alignment = alignof(MaxAlignT);
+    }
+    if (alignment < alignof(MaxAlignT)) {
+        alignment = alignof(MaxAlignT);
+    }
+
+    const size_t pageSize = m_vm->PageSize();
+    const size_t alignmentPadding = alignment - 1;
+    if (size > (std::numeric_limits<size_t>::max)() - alignmentPadding) {
+        return nullptr;
+    }
+
+    const size_t committedSize = RoundUpToPage(size + alignmentPadding, pageSize);
+    if (committedSize > (std::numeric_limits<size_t>::max)() - (pageSize * 2)) {
+        return nullptr;
+    }
+
+    // Layout: [guard page][committed aligned payload range][guard page].
+    const size_t totalSize = committedSize + (pageSize * 2);
+    void* base = m_vm->Reserve(totalSize);
+    if (!base) {
+        return nullptr;
+    }
+
+    void* committedAddress = static_cast<uint8*>(base) + pageSize;
+    if (!m_vm->Commit(committedAddress, committedSize)) {
+        m_vm->Release(base);
+        return nullptr;
+    }
+
+    void* userPtr = AlignPointer(committedAddress, alignment);
+    Threading::SpinLockGuard guard(m_lock);
+    m_allocs[userPtr] = { base, committedAddress, totalSize, committedSize, size, alignment };
+    m_allocatedTotal += size;
+
+    return userPtr;
+}
+
+void SecuredAllocator::Free(void* ptr)
+{
+    if (!ptr) return;
+
+    Threading::SpinLockGuard guard(m_lock);
+    const auto it = m_allocs.find(ptr);
+    if (it != m_allocs.end()) {
+        m_allocatedTotal -= it->second.userSize;
+        m_vm->Release(it->second.baseAddress);
+        m_allocs.erase(it);
+    }
+}
+
+void* SecuredAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
+{
+    if (!ptr) return Allocate(newSize, alignment);
+    if (newSize == 0) {
+        Free(ptr);
+        return nullptr;
+    }
+
+    size_t oldSize = 0;
+    {
+        Threading::SpinLockGuard guard(m_lock);
+        const auto it = m_allocs.find(ptr);
+        if (it == m_allocs.end()) {
+            return nullptr;
+        }
+        oldSize = it->second.userSize;
+    }
+
+    // Hardened realloc: always move to new address to catch dangling pointers
+    void* newPtr = Allocate(newSize, alignment);
+    if (newPtr) {
+        size_t copySize = oldSize < newSize ? oldSize : newSize;
+        MemCopy(newPtr, ptr, copySize);
+        Free(ptr);
+    }
+    return newPtr;
+}
+
+size_t SecuredAllocator::AllocatedSize() const
+{
+    Threading::SpinLockGuard guard(m_lock);
+    return m_allocatedTotal;
+}
+
+bool SecuredAllocator::Owns(void* ptr) const
+{
+    Threading::SpinLockGuard guard(m_lock);
+    return m_allocs.find(ptr) != m_allocs.end();
+}
+
+void SecuredAllocator::MakeReadOnly(void* ptr)
+{
+    Threading::SpinLockGuard guard(m_lock);
+    const auto it = m_allocs.find(ptr);
+    if (it != m_allocs.end()) {
+        (void)m_vm->Protect(
+            it->second.committedAddress,
+            it->second.committedSize,
+            IVirtualMemory::MemoryProtection::ReadOnly);
+    }
+}
+
+void SecuredAllocator::MakeReadWrite(void* ptr)
+{
+    Threading::SpinLockGuard guard(m_lock);
+    const auto it = m_allocs.find(ptr);
+    if (it != m_allocs.end()) {
+        (void)m_vm->Protect(
+            it->second.committedAddress,
+            it->second.committedSize,
+            IVirtualMemory::MemoryProtection::ReadWrite);
+    }
+}
+
+void SecuredAllocator::ScrubAndFree(void* ptr)
+{
+    size_t userSize = 0;
+    void* committedAddress = nullptr;
+    size_t committedSize = 0;
+    {
+        Threading::SpinLockGuard guard(m_lock);
+        const auto it = m_allocs.find(ptr);
+        if (it == m_allocs.end()) {
+            return;
+        }
+        userSize = it->second.userSize;
+        committedAddress = it->second.committedAddress;
+        committedSize = it->second.committedSize;
+    }
+    (void)m_vm->Protect(committedAddress, committedSize, IVirtualMemory::MemoryProtection::ReadWrite);
+    MemSet(ptr, 0, userSize);
+    Free(ptr);
+}
+
+} // namespace Engine::Memory

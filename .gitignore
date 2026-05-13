@@ -2,3 +2,4 @@ src/Assets
 build/
 *.spv
 vender/JoltPhysics
+.vs/

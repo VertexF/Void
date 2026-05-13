@@ -67,8 +67,15 @@ void StringBuffer::init(size_t size, Allocator* newAllocator)
 
 void StringBuffer::shutdown()
 {
+    if (allocator == nullptr)
+    {
+        return;
+    }
+
     void_free(data, allocator);
-    bufferSize = 0; 
+    data = nullptr;
+    allocator = nullptr;
+    bufferSize = 0;
     currentSize = 0;
 }
 
@@ -136,7 +143,7 @@ void StringBuffer::appendF(const char* format, ...)
         return;
     }
 
-    //Maybe come back to this and fix up the formating.
+    //Maybe come back to this and fix up the formatting.
     va_list args;
     va_start(args, format);
     int writtenChars = vsnprintf(&data[currentSize], bufferSize - currentSize, format, args);
@@ -159,7 +166,7 @@ char* StringBuffer::appendUseF(const char* format, ...)
 {
     uint32_t cachedOffset = currentSize;
 
-    //Maybe come back to this and fix up the formating, this isn't safe.
+    //Maybe come back to this and fix up the formatting, this isn't safe.
     //I'm not sure if this is needed because if you crash the string buffer, that might be a you problem.
     if (currentSize >= bufferSize) 
     {

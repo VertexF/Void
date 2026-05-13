@@ -1,7 +1,10 @@
 #ifndef PLATFORM_HDR
 #define PLATFORM_HDR
 
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
+
+#include <Foundation/CompilerTraits.hpp>
 
 #if !defined(_MSC_VER)
     #include <signal.h>
@@ -25,5 +28,24 @@
 #define VOID_FILELINE(MESSAGE)    __FILE__ "(" VOID_LINE_STRING ") : " MESSAGE
 
 #define VOID_UNIQUE_SUFFIX(PARAM) VOID_CONCAT(PARAM, __LINE__)
+
+namespace Engine {
+
+using int8 = std::int8_t;
+using int16 = std::int16_t;
+using int32 = std::int32_t;
+using int64 = std::int64_t;
+using uint8 = std::uint8_t;
+using uint16 = std::uint16_t;
+using uint32 = std::uint32_t;
+using uint64 = std::uint64_t;
+using usize = std::size_t;
+using isize = std::ptrdiff_t;
+using uintptr = std::uintptr_t;
+using byte = std::uint8_t;
+using float32 = float;
+using float64 = double;
+
+} // namespace Engine
 
 #endif // !PLATFORM_HDR
