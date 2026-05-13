@@ -13,6 +13,39 @@ thread_local uint32 g_profilingSuppressionDepth = 0;
     const size_t index = static_cast<size_t>(tag);
     return index < static_cast<size_t>(MemoryTag::Count) ? index : 0;
 }
+
+void AppendJsonEscaped(std::string& out, const std::string& text)
+{
+    for (char c : text) {
+        switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+        }
+    }
+}
+
+void AppendJsonField(std::string& out, const char* name, size_t value, bool trailingComma)
+{
+    out += "\"";
+    out += name;
+    out += "\":";
+    out += std::to_string(value);
+    if (trailingComma) {
+        out += ",";
+    }
+}
+
+void AppendTextField(std::string& out, const char* name, size_t value)
+{
+    out += " ";
+    out += name;
+    out += "=";
+    out += std::to_string(value);
+}
 }
 
 std::string MemoryManager::ToString(StringView name)
@@ -21,6 +54,40 @@ std::string MemoryManager::ToString(StringView name)
         return {};
     }
     return std::string(name.text, name.length);
+}
+
+std::vector<MemoryManager::NamedAllocatorStats> MemoryManager::SnapshotRegisteredAllocatorStats(bool publishToProfiler)
+{
+    MemoryManager* instance = g_instance;
+    if (!instance) {
+        return {};
+    }
+
+    std::unordered_map<std::string, IAllocator*> allocators;
+    MemoryProfiler* profiler = nullptr;
+    {
+        Threading::SpinLockGuard guard(instance->m_lock);
+        allocators = instance->m_allocators;
+        profiler = instance->m_profiler;
+    }
+
+    std::vector<NamedAllocatorStats> snapshots;
+    snapshots.reserve(allocators.size());
+    for (const auto& entry : allocators) {
+        if (!entry.second) {
+            continue;
+        }
+
+        AllocatorStats stats = entry.second->GetStats();
+        if (!stats.name || stats.name[0] == '\0') {
+            stats.name = entry.second->Name();
+        }
+        if (profiler && publishToProfiler) {
+            profiler->UpdateAllocatorStats(entry.first.c_str(), stats);
+        }
+        snapshots.push_back({entry.first, stats});
+    }
+    return snapshots;
 }
 
 void MemoryManager::Initialize()
@@ -188,23 +255,7 @@ bool MemoryManager::CaptureAllocatorStats(StringView name)
 void MemoryManager::CaptureAllAllocatorStats()
 {
     Initialize();
-    std::unordered_map<std::string, IAllocator*> allocators;
-    MemoryProfiler* profiler = nullptr;
-    {
-        Threading::SpinLockGuard guard(g_instance->m_lock);
-        allocators = g_instance->m_allocators;
-        profiler = g_instance->m_profiler;
-    }
-
-    if (!profiler) {
-        return;
-    }
-
-    for (const auto& entry : allocators) {
-        if (entry.second) {
-            profiler->UpdateAllocatorStats(entry.first.c_str(), entry.second->GetStats());
-        }
-    }
+    (void)SnapshotRegisteredAllocatorStats(true);
 }
 
 bool MemoryManager::GetAllocatorStats(StringView name, AllocatorStats& outStats)
@@ -233,6 +284,75 @@ Vector<AllocatorStats> MemoryManager::GetAllocatorStatsSnapshots()
         profiler = instance->m_profiler;
     }
     return profiler ? profiler->GetAllocatorStatsSnapshots() : Vector<AllocatorStats>{};
+}
+
+Vector<AllocatorStats> MemoryManager::SnapshotAllocatorStats()
+{
+    Vector<AllocatorStats> stats;
+    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true);
+    stats.reserve(snapshots.size());
+    for (const NamedAllocatorStats& snapshot : snapshots) {
+        stats.push_back(snapshot.stats);
+    }
+    return stats;
+}
+
+std::string MemoryManager::DumpAllocatorStatsJson()
+{
+    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true);
+
+    std::string out;
+    out.reserve(128 + snapshots.size() * 320);
+    out += "{\"allocators\":[";
+    for (size_t i = 0; i < snapshots.size(); ++i) {
+        const NamedAllocatorStats& snapshot = snapshots[i];
+        const AllocatorStats& stats = snapshot.stats;
+        out += "{\"name\":\"";
+        AppendJsonEscaped(out, snapshot.name);
+        out += "\",";
+        AppendJsonField(out, "liveBytes", stats.liveBytes, true);
+        AppendJsonField(out, "peakBytes", stats.peakBytes, true);
+        AppendJsonField(out, "allocationCount", stats.allocationCount, true);
+        AppendJsonField(out, "freeCount", stats.freeCount, true);
+        AppendJsonField(out, "failedAllocationCount", stats.failedAllocationCount, true);
+        AppendJsonField(out, "liveAllocationCount", stats.liveAllocationCount, true);
+        AppendJsonField(out, "reservedBytes", stats.reservedBytes, true);
+        AppendJsonField(out, "committedBytes", stats.committedBytes, true);
+        AppendJsonField(out, "freeBytes", stats.freeBytes, true);
+        AppendJsonField(out, "largestFreeBlockBytes", stats.largestFreeBlockBytes, true);
+        AppendJsonField(out, "fragmentationBytes", stats.fragmentationBytes, false);
+        out += "}";
+        if (i + 1 < snapshots.size()) {
+            out += ",";
+        }
+    }
+    out += "]}";
+    return out;
+}
+
+std::string MemoryManager::DumpAllocatorStatsText()
+{
+    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true);
+
+    std::string out;
+    out.reserve(snapshots.size() * 240);
+    for (const NamedAllocatorStats& snapshot : snapshots) {
+        const AllocatorStats& stats = snapshot.stats;
+        out += snapshot.name;
+        AppendTextField(out, "live", stats.liveBytes);
+        AppendTextField(out, "peak", stats.peakBytes);
+        AppendTextField(out, "allocs", stats.allocationCount);
+        AppendTextField(out, "frees", stats.freeCount);
+        AppendTextField(out, "failures", stats.failedAllocationCount);
+        AppendTextField(out, "liveAllocs", stats.liveAllocationCount);
+        AppendTextField(out, "reserved", stats.reservedBytes);
+        AppendTextField(out, "committed", stats.committedBytes);
+        AppendTextField(out, "free", stats.freeBytes);
+        AppendTextField(out, "largestFree", stats.largestFreeBlockBytes);
+        AppendTextField(out, "fragmentation", stats.fragmentationBytes);
+        out += "\n";
+    }
+    return out;
 }
 
 bool MemoryManager::IsProfilingSuppressed() noexcept

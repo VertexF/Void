@@ -1,8 +1,11 @@
 #include <Foundation/Containers/Vector.hpp>
+#include <Foundation/Memory/Alignment.hpp>
 #include <Foundation/Memory/Allocators/Advanced/BuddyAllocator.hpp>
+#include <Foundation/Memory/Allocators/Advanced/SecuredAllocator.hpp>
 #include <Foundation/Memory/Allocators/Advanced/TLSCachingAllocator.hpp>
 #include <Foundation/Memory/Allocators/Advanced/ThreadSafeAllocator.hpp>
 #include <Foundation/Memory/Allocators/Advanced/TrackedAllocator.hpp>
+#include <Foundation/Memory/Allocators/AlignedAllocator.hpp>
 #include <Foundation/Memory/Allocators/BinnedAllocator.hpp>
 #include <Foundation/Memory/Allocators/MallocAllocator.hpp>
 #include <Foundation/Memory/Allocators/MonotonicAllocator.hpp>
@@ -15,6 +18,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <random>
 #include <thread>
 
@@ -133,6 +137,105 @@ void RunAllocatorTorture(
     EXPECT_GT(stats.allocationCount, 0u);
 }
 
+void ExpectFragmentationInvariant(const char* name, const AllocatorStats& stats)
+{
+    SCOPED_TRACE(name);
+    EXPECT_LE(stats.largestFreeBlockBytes, stats.freeBytes);
+    EXPECT_EQ(stats.fragmentationBytes,
+        stats.freeBytes > stats.largestFreeBlockBytes ? stats.freeBytes - stats.largestFreeBlockBytes : 0u);
+}
+
+void RunFragmentationRecoverability(
+    const char* name,
+    IAllocator& allocator,
+    uint32 seed,
+    size_t maxSmallSize,
+    size_t recoverySize,
+    size_t finalRecoverySize)
+{
+    SCOPED_TRACE(name);
+    std::mt19937 rng(seed);
+    std::uniform_int_distribution<size_t> sizeDist(8, maxSmallSize);
+    Vector<TortureAllocation> live;
+    live.reserve(1024);
+
+    for (int i = 0; i < 2048; ++i) {
+        TortureAllocation allocation{};
+        allocation.size = AlignSize(sizeDist(rng), 8);
+        allocation.pattern = static_cast<uint8>((i * 19) & 0xFF);
+        allocation.ptr = allocator.Allocate(allocation.size, 16);
+        if (allocation.ptr) {
+            FillPattern(allocation);
+            live.push_back(allocation);
+        }
+    }
+    ASSERT_FALSE(live.empty());
+
+    Vector<TortureAllocation> survivors;
+    survivors.reserve(live.size());
+    for (size_t i = 0; i < live.size(); ++i) {
+        if ((i % 3u) == 0u || (i % 7u) == 0u) {
+            ExpectPatternPrefix(live[i], live[i].size);
+            allocator.Free(live[i].ptr);
+        } else {
+            survivors.push_back(live[i]);
+        }
+    }
+    live.clear();
+    live.reserve(survivors.size());
+    for (TortureAllocation allocation : survivors) {
+        live.push_back(allocation);
+    }
+
+    ExpectFragmentationInvariant(name, allocator.GetStats());
+
+    Vector<TortureAllocation> recovered;
+    recovered.reserve(64);
+    for (int i = 0; i < 64; ++i) {
+        TortureAllocation allocation{};
+        allocation.size = recoverySize;
+        allocation.pattern = static_cast<uint8>((i * 29) & 0xFF);
+        allocation.ptr = allocator.Allocate(allocation.size, 16);
+        if (allocation.ptr) {
+            FillPattern(allocation);
+            recovered.push_back(allocation);
+        }
+    }
+    EXPECT_FALSE(recovered.empty());
+
+    for (TortureAllocation allocation : recovered) {
+        ExpectPatternPrefix(allocation, allocation.size);
+        allocator.Free(allocation.ptr);
+    }
+    for (TortureAllocation allocation : live) {
+        ExpectPatternPrefix(allocation, allocation.size);
+        allocator.Free(allocation.ptr);
+    }
+
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
+    ExpectFragmentationInvariant(name, allocator.GetStats());
+
+    void* recoveredBlock = allocator.Allocate(finalRecoverySize, 16);
+    ASSERT_NE(recoveredBlock, nullptr);
+    allocator.Free(recoveredBlock);
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
+}
+
+void ExpectFailureCounterIncrements(const char* name, IAllocator& allocator, size_t size, size_t alignment)
+{
+    SCOPED_TRACE(name);
+    const size_t before = allocator.GetStats().failedAllocationCount;
+    void* ptr = allocator.Allocate(size, alignment);
+    EXPECT_EQ(ptr, nullptr);
+    if (ptr) {
+        allocator.Free(ptr);
+    }
+
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, before);
+    }
+}
+
 } // namespace
 
 TEST(MemoryStress, TLSFDeterministicMixedAllocFree)
@@ -241,6 +344,70 @@ TEST(MemoryStress, DeterministicAllocatorTorture)
     ThreadSafeAllocator threadSafeAllocator(&tlsBacking);
     TLSCachingAllocator tlsCachingAllocator(&threadSafeAllocator);
     RunAllocatorTorture("TLSCachingAllocator", tlsCachingAllocator, 0x1009u, 512);
+}
+
+TEST(MemoryStress, FragmentationRecoverabilityForGeneralPurposeAllocators)
+{
+    TLSFAllocator tlsfAllocator(4ull * 1024ull * 1024ull);
+    RunFragmentationRecoverability("TLSFAllocator", tlsfAllocator, 0xF001u, 2048, 4096, 512 * 1024);
+
+    BinnedAllocator binnedAllocator;
+    RunFragmentationRecoverability("BinnedAllocator", binnedAllocator, 0xF002u, 2048, 4096, 256 * 1024);
+
+    BuddyAllocator buddyAllocator(4ull * 1024ull * 1024ull, 256);
+    RunFragmentationRecoverability("BuddyAllocator", buddyAllocator, 0xF003u, 2048, 4096, 512 * 1024);
+}
+
+TEST(MemoryStress, AllocatorFailureCountersTrackRejectedRequests)
+{
+    MallocAllocator mallocAllocator;
+    ExpectFailureCounterIncrements("MallocAllocator", mallocAllocator, 0, 16);
+
+    BinnedAllocator binnedAllocator;
+    ExpectFailureCounterIncrements("BinnedAllocator", binnedAllocator, 0, 16);
+
+    TLSFAllocator tlsfAllocator(1024);
+    ExpectFailureCounterIncrements("TLSFAllocator", tlsfAllocator, 2048, 16);
+
+    BuddyAllocator buddyAllocator(1024, 256);
+    ExpectFailureCounterIncrements("BuddyAllocator", buddyAllocator, 2048, 16);
+
+    PoolAllocator poolAllocator(64, 2, nullptr, 16);
+    void* first = poolAllocator.Allocate(64, 16);
+    void* second = poolAllocator.Allocate(64, 16);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    ExpectFailureCounterIncrements("PoolAllocator", poolAllocator, 64, 16);
+    poolAllocator.Free(second);
+    poolAllocator.Free(first);
+
+    MonotonicAllocator monotonicAllocator(mallocAllocator, 64);
+    ExpectFailureCounterIncrements(
+        "MonotonicAllocator",
+        monotonicAllocator,
+        (std::numeric_limits<size_t>::max)(),
+        16);
+
+    MallocAllocator debugBacking;
+    DebugAllocator debugAllocator(&debugBacking);
+    ExpectFailureCounterIncrements("DebugAllocator", debugAllocator, 0, 16);
+
+    MallocAllocator trackedBacking;
+    TrackedAllocator trackedAllocator(&trackedBacking);
+    ExpectFailureCounterIncrements("TrackedAllocator", trackedAllocator, 0, 16);
+
+    MallocAllocator threadSafeBacking;
+    ThreadSafeAllocator threadSafeAllocator(&threadSafeBacking);
+    ExpectFailureCounterIncrements("ThreadSafeAllocator", threadSafeAllocator, 0, 16);
+
+    TLSCachingAllocator tlsCachingAllocator(&threadSafeAllocator);
+    ExpectFailureCounterIncrements("TLSCachingAllocator", tlsCachingAllocator, 0, 16);
+
+    AlignedAllocator alignedAllocator;
+    ExpectFailureCounterIncrements("AlignedAllocator", alignedAllocator, 0, 16);
+
+    SecuredAllocator securedAllocator;
+    ExpectFailureCounterIncrements("SecuredAllocator", securedAllocator, 0, 16);
 }
 
 } // namespace Engine::Memory

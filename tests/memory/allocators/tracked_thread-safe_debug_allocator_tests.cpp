@@ -218,4 +218,29 @@ TEST(DebugAllocator, RejectsInvalidAndDoubleFreeThroughLiveRegistry)
     EXPECT_EQ(backing.AllocatedSize(), 0u);
 }
 
+TEST(DebugAllocator, ReportsGuardOverwritesWithoutFreeingAllocation)
+{
+    MallocAllocator backing;
+    DebugAllocator allocator(&backing);
+
+    void* ptr = allocator.Allocate(24, 16);
+    ASSERT_NE(ptr, nullptr);
+    EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::Valid);
+
+    auto* bytes = static_cast<uint8*>(ptr);
+    bytes[24] = 0x41u;
+    EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::PostGuardCorrupt);
+    bytes[24] = 0xBBu;
+    EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::Valid);
+
+    bytes[-1] = 0x42u;
+    EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::PreGuardCorrupt);
+    bytes[-1] = 0xAAu;
+    EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::Valid);
+
+    allocator.Free(ptr);
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
+    EXPECT_EQ(backing.AllocatedSize(), 0u);
+}
+
 } // namespace Engine::Memory

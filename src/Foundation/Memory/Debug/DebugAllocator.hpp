@@ -14,6 +14,14 @@ class MemoryProfiler;
 
 class DebugAllocator : public IAllocator {
 public:
+    enum class AllocationValidation : uint8 {
+        Valid,
+        InvalidPointer,
+        HeaderCorrupt,
+        PreGuardCorrupt,
+        PostGuardCorrupt
+    };
+
     explicit DebugAllocator(IAllocator* backingAllocator = nullptr,
                             LeakDetector* leakDetector = nullptr,
                             MemoryProfiler* profiler = nullptr);
@@ -29,6 +37,7 @@ public:
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
     [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocationValidation ValidateAllocation(void* ptr) const;
 
     void SetLeakDetector(LeakDetector* detector) noexcept { m_leakDetector = detector; }
     void Profiler(MemoryProfiler* profiler) noexcept { m_profiler = profiler; }

@@ -58,4 +58,17 @@ bool ThreadSafeAllocator::Owns(void* ptr) const
     return m_backingAllocator->Owns(ptr);
 }
 
+AllocatorStats ThreadSafeAllocator::GetStats() const
+{
+    if (!m_backingAllocator) {
+        AllocatorStats stats{};
+        stats.name = Name();
+        return stats;
+    }
+    Threading::LockGuard guard(m_mutex);
+    AllocatorStats stats = m_backingAllocator->GetStats();
+    stats.name = Name();
+    return stats;
+}
+
 } // namespace Engine::Memory

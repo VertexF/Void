@@ -235,4 +235,53 @@ TEST(MemoryManager, CapturesRegisteredAllocatorStatsIntoProfiler)
     MemoryManager::Shutdown();
 }
 
+TEST(MemoryManager, DumpsAllocatorDiagnosticsForEditorHud)
+{
+    MemoryManager::Shutdown();
+    MemoryProfiler profiler;
+    MallocAllocator allocator;
+
+    MemoryManager::Initialize();
+    MemoryManager::Profiler(&profiler);
+    MemoryManager::RegisterAllocator(MakeView("hud-malloc"), &allocator);
+
+    void* ptr = allocator.Allocate(160, 16);
+    ASSERT_NE(ptr, nullptr);
+
+    const Vector<AllocatorStats> snapshots = MemoryManager::SnapshotAllocatorStats();
+    ASSERT_FALSE(snapshots.empty());
+
+    bool foundLiveAllocator = false;
+    for (const AllocatorStats& stats : snapshots) {
+        if (stats.name && std::strcmp(stats.name, allocator.Name()) == 0) {
+            foundLiveAllocator = stats.liveBytes == 160u &&
+                stats.peakBytes >= 160u &&
+                stats.allocationCount >= 1u;
+        }
+    }
+    EXPECT_TRUE(foundLiveAllocator);
+
+    const std::string json = MemoryManager::DumpAllocatorStatsJson();
+    EXPECT_NE(json.find("\"name\":\"hud-malloc\""), std::string::npos);
+    EXPECT_NE(json.find("\"liveBytes\":160"), std::string::npos);
+    EXPECT_NE(json.find("\"peakBytes\":"), std::string::npos);
+    EXPECT_NE(json.find("\"failedAllocationCount\":"), std::string::npos);
+    EXPECT_NE(json.find("\"fragmentationBytes\":"), std::string::npos);
+
+    const std::string text = MemoryManager::DumpAllocatorStatsText();
+    EXPECT_NE(text.find("hud-malloc"), std::string::npos);
+    EXPECT_NE(text.find("live=160"), std::string::npos);
+    EXPECT_NE(text.find("failures="), std::string::npos);
+    EXPECT_NE(text.find("fragmentation="), std::string::npos);
+
+    AllocatorStats profilerStats{};
+    ASSERT_TRUE(MemoryManager::GetAllocatorStats(MakeView("hud-malloc"), profilerStats));
+    EXPECT_EQ(profilerStats.liveBytes, 160u);
+
+    allocator.Free(ptr);
+    MemoryManager::UnregisterAllocator(MakeView("hud-malloc"));
+    MemoryManager::Profiler(nullptr);
+    MemoryManager::Shutdown();
+}
+
 } // namespace Engine::Memory

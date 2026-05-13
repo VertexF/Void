@@ -73,6 +73,7 @@ public:
 
         const usize required = RequiredBytes(size, alignment);
         if (required == 0) {
+            m_stats.RecordFailedAllocation();
             return nullptr;
         }
 

@@ -9,6 +9,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace Engine::Memory {
 
@@ -36,12 +37,21 @@ public:
     static void CaptureAllAllocatorStats();
     static bool GetAllocatorStats(StringView name, AllocatorStats& outStats);
     static Vector<AllocatorStats> GetAllocatorStatsSnapshots();
+    static Vector<AllocatorStats> SnapshotAllocatorStats();
+    static std::string DumpAllocatorStatsJson();
+    static std::string DumpAllocatorStatsText();
     static bool IsProfilingSuppressed() noexcept;
     static void PushProfilingSuppression() noexcept;
     static void PopProfilingSuppression() noexcept;
 
 private:
+    struct NamedAllocatorStats {
+        std::string name;
+        AllocatorStats stats;
+    };
+
     static std::string ToString(StringView name);
+    static std::vector<NamedAllocatorStats> SnapshotRegisteredAllocatorStats(bool publishToProfiler);
 
     std::unordered_map<std::string, IAllocator*> m_allocators;
     size_t m_budgets[static_cast<size_t>(MemoryTag::Count)] = {0};

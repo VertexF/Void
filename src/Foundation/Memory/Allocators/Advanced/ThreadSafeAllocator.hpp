@@ -23,6 +23,7 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
 
     [[nodiscard]] IAllocator* GetBackingAllocator() const noexcept { return m_backingAllocator; }
     void SetBackingAllocator(IAllocator* allocator) noexcept { m_backingAllocator = allocator; }

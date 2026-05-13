@@ -220,4 +220,36 @@ AllocatorStats DebugAllocator::GetStats() const
     return m_stats.Snapshot(Name());
 }
 
+DebugAllocator::AllocationValidation DebugAllocator::ValidateAllocation(void* ptr) const
+{
+    if (!ptr) {
+        return AllocationValidation::InvalidPointer;
+    }
+
+    Threading::SpinLockGuard guard(m_liveLock);
+    if (m_liveAllocations.find(ptr) == m_liveAllocations.end()) {
+        return AllocationValidation::InvalidPointer;
+    }
+
+    const auto* aligned = static_cast<const byte*>(ptr);
+    const auto* header = reinterpret_cast<const DebugHeader*>(aligned - kGuardSize - sizeof(DebugHeader));
+    if (header->magic != kDebugMagic) {
+        return AllocationValidation::HeaderCorrupt;
+    }
+
+    for (size_t i = 0; i < kGuardSize; ++i) {
+        if (static_cast<uint8>((aligned - kGuardSize)[i]) != kPreGuardPattern) {
+            return AllocationValidation::PreGuardCorrupt;
+        }
+    }
+
+    for (size_t i = 0; i < kGuardSize; ++i) {
+        if (static_cast<uint8>((aligned + header->size)[i]) != kPostGuardPattern) {
+            return AllocationValidation::PostGuardCorrupt;
+        }
+    }
+
+    return AllocationValidation::Valid;
+}
+
 } // namespace Engine::Memory
