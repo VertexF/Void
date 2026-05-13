@@ -208,6 +208,13 @@ void* BuddyAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         return nullptr;
     }
 
+    if (!IsPowerOfTwo(alignment)) {
+        alignment = kMinAlignment;
+    }
+    if (alignment < kMinAlignment) {
+        alignment = kMinAlignment;
+    }
+
     auto* aligned = static_cast<byte*>(ptr);
     auto* header = reinterpret_cast<Header*>(aligned - sizeof(Header));
     

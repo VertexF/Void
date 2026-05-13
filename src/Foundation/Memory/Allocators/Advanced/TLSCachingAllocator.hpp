@@ -8,6 +8,11 @@
 
 #include <array>
 
+#if !defined(NDEBUG)
+    #include <Foundation/Threading/Lock/SpinLock.hpp>
+    #include <unordered_set>
+#endif
+
 namespace Engine::Memory {
 
 /// @brief Thread-local caching allocator wrapper
@@ -90,11 +95,19 @@ public:
 private:
     [[nodiscard]] ThreadLocalCache& GetCache();
     void FlushCacheInternal(ThreadLocalCache& cache);
+#if !defined(NDEBUG)
+    [[nodiscard]] bool UnregisterLiveAllocation(void* ptr);
+    void RegisterLiveAllocation(void* ptr);
+#endif
 
     IAllocator* m_backingAllocator = nullptr;
     size_t m_cacheSize = kDefaultCacheSize;
     Atomic<size_t> m_cacheHits{0};
     Atomic<size_t> m_cacheMisses{0};
+#if !defined(NDEBUG)
+    std::unordered_set<void*> m_liveAllocations;
+    mutable Threading::SpinLock m_liveLock;
+#endif
 };
 
 } // namespace Engine::Memory

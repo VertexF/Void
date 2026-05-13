@@ -168,7 +168,7 @@ size_t FrameAllocator::GetMarker() const noexcept
 
 void FrameAllocator::RewindToMarker(size_t marker)
 {
-    if (marker <= m_capacity) {
+    if (marker <= m_offset) {
         m_offset = marker;
     }
 }

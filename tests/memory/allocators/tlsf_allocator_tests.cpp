@@ -123,6 +123,29 @@ TEST(TLSFAllocator, SupportsSmallSizeClasses)
     EXPECT_EQ(pool.AllocatedSize(), 0u);
 }
 
+TEST(TLSFAllocator, HandlesZeroAndInvalidAlignmentEdges)
+{
+    TLSFAllocator pool(4096);
+
+    EXPECT_EQ(pool.Allocate(0), nullptr);
+    EXPECT_EQ(pool.Reallocate(nullptr, 0), nullptr);
+
+    void* normalized = pool.Allocate(64, 24);
+    ASSERT_NE(normalized, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(normalized) % alignof(MaxAlignT), 0u);
+    EXPECT_TRUE(pool.Owns(normalized));
+    EXPECT_FALSE(pool.Owns(static_cast<uint8*>(normalized) + 1));
+
+    void* tooAligned = pool.Allocate(64, 32);
+    EXPECT_EQ(tooAligned, nullptr);
+
+    void* grown = pool.Reallocate(normalized, 128, 24);
+    ASSERT_NE(grown, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(grown) % alignof(MaxAlignT), 0u);
+    pool.Free(grown);
+    EXPECT_EQ(pool.AllocatedSize(), 0u);
+}
+
 TEST(TLSFAllocator, RepeatedSmallAllocFree)
 {
     TLSFAllocator pool(128 * 1024);

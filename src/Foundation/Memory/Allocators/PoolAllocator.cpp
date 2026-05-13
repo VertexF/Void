@@ -133,7 +133,7 @@ PoolAllocator& PoolAllocator::operator=(PoolAllocator&& other) noexcept
 
 void* PoolAllocator::Allocate(size_t size, size_t alignment)
 {
-    if (size > m_blockSize) {
+    if (size == 0 || size > m_blockSize) {
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -178,6 +178,10 @@ void* PoolAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
 
     if (!Owns(ptr)) {
         return nullptr;
+    }
+
+    if (!IsPowerOfTwo(alignment)) {
+        alignment = m_blockAlignment;
     }
 
     // Pool blocks are fixed size. If new size fits, we just return the same block.

@@ -70,6 +70,31 @@ TEST(SecuredAllocator, ReallocateMovesAndPreservesPayload)
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
 }
 
+TEST(SecuredAllocator, RejectsInvalidInputsWithoutTouchingCounters)
+{
+    SecuredAllocator allocator;
+    int stackValue = 0;
+
+    EXPECT_FALSE(allocator.Owns(nullptr));
+    EXPECT_FALSE(allocator.Owns(&stackValue));
+    EXPECT_EQ(allocator.Allocate(0, 64), nullptr);
+    EXPECT_EQ(allocator.Reallocate(nullptr, 0, 64), nullptr);
+
+    allocator.Free(&stackValue);
+    allocator.MakeReadOnly(&stackValue);
+    allocator.MakeReadWrite(&stackValue);
+    allocator.ScrubAndFree(&stackValue);
+    EXPECT_EQ(allocator.Reallocate(&stackValue, 64, 16), nullptr);
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
+
+    void* normalized = allocator.Allocate(96, 24);
+    ASSERT_NE(normalized, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(normalized) % alignof(MaxAlignT), 0u);
+    allocator.Free(normalized);
+    allocator.Free(normalized);
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
+}
+
 TEST(MonotonicAllocator, UserBufferResetsAndReallocatePreservesPayload)
 {
     MallocAllocator upstream;
@@ -168,6 +193,32 @@ TEST(PageHeap, AllocatesCommitsAndRecyclesPages)
     pageHeap.FreePage(first, pageSize);
     void* recycled = pageHeap.AllocatePage(pageSize);
     EXPECT_EQ(recycled, first);
+
+    vm->Release(base);
+}
+
+TEST(PageHeap, FailedOversizedAllocationDoesNotConsumeReservedSpace)
+{
+    UniquePtr<IVirtualMemory> vm = CreateVirtualMemory();
+    ASSERT_TRUE(vm);
+
+    const size_t pageSize = 64ull * 1024ull;
+    const size_t reservedSize = pageSize * 2;
+    void* base = vm->Reserve(reservedSize);
+    ASSERT_NE(base, nullptr);
+
+    PageHeap pageHeap;
+    pageHeap.Initialize(vm.Get(), base, reservedSize);
+
+    EXPECT_EQ(pageHeap.AllocatePage(0), nullptr);
+    EXPECT_EQ(pageHeap.AllocatePage(reservedSize + pageSize), nullptr);
+
+    void* first = pageHeap.AllocatePage(pageSize);
+    void* second = pageHeap.AllocatePage(pageSize);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    EXPECT_NE(first, second);
+    EXPECT_EQ(pageHeap.AllocatePage(pageSize), nullptr);
 
     vm->Release(base);
 }

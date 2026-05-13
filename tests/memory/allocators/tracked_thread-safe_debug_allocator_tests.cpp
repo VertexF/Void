@@ -123,6 +123,12 @@ TEST(AlignedAllocator, TracksUserBytesAndFreesBackingAllocation)
 {
     MallocAllocator backing;
     AlignedAllocator allocator(64, &backing);
+    int stackValue = 0;
+
+    EXPECT_FALSE(allocator.Owns(nullptr));
+    EXPECT_FALSE(allocator.Owns(&stackValue));
+    allocator.Free(&stackValue);
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
 
     void* ptr = allocator.Allocate(80, 24);
     ASSERT_NE(ptr, nullptr);
@@ -131,6 +137,8 @@ TEST(AlignedAllocator, TracksUserBytesAndFreesBackingAllocation)
     EXPECT_EQ(allocator.AllocatedSize(), 80u);
     EXPECT_GT(backing.AllocatedSize(), 80u);
 
+    allocator.Free(ptr);
+    EXPECT_FALSE(allocator.Owns(ptr));
     allocator.Free(ptr);
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
     EXPECT_EQ(backing.AllocatedSize(), 0u);

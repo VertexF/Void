@@ -15,6 +15,10 @@ void PageHeap::Initialize(IVirtualMemory* vm, void* baseAddress, size_t reserved
 
 void* PageHeap::AllocatePage(size_t pageSize) noexcept
 {
+    if (!m_vm || !m_baseAddress || pageSize == 0 || pageSize > m_reservedSize) {
+        return nullptr;
+    }
+
     // 1. Try to pop from recycled list (lock-free stack)
     FreePageNode* oldHead = m_freeList.Load(MemoryOrder::Acquire);
     while (oldHead) {
@@ -31,9 +35,18 @@ void* PageHeap::AllocatePage(size_t pageSize) noexcept
     }
 
     // 2. Atomic bump allocation for new pages
-    size_t offset = m_bumpOffset.FetchAdd(pageSize, MemoryOrder::Relaxed);
-    if (offset + pageSize > m_reservedSize) {
-        return nullptr; // OOM in reserved space
+    size_t offset = m_bumpOffset.Load(MemoryOrder::Acquire);
+    while (true) {
+        if (offset > m_reservedSize || pageSize > m_reservedSize - offset) {
+            return nullptr; // OOM in reserved space
+        }
+
+        const size_t nextOffset = offset + pageSize;
+        if (m_bumpOffset.CompareExchangeWeak(offset, nextOffset,
+                                             MemoryOrder::Release,
+                                             MemoryOrder::Acquire)) {
+            break;
+        }
     }
 
     void* ptr = m_baseAddress + offset;

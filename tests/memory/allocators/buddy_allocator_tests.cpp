@@ -40,6 +40,9 @@ TEST(BuddyAllocator, ReallocatePreservesPayload)
 {
     BuddyAllocator allocator(1ull * 1024ull * 1024ull, 256);
 
+    EXPECT_EQ(allocator.Allocate(0, 16), nullptr);
+    EXPECT_EQ(allocator.Reallocate(nullptr, 0, 16), nullptr);
+
     auto* values = static_cast<uint32*>(allocator.Allocate(sizeof(uint32) * 4, alignof(uint32)));
     ASSERT_NE(values, nullptr);
     values[0] = 13;
@@ -60,7 +63,13 @@ TEST(BuddyAllocator, ReallocatePreservesPayload)
     EXPECT_EQ(sameBlock[0], 13u);
     EXPECT_EQ(allocator.AllocatedSize(), sizeof(uint32) * 32);
 
-    allocator.Free(sameBlock);
+    auto* normalizedAlignment = static_cast<uint32*>(allocator.Reallocate(sameBlock, sizeof(uint32) * 16, 24));
+    ASSERT_NE(normalizedAlignment, nullptr);
+    EXPECT_EQ(normalizedAlignment[0], 13u);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(normalizedAlignment) % alignof(MaxAlignT), 0u);
+    EXPECT_EQ(allocator.AllocatedSize(), sizeof(uint32) * 16);
+
+    allocator.Free(normalizedAlignment);
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
 }
 

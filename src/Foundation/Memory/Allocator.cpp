@@ -17,6 +17,9 @@ public:
             return nullptr;
         }
 
+        if (!IsPowerOfTwo(alignment)) {
+            alignment = alignof(MaxAlignT);
+        }
         if (alignment < alignof(void*)) {
             alignment = alignof(void*);
         }
@@ -50,6 +53,9 @@ public:
         }
         if (!ptr) {
             return Allocate(newSize, alignment);
+        }
+        if (!IsPowerOfTwo(alignment)) {
+            alignment = alignof(MaxAlignT);
         }
         if (alignment < alignof(void*)) {
             alignment = alignof(void*);

@@ -46,6 +46,12 @@ TEST(TLSCachingAllocator, RejectsDoubleFreeAndStaleReallocate)
     MallocAllocator mallocAllocator;
     ThreadSafeAllocator safeAllocator(&mallocAllocator);
     TLSCachingAllocator allocator(&safeAllocator);
+    int stackValue = 0;
+
+    EXPECT_FALSE(allocator.Owns(nullptr));
+    EXPECT_FALSE(allocator.Owns(&stackValue));
+    allocator.Free(&stackValue);
+    EXPECT_EQ(allocator.Reallocate(&stackValue, 192, 32), nullptr);
 
     void* ptr = allocator.Allocate(96, 32);
     ASSERT_NE(ptr, nullptr);

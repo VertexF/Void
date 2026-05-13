@@ -13,6 +13,9 @@ TEST(BinnedAllocatorDetails, ReallocatePreservesPayloadAndAccounting)
     MallocAllocator backing;
     BinnedAllocator allocator(&backing);
 
+    EXPECT_EQ(allocator.Allocate(0, 16), nullptr);
+    EXPECT_EQ(allocator.Reallocate(nullptr, 0, 16), nullptr);
+
     auto* values = static_cast<uint32*>(allocator.Allocate(sizeof(uint32) * 4, alignof(uint32)));
     ASSERT_NE(values, nullptr);
     values[0] = 3;
@@ -34,7 +37,12 @@ TEST(BinnedAllocatorDetails, ReallocatePreservesPayloadAndAccounting)
     EXPECT_EQ(shrunk[1], 5u);
     EXPECT_EQ(allocator.AllocatedSize(), sizeof(uint32) * 2);
 
-    allocator.Free(shrunk);
+    auto* normalizedAlignment = static_cast<uint32*>(allocator.Reallocate(shrunk, sizeof(uint32), 24));
+    ASSERT_EQ(normalizedAlignment, shrunk);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(normalizedAlignment) % alignof(MaxAlignT), 0u);
+    EXPECT_EQ(allocator.AllocatedSize(), sizeof(uint32));
+
+    allocator.Free(normalizedAlignment);
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
 }
 

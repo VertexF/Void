@@ -15,6 +15,11 @@
 #include <cstdlib>
 #include <limits>
 
+#if !defined(NDEBUG)
+    #include <Foundation/Threading/Lock/SpinLock.hpp>
+    #include <unordered_set>
+#endif
+
 #if defined(ENGINE_PLATFORM_WINDOWS)
     #include <malloc.h>
 #endif
@@ -88,11 +93,26 @@ public:
         header->magic = Detail::kAlignedAllocationMagic;
 
         m_allocated += size;
+#if !defined(NDEBUG)
+        Threading::SpinLockGuard guard(m_lock);
+        m_liveAllocations.insert(aligned);
+#endif
         return aligned;
     }
 
     void Free(void* ptr) override {
         if (!ptr) return;
+
+#if !defined(NDEBUG)
+        {
+            Threading::SpinLockGuard guard(m_lock);
+            const auto it = m_liveAllocations.find(ptr);
+            if (it == m_liveAllocations.end()) {
+                return;
+            }
+            m_liveAllocations.erase(it);
+        }
+#endif
 
         auto* aligned = static_cast<uint8*>(ptr);
         auto* header = reinterpret_cast<Detail::AlignedAllocationHeader*>(aligned - sizeof(Detail::AlignedAllocationHeader));
@@ -125,16 +145,25 @@ public:
         if (!ptr) {
             return false;
         }
+#if !defined(NDEBUG)
+        Threading::SpinLockGuard guard(m_lock);
+        return m_liveAllocations.find(ptr) != m_liveAllocations.end();
+#else
         const auto* aligned = static_cast<const uint8*>(ptr);
         const auto* header = reinterpret_cast<const Detail::AlignedAllocationHeader*>(
             aligned - sizeof(Detail::AlignedAllocationHeader));
         return header->magic == Detail::kAlignedAllocationMagic;
+#endif
     }
 
 private:
     usize m_minAlignment;
     IAllocator* m_backing;
     size_t m_allocated;
+#if !defined(NDEBUG)
+    std::unordered_set<void*> m_liveAllocations;
+    mutable Threading::SpinLock m_lock;
+#endif
 };
 
 } // namespace Engine::Memory

@@ -148,12 +148,35 @@ TEST(ArenaAllocators, StackAllocatorRejectsForwardMarkers)
     EXPECT_FALSE(allocator.Owns(ptr));
 }
 
+TEST(ArenaAllocators, LinearAndFrameAllocatorsRejectForwardMarkers)
+{
+    LinearAllocator linear(256);
+    void* linearPtr = linear.Allocate(32, 16);
+    ASSERT_NE(linearPtr, nullptr);
+    const size_t linearAllocated = linear.AllocatedSize();
+
+    linear.RewindToMarker(linearAllocated + 64);
+    EXPECT_EQ(linear.AllocatedSize(), linearAllocated);
+    EXPECT_FALSE(linear.Owns(static_cast<uint8*>(linearPtr) + 40));
+
+    FrameAllocator frame(256);
+    void* framePtr = frame.Allocate(32, 16);
+    ASSERT_NE(framePtr, nullptr);
+    const size_t frameAllocated = frame.AllocatedSize();
+
+    frame.RewindToMarker(frameAllocated + 64);
+    EXPECT_EQ(frame.AllocatedSize(), frameAllocated);
+    EXPECT_FALSE(frame.Owns(static_cast<uint8*>(framePtr) + 40));
+}
+
 TEST(ArenaAllocators, PoolAllocatorReusesFixedBlocks)
 {
     PoolAllocator allocator(128, 4, nullptr, 16);
     int stackValue = 0;
     EXPECT_FALSE(allocator.Owns(&stackValue));
     allocator.Free(&stackValue);
+    EXPECT_EQ(allocator.Allocate(0, 16), nullptr);
+    EXPECT_EQ(allocator.Reallocate(nullptr, 0, 16), nullptr);
 
     void* a = allocator.Allocate(64, 16);
     void* b = allocator.Allocate(64, 16);
@@ -165,13 +188,31 @@ TEST(ArenaAllocators, PoolAllocatorReusesFixedBlocks)
 
     void* same = allocator.Reallocate(a, 96, 16);
     EXPECT_EQ(same, a);
+    EXPECT_EQ(allocator.Reallocate(a, 96, 24), a);
     EXPECT_EQ(allocator.Reallocate(a, 256, 16), nullptr);
+
+    void* c = allocator.Allocate(64, 16);
+    void* d = allocator.Allocate(64, 16);
+    ASSERT_NE(c, nullptr);
+    ASSERT_NE(d, nullptr);
+    EXPECT_TRUE(allocator.IsFull());
+    EXPECT_EQ(allocator.Allocate(64, 16), nullptr);
+
+    allocator.Free(c);
+    allocator.Free(d);
 
     allocator.Free(a);
     EXPECT_FALSE(allocator.Owns(a));
     allocator.Free(a);
     allocator.Free(b);
     EXPECT_EQ(allocator.GetAllocatedBlockCount(), 0u);
+
+    void* resetBlock = allocator.Allocate(64, 16);
+    ASSERT_NE(resetBlock, nullptr);
+    allocator.Reset();
+    EXPECT_EQ(allocator.GetAllocatedBlockCount(), 0u);
+    EXPECT_EQ(allocator.GetFreeBlockCount(), allocator.GetBlockCount());
+    EXPECT_FALSE(allocator.Owns(resetBlock));
 }
 
 TEST(ArenaAllocators, ThreadLinearAllocatorsReset)
@@ -198,6 +239,12 @@ TEST(ArenaAllocators, ThreadLinearAllocatorsReset)
     threadLocal.Reset();
     EXPECT_EQ(threadLocal.AllocatedSize(), 0u);
     EXPECT_FALSE(threadLocal.Owns(b));
+
+    ThreadLocalLinearAllocator emptyThreadLocal(0);
+    int localValue = 0;
+    EXPECT_EQ(emptyThreadLocal.Allocate(16, 16), nullptr);
+    EXPECT_EQ(emptyThreadLocal.Reallocate(nullptr, 16, 16), nullptr);
+    EXPECT_FALSE(emptyThreadLocal.Owns(&localValue));
 }
 
 } // namespace Engine::Memory

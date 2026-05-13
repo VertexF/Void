@@ -144,6 +144,13 @@ void* BinnedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         return nullptr;
     }
 
+    if (!IsPowerOfTwo(alignment)) {
+        alignment = alignof(MaxAlignT);
+    }
+    if (alignment < alignof(MaxAlignT)) {
+        alignment = alignof(MaxAlignT);
+    }
+
     AllocationHeader* header = HeaderFromPointer(ptr);
     const size_t oldSize = header->requestedSize;
     if (newSize <= oldSize && RequiredBlockSize(newSize, alignment) <= header->blockSize) {

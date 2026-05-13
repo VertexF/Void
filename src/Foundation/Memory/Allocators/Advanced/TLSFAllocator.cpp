@@ -74,7 +74,13 @@ namespace Engine::Memory {
     void* TLSFAllocator::Allocate(size_t size, size_t alignment)
     {
         if (size == 0) return nullptr;
-        if (!IsPowerOfTwo(alignment) || alignment > kMinBlockSize) return nullptr;
+        if (!IsPowerOfTwo(alignment)) {
+            alignment = alignof(MaxAlignT);
+        }
+        if (alignment < alignof(MaxAlignT)) {
+            alignment = alignof(MaxAlignT);
+        }
+        if (alignment > kMinBlockSize) return nullptr;
 
         if (size < kMinBlockSize) {
             size = kMinBlockSize;

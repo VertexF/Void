@@ -94,6 +94,9 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
             cache.blocks[i].alignment >= alignment) {
             void* ptr = cache.blocks[i].ptr;
             HeaderFromUserPointer(ptr)->magic = kTLSMagic;
+#if !defined(NDEBUG)
+            RegisterLiveAllocation(ptr);
+#endif
             // Swap with last element and remove
             cache.blocks[i] = cache.blocks[cache.count - 1];
             cache.blocks[cache.count - 1] = {};
@@ -126,6 +129,9 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
     header->alignment = alignment;
     header->adjustment = static_cast<size_t>(aligned - rawBytes);
     header->magic = kTLSMagic;
+#if !defined(NDEBUG)
+    RegisterLiveAllocation(aligned);
+#endif
 
     return aligned;
 }
@@ -139,6 +145,12 @@ void* TLSCachingAllocator::Reallocate(void* ptr, size_t newSize, size_t alignmen
         Free(ptr);
         return nullptr;
     }
+
+#if !defined(NDEBUG)
+    if (!Owns(ptr)) {
+        return nullptr;
+    }
+#endif
 
     auto* header = HeaderFromUserPointer(ptr);
     if (header->magic != kTLSMagic) {
@@ -165,6 +177,12 @@ void TLSCachingAllocator::Free(void* ptr)
     if (!ptr) {
         return;
     }
+
+#if !defined(NDEBUG)
+    if (!UnregisterLiveAllocation(ptr)) {
+        return;
+    }
+#endif
 
     // Read header to get size
     auto* header = HeaderFromUserPointer(ptr);
@@ -214,13 +232,40 @@ bool TLSCachingAllocator::Owns(void* ptr) const
     if (!ptr) {
         return false;
     }
+#if !defined(NDEBUG)
+    Threading::SpinLockGuard guard(m_liveLock);
+    return m_liveAllocations.find(ptr) != m_liveAllocations.end();
+#else
     auto* header = HeaderFromUserPointer(ptr);
     return header->magic == kTLSMagic;
+#endif
 }
 
 void TLSCachingAllocator::FlushCache()
 {
     FlushCacheInternal(GetCache());
 }
+
+#if !defined(NDEBUG)
+bool TLSCachingAllocator::UnregisterLiveAllocation(void* ptr)
+{
+    Threading::SpinLockGuard guard(m_liveLock);
+    const auto it = m_liveAllocations.find(ptr);
+    if (it == m_liveAllocations.end()) {
+        return false;
+    }
+    m_liveAllocations.erase(it);
+    return true;
+}
+
+void TLSCachingAllocator::RegisterLiveAllocation(void* ptr)
+{
+    if (!ptr) {
+        return;
+    }
+    Threading::SpinLockGuard guard(m_liveLock);
+    m_liveAllocations.insert(ptr);
+}
+#endif
 
 } // namespace Engine::Memory

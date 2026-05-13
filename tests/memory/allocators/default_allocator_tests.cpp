@@ -99,4 +99,22 @@ TEST(DefaultAllocator, GuardRestoresSystemAllocator)
     allocator.Free(ptr);
 }
 
+TEST(DefaultAllocator, HandlesZeroAllocateAndReallocateEdges)
+{
+    SetDefaultAllocator(nullptr);
+    IAllocator& allocator = GetDefaultAllocator();
+
+    EXPECT_EQ(allocator.Allocate(0, 16), nullptr);
+    EXPECT_EQ(allocator.Reallocate(nullptr, 0, 16), nullptr);
+
+    void* ptr = allocator.Reallocate(nullptr, 64, 24);
+    ASSERT_NE(ptr, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(ptr) % alignof(MaxAlignT), 0u);
+
+    void* grown = allocator.Reallocate(ptr, 128, 64);
+    ASSERT_NE(grown, nullptr);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(grown) % 64u, 0u);
+    EXPECT_EQ(allocator.Reallocate(grown, 0, 64), nullptr);
+}
+
 } // namespace Engine::Memory

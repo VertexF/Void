@@ -148,7 +148,7 @@ size_t LinearAllocator::GetMarker() const
 
 void LinearAllocator::RewindToMarker(size_t marker)
 {
-    if (marker <= m_capacity) {
+    if (marker <= m_offset) {
         m_offset = marker;
     }
 }
