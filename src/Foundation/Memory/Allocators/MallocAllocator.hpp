@@ -4,7 +4,7 @@
 #include <Foundation/Memory/Allocator.hpp>
 #include <Foundation/Threading/Atomic.hpp>
 
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
 #include <Foundation/Threading/Lock/SpinLock.hpp>
 
 #include <unordered_set>
@@ -29,7 +29,7 @@ public:
 private:
     Atomic<size_t> m_allocated{0};
     AllocatorStatsTracker m_stats;
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     std::unordered_set<void*> m_liveAllocations;
     mutable Threading::SpinLock m_liveLock;
 #endif

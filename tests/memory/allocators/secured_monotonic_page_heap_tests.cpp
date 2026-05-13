@@ -70,10 +70,11 @@ TEST(SecuredAllocator, ReallocateMovesAndPreservesPayload)
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
 }
 
-TEST(SecuredAllocator, RejectsInvalidInputsWithoutTouchingCounters)
+TEST(SecuredAllocator, ReportsInvalidInputsAndKeepsAccountingBalanced)
 {
     SecuredAllocator allocator;
     int stackValue = 0;
+    const size_t failuresBefore = allocator.GetStats().failedAllocationCount;
 
     EXPECT_FALSE(allocator.Owns(nullptr));
     EXPECT_FALSE(allocator.Owns(&stackValue));
@@ -86,12 +87,19 @@ TEST(SecuredAllocator, RejectsInvalidInputsWithoutTouchingCounters)
     allocator.ScrubAndFree(&stackValue);
     EXPECT_EQ(allocator.Reallocate(&stackValue, 64, 16), nullptr);
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresBefore);
+    }
 
     void* normalized = allocator.Allocate(96, 24);
     ASSERT_NE(normalized, nullptr);
     EXPECT_EQ(reinterpret_cast<uintptr_t>(normalized) % alignof(MaxAlignT), 0u);
     allocator.Free(normalized);
+    const size_t failuresBeforeDoubleFree = allocator.GetStats().failedAllocationCount;
     allocator.Free(normalized);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresBeforeDoubleFree);
+    }
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
 }
 

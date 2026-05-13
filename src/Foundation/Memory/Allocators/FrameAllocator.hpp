@@ -3,7 +3,7 @@
 
 #include <Foundation/Memory/Allocator.hpp>
 
-// Win32 defines GetFreeSpace as a macro — undef to avoid name collision
+// Win32 defines GetFreeSpace as a macro - undef to avoid name collision
 #ifdef GetFreeSpace
 #undef GetFreeSpace
 #endif
@@ -29,6 +29,8 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     /// @brief Starts a new frame (frees all allocations from previous frame).
     void BeginFrame();
@@ -48,6 +50,7 @@ private:
     size_t m_offset = 0;
     IAllocator* m_backingAllocator = nullptr;
     bool m_ownsBuffer = false;
+    AllocatorStatsTracker m_stats;
 };
 
 /// @brief RAII scope that rewinds the frame allocator to the marker on destruction.

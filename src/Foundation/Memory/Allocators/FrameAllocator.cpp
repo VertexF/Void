@@ -1,6 +1,8 @@
 #include <Foundation/Memory/Allocators/FrameAllocator.hpp>
 #include <Foundation/Memory/Alignment.hpp>
 
+#include <limits>
+
 namespace Engine::Memory {
 
 namespace {
@@ -77,6 +79,7 @@ FrameAllocator& FrameAllocator::operator=(FrameAllocator&& other) noexcept
 void* FrameAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_buffer || size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -89,12 +92,17 @@ void* FrameAllocator::Allocate(size_t size, size_t alignment)
     auto* base = static_cast<byte*>(m_buffer);
     byte* current = base + m_offset;
     size_t adjustment = AlignmentAdjustment(current, alignment);
-    if (m_offset + adjustment + size > m_capacity) {
+    if (m_offset > (std::numeric_limits<size_t>::max)() - adjustment ||
+        size > (std::numeric_limits<size_t>::max)() - m_offset - adjustment ||
+        m_offset + adjustment + size > m_capacity) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
+    const size_t previousOffset = m_offset;
     size_t alignedOffset = m_offset + adjustment;
     m_offset = alignedOffset + size;
+    m_stats.RecordAllocation(m_offset - previousOffset);
     return base + alignedOffset;
 }
 
@@ -109,10 +117,11 @@ void* FrameAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
-    // Like LinearAllocator, FrameAllocator doesn't track individual block sizes.
+    m_stats.RecordFailedAllocation();
     return nullptr;
 }
 
@@ -142,9 +151,30 @@ bool FrameAllocator::Owns(void* ptr) const
     return p >= start && p < end;
 }
 
+AllocatorStats FrameAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    stats.liveBytes = m_offset;
+    if (stats.peakBytes < stats.liveBytes) {
+        stats.peakBytes = stats.liveBytes;
+    }
+    return stats;
+}
+
+AllocatorStats FrameAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
+    stats.reservedBytes = m_capacity;
+    stats.committedBytes = m_capacity;
+    stats.freeBytes = GetFreeSpace();
+    stats.largestFreeBlockBytes = stats.freeBytes;
+    return stats;
+}
+
 void FrameAllocator::BeginFrame()
 {
     m_offset = 0;
+    m_stats.ResetLive();
 }
 
 void FrameAllocator::EndFrame()
@@ -170,6 +200,9 @@ void FrameAllocator::RewindToMarker(size_t marker)
 {
     if (marker <= m_offset) {
         m_offset = marker;
+        if (marker == 0) {
+            m_stats.ResetLive();
+        }
     }
 }
 

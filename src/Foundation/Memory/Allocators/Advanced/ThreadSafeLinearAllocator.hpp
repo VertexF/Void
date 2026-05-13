@@ -7,7 +7,7 @@
 namespace Engine::Memory {
 
 /// @brief Thread-safe linear allocator using atomic bump pointer.
-/// @details High performance shared temporary memory. Individual frees not supported.
+/// @details Shared linear allocator. Individual frees are not supported.
 class ThreadSafeLinearAllocator : public IAllocator {
 public:
     explicit ThreadSafeLinearAllocator(size_t size, IAllocator* backingAllocator = nullptr);
@@ -19,6 +19,8 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     void Reset();
 
@@ -38,6 +40,7 @@ private:
     Atomic<size_t> m_offset{0};
     Atomic<uint32> m_generation{1};
     IAllocator* m_backingAllocator = nullptr;
+    AllocatorStatsTracker m_stats;
 };
 
 } // namespace Engine::Memory

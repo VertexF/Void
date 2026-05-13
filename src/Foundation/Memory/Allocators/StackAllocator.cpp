@@ -1,6 +1,8 @@
 #include <Foundation/Memory/Allocators/StackAllocator.hpp>
 #include <Foundation/Memory/Alignment.hpp>
 
+#include <limits>
+
 namespace Engine::Memory {
 
 namespace {
@@ -85,6 +87,7 @@ StackAllocator& StackAllocator::operator=(StackAllocator&& other) noexcept
 void* StackAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_buffer || size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -98,7 +101,10 @@ void* StackAllocator::Allocate(size_t size, size_t alignment)
     byte* current = base + m_offset;
     size_t prevOffset = m_offset;
     size_t adjustment = AlignmentAdjustmentWithHeader(current, alignment, sizeof(StackHeader));
-    if (m_offset + adjustment + size > m_capacity) {
+    if (m_offset > (std::numeric_limits<size_t>::max)() - adjustment ||
+        size > (std::numeric_limits<size_t>::max)() - m_offset - adjustment ||
+        m_offset + adjustment + size > m_capacity) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -110,6 +116,7 @@ void* StackAllocator::Allocate(size_t size, size_t alignment)
     header->magic = kStackMagic;
 
     m_offset = alignedOffset + size;
+    m_stats.RecordAllocation(m_offset - prevOffset);
     return base + alignedOffset;
 }
 
@@ -124,6 +131,7 @@ void* StackAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!IsLiveAllocation(ptr)) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
@@ -135,18 +143,24 @@ void* StackAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     // True top-of-stack check:
     if (alignedOffset + header->size == m_offset) {
         if (alignedOffset + newSize <= m_capacity) {
+            const size_t oldOffset = m_offset;
             header->size = newSize;
             m_offset = alignedOffset + newSize;
+            m_stats.RecordResize(oldOffset, m_offset);
             return ptr;
         }
     }
 
+    m_stats.RecordFailedAllocation();
     return nullptr;
 }
 
 void StackAllocator::Free(void* ptr)
 {
     if (!ptr || !IsLiveAllocation(ptr)) {
+        if (ptr) {
+            m_stats.RecordFailedAllocation();
+        }
         return;
     }
 
@@ -154,10 +168,13 @@ void StackAllocator::Free(void* ptr)
     auto* header = reinterpret_cast<StackHeader*>(aligned - sizeof(StackHeader));
     const size_t alignedOffset = static_cast<size_t>(aligned - static_cast<byte*>(m_buffer));
     if (alignedOffset + header->size != m_offset) {
+        m_stats.RecordFailedAllocation();
         return;
     }
+    const size_t oldOffset = m_offset;
     m_offset = header->previousOffset;
     header->magic = 0;
+    m_stats.RecordFree(oldOffset - m_offset);
 }
 
 size_t StackAllocator::AllocatedSize() const
@@ -173,6 +190,26 @@ const char* StackAllocator::Name() const
 bool StackAllocator::Owns(void* ptr) const
 {
     return IsLiveAllocation(ptr);
+}
+
+AllocatorStats StackAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    stats.liveBytes = m_offset;
+    if (stats.peakBytes < stats.liveBytes) {
+        stats.peakBytes = stats.liveBytes;
+    }
+    return stats;
+}
+
+AllocatorStats StackAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
+    stats.reservedBytes = m_capacity;
+    stats.committedBytes = m_capacity;
+    stats.freeBytes = m_capacity >= m_offset ? m_capacity - m_offset : 0;
+    stats.largestFreeBlockBytes = stats.freeBytes;
+    return stats;
 }
 
 bool StackAllocator::IsLiveAllocation(void* ptr) const noexcept
@@ -205,6 +242,7 @@ bool StackAllocator::IsLiveAllocation(void* ptr) const noexcept
 void StackAllocator::Reset()
 {
     m_offset = 0;
+    m_stats.ResetLive();
 }
 
 size_t StackAllocator::GetCapacity() const noexcept
@@ -221,6 +259,9 @@ void StackAllocator::RewindToMarker(size_t marker)
 {
     if (marker <= m_offset) {
         m_offset = marker;
+        if (marker == 0) {
+            m_stats.ResetLive();
+        }
     }
 }
 

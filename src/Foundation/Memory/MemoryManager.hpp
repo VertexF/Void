@@ -9,7 +9,6 @@
 
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace Engine::Memory {
 
@@ -51,7 +50,7 @@ private:
     };
 
     static std::string ToString(StringView name);
-    static std::vector<NamedAllocatorStats> SnapshotRegisteredAllocatorStats(
+    static Vector<NamedAllocatorStats> SnapshotRegisteredAllocatorStats(
         bool publishToProfiler,
         AllocatorStatsDetail detail);
 

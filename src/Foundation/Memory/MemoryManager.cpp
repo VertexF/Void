@@ -56,7 +56,7 @@ std::string MemoryManager::ToString(StringView name)
     return std::string(name.text, name.length);
 }
 
-std::vector<MemoryManager::NamedAllocatorStats> MemoryManager::SnapshotRegisteredAllocatorStats(
+Vector<MemoryManager::NamedAllocatorStats> MemoryManager::SnapshotRegisteredAllocatorStats(
     bool publishToProfiler,
     AllocatorStatsDetail detail)
 {
@@ -73,8 +73,8 @@ std::vector<MemoryManager::NamedAllocatorStats> MemoryManager::SnapshotRegistere
         profiler = instance->m_profiler;
     }
 
-    std::vector<NamedAllocatorStats> snapshots;
-    snapshots.reserve(allocators.size());
+    Vector<NamedAllocatorStats> snapshots;
+    snapshots.reserve(static_cast<Vector<NamedAllocatorStats>::size_type>(allocators.size()));
     for (const auto& entry : allocators) {
         if (!entry.second) {
             continue;
@@ -295,7 +295,7 @@ Vector<AllocatorStats> MemoryManager::GetAllocatorStatsSnapshots()
 Vector<AllocatorStats> MemoryManager::SnapshotAllocatorStats(AllocatorStatsDetail detail)
 {
     Vector<AllocatorStats> stats;
-    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, detail);
+    const Vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, detail);
     stats.reserve(snapshots.size());
     for (const NamedAllocatorStats& snapshot : snapshots) {
         stats.push_back(snapshot.stats);
@@ -305,7 +305,7 @@ Vector<AllocatorStats> MemoryManager::SnapshotAllocatorStats(AllocatorStatsDetai
 
 std::string MemoryManager::DumpAllocatorStatsJson()
 {
-    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, AllocatorStatsDetail::Detailed);
+    const Vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, AllocatorStatsDetail::Detailed);
 
     std::string out;
     out.reserve(128 + snapshots.size() * 320);
@@ -338,7 +338,7 @@ std::string MemoryManager::DumpAllocatorStatsJson()
 
 std::string MemoryManager::DumpAllocatorStatsText()
 {
-    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, AllocatorStatsDetail::Detailed);
+    const Vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, AllocatorStatsDetail::Detailed);
 
     std::string out;
     out.reserve(snapshots.size() * 240);

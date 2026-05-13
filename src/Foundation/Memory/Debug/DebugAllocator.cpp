@@ -149,14 +149,17 @@ void DebugAllocator::Free(void* ptr)
             ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "DebugAllocator: invalid or double free");
             return;
         }
+
+        auto* header = HeaderFromUserPointer(ptr);
+        if (header->magic != kDebugMagic) {
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "DebugAllocator: allocation header corrupted");
+            return;
+        }
         m_liveAllocations.erase(it);
     }
 
     byte* aligned = static_cast<byte*>(ptr);
     auto* header = HeaderFromUserPointer(ptr);
-    if (header->magic != kDebugMagic) {
-        return;
-    }
     const size_t size = header->size;
     const MemoryTag tag = header->tag;
 

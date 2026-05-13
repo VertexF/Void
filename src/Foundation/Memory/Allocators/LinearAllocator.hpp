@@ -5,6 +5,11 @@
 #include <Foundation/Memory/UniquePtr.hpp>
 #include <Foundation/Memory/Allocator.hpp>
 
+// Win32 defines GetFreeSpace as a macro; keep the allocator API name stable.
+#ifdef GetFreeSpace
+#undef GetFreeSpace
+#endif
+
 namespace Engine::Memory {
 
 /// @brief Fast linear allocator (bump Pointer)
@@ -42,6 +47,8 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     // ========================================================================
     // Linear Allocator Specific
@@ -81,6 +88,7 @@ private:
     size_t m_offset = 0;
     IAllocator* m_backingAllocator = nullptr;
     bool m_ownsBuffer = false;
+    AllocatorStatsTracker m_stats;
     
     Vector<UniquePtr<IAllocator>> m_children;
 };

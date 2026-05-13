@@ -1,7 +1,7 @@
 #ifndef FOUNDATION_MEMORY_MONOTONIC_ALLOCATOR_HDR
 #define FOUNDATION_MEMORY_MONOTONIC_ALLOCATOR_HDR
 
-// O(1) allocate, no individual free, bulk Release(). Ideal for:
+// O(1) bump allocation while the current block has capacity; bulk Release(). Ideal for:
 //   - Per-frame scratch allocations
 //   - Command buffer building
 //   - Particle system temporaries
@@ -18,7 +18,7 @@
 
 namespace Engine::Memory {
 
-/// @brief Bump allocator: O(1) allocate, no individual deallocation.
+/// @brief Bump allocator with O(1) fast path and upstream block growth on exhaustion.
 ///        Call Release() to free everything at once.
 ///        Grows by allocating new blocks from an upstream allocator.
 class MonotonicAllocator final : public IAllocator {

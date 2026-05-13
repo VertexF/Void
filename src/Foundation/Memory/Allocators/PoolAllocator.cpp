@@ -6,6 +6,8 @@
 #include <Foundation/Memory/Alignment.hpp>
 #include <Foundation/Threading/Atomic.hpp>
 
+#include <limits>
+
 namespace Engine::Memory {
 
 PoolAllocator::PoolAllocator(size_t blockSize, size_t blockCount, IAllocator* backingAllocator, size_t blockAlignment)
@@ -26,25 +28,51 @@ PoolAllocator::PoolAllocator(size_t blockSize, size_t blockCount, IAllocator* ba
     }
 
     m_blockSize = AlignSize(m_blockSize, m_blockAlignment);
+    if (m_blockSize > (std::numeric_limits<size_t>::max)() / m_blockCount) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "PoolAllocator: backing buffer size overflow");
+        m_blockCount = 0;
+        return;
+    }
 
     const size_t bufferSize = m_blockSize * m_blockCount;
     m_buffer = m_backingAllocator->Allocate(bufferSize, m_blockAlignment);
+    if (!m_buffer) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "PoolAllocator: backing buffer allocation failed");
+        m_blockCount = 0;
+        return;
+    }
 
     m_allocatedBitmapBytes = (m_blockCount + 7u) / 8u;
     if (m_allocatedBitmapBytes > 0) {
         m_allocatedBitmap = static_cast<uint8*>(
             m_backingAllocator->Allocate(m_allocatedBitmapBytes, alignof(uint8)));
-        if (m_allocatedBitmap) {
-            MemSet(m_allocatedBitmap, 0, m_allocatedBitmapBytes);
+        if (!m_allocatedBitmap) {
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "PoolAllocator: allocation bitmap allocation failed");
+            m_backingAllocator->Free(m_buffer);
+            m_buffer = nullptr;
+            m_blockCount = 0;
+            m_allocatedBitmapBytes = 0;
+            return;
         }
+        MemSet(m_allocatedBitmap, 0, m_allocatedBitmapBytes);
     }
 
     m_blockTags = static_cast<MemoryTag*>(
         m_backingAllocator->Allocate(m_blockCount * sizeof(MemoryTag), alignof(MemoryTag)));
-    if (m_blockTags) {
-        for (size_t i = 0; i < m_blockCount; ++i) {
-            m_blockTags[i] = MemoryTag::Default;
+    if (!m_blockTags) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "PoolAllocator: block tag allocation failed");
+        if (m_allocatedBitmap) {
+            m_backingAllocator->Free(m_allocatedBitmap);
+            m_allocatedBitmap = nullptr;
         }
+        m_backingAllocator->Free(m_buffer);
+        m_buffer = nullptr;
+        m_blockCount = 0;
+        m_allocatedBitmapBytes = 0;
+        return;
+    }
+    for (size_t i = 0; i < m_blockCount; ++i) {
+        m_blockTags[i] = MemoryTag::Default;
     }
 
     InitializeFreeList();
@@ -371,8 +399,6 @@ void PoolAllocator::InitializeFreeList()
 
 bool PoolAllocator::IsAllocatedIndex(size_t index) const noexcept
 {
-    // For AAA, we'd use atomics for everything, but here IsAllocatedIndex is 
-    // mostly used for debugging/checks. We'll use the lock for safety if called concurrently.
     Threading::SpinLockGuard guard(m_lock);
     if (!m_allocatedBitmap || index >= m_blockCount) {
         return false;

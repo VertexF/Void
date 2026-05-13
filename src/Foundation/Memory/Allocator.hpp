@@ -24,6 +24,15 @@ namespace Engine::Memory {
     inline constexpr bool kAllocatorDetailedStatsEnabled = false;
 #endif
 
+#if !defined(ENGINE_MEMORY_TRACK_OWNERSHIP)
+    #if !defined(NDEBUG) || defined(ENGINE_MEMORY_DIAGNOSTICS)
+        #define ENGINE_MEMORY_TRACK_OWNERSHIP 1
+    #else
+        #define ENGINE_MEMORY_TRACK_OWNERSHIP 0
+    #endif
+#endif
+    inline constexpr bool kAllocatorOwnershipTrackingEnabled = ENGINE_MEMORY_TRACK_OWNERSHIP != 0;
+
     struct AllocatorStats {
         const char* name = nullptr;
         size_t liveBytes = 0;
@@ -62,10 +71,8 @@ namespace Engine::Memory {
                 (void)size;
                 return;
             }
-            const size_t live = m_liveBytes.Load(MemoryOrder::Relaxed);
-            m_liveBytes.Store(size <= live ? live - size : 0, MemoryOrder::Relaxed);
-            const size_t liveCount = m_liveAllocationCount.Load(MemoryOrder::Relaxed);
-            m_liveAllocationCount.Store(liveCount > 0 ? liveCount - 1 : 0, MemoryOrder::Relaxed);
+            SaturatingSubtract(m_liveBytes, size);
+            SaturatingSubtract(m_liveAllocationCount, 1);
             m_freeCount.FetchAdd(1, MemoryOrder::Relaxed);
         }
 
@@ -85,8 +92,7 @@ namespace Engine::Memory {
                 return;
             }
             const size_t delta = oldSize - newSize;
-            const size_t live = m_liveBytes.Load(MemoryOrder::Relaxed);
-            m_liveBytes.Store(delta <= live ? live - delta : 0, MemoryOrder::Relaxed);
+            SaturatingSubtract(m_liveBytes, delta);
         }
 
         void RecordFailedAllocation() noexcept {
@@ -117,6 +123,16 @@ namespace Engine::Memory {
         }
 
     private:
+        static void SaturatingSubtract(Atomic<size_t>& value, size_t amount) noexcept {
+            size_t current = value.Load(MemoryOrder::Relaxed);
+            while (true) {
+                const size_t desired = amount <= current ? current - amount : 0;
+                if (value.CompareExchangeWeak(current, desired, MemoryOrder::Relaxed, MemoryOrder::Relaxed)) {
+                    return;
+                }
+            }
+        }
+
         void UpdatePeak(size_t live) noexcept {
             size_t peak = m_peakBytes.Load(MemoryOrder::Relaxed);
             while (live > peak &&
@@ -172,7 +188,11 @@ namespace Engine::Memory {
         /// @brief Get allocator name for debugging
         virtual const char* Name() const = 0;
 
-        /// @brief Check if allocator owns this Pointer
+        /// @brief Check if allocator owns this pointer.
+        /// @details Must be non-invasive: implementations may inspect allocator-owned
+        ///          ranges, registries, or metadata after a range proof, but must not
+        ///          dereference caller-adjacent memory to discover ownership. If
+        ///          ownership cannot be proven cheaply, return false.
         virtual bool Owns(void* ptr) const = 0;
 
         /// @brief Snapshot cheap allocator counters only. Must avoid structural free-list/page walks.

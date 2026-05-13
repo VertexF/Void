@@ -106,14 +106,18 @@ void TrackedAllocator::Free(void* ptr)
             m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
             return;
         }
+
+        byte* aligned = static_cast<byte*>(ptr);
+        auto* header = reinterpret_cast<AllocationHeader*>(aligned - sizeof(AllocationHeader));
+        if (header->padding != kTrackedMagic) {
+            m_failedAllocationCount.FetchAdd(1, MemoryOrder::Relaxed);
+            return;
+        }
         m_liveAllocations.erase(it);
     }
 
     byte* aligned = static_cast<byte*>(ptr);
     auto* header = reinterpret_cast<AllocationHeader*>(aligned - sizeof(AllocationHeader));
-    if (header->padding != kTrackedMagic) {
-        return;
-    }
     const size_t size = header->size;
 
     m_allocatedBytes.FetchSub(size, MemoryOrder::Relaxed);

@@ -230,7 +230,7 @@ namespace Engine::Threading {
             #endif
         } // END Of CompareExchange
 
-        /// @brief Weak CAS — may spuriously fail. Use in retry loops for better perf on ARM.
+        /// @brief Weak CAS - may spuriously fail. Use in retry loops for better perf on ARM.
         inline bool CompareExchangeWeak(T& expected, T desired, 
             MemoryOrder success = MemoryOrder::SeqCst,
             MemoryOrder failure = MemoryOrder::SeqCst) noexcept {
@@ -241,7 +241,7 @@ namespace Engine::Threading {
                     Detail::ToBuiltinOrder(success), Detail::ToBuiltinOrder(failure));
                     
             #elif defined(ENGINE_COMPILER_MSVC)
-                // MSVC x64 has no weak CAS — strong CAS is the only option
+                // MSVC x64 has no weak CAS - strong CAS is the only option
                 return CompareExchange(expected, desired, success, failure);
             #endif
         }

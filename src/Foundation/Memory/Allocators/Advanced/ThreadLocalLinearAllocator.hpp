@@ -2,11 +2,14 @@
 #define FOUNDATION_MEMORY_THREAD_LOCAL_LINEAR_ALLOCATOR_HDR
 
 #include <Foundation/Memory/Allocators/LinearAllocator.hpp>
+#include <Foundation/Threading/Lock/SpinLock.hpp>
 
 namespace Engine::Memory {
 
-/// @brief Thread-local linear allocator for zero-contention fast temporary memory.
-/// @details Each thread has its own private instance.
+struct ThreadLocalLinearAllocatorState;
+
+/// @brief Thread-local linear allocator for temporary memory.
+/// @details Each thread gets a private arena; allocator lifetime cleanup is coordinated through a state registry.
 class ThreadLocalLinearAllocator : public IAllocator {
 public:
     /// @param perThreadSize Size of buffer for EACH thread.
@@ -20,14 +23,27 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     void Reset();
 
 private:
-    [[nodiscard]] LinearAllocator& GetLocalAllocator() const;
+    friend struct ThreadLocalLinearAllocatorState;
+
+    [[nodiscard]] LinearAllocator* GetLocalAllocator() const;
+    [[nodiscard]] LinearAllocator* FindLocalAllocator() const noexcept;
+    void RegisterState(ThreadLocalLinearAllocatorState* state) const;
+    void UnregisterState(ThreadLocalLinearAllocatorState* state) const;
+    void AddTrackedBytes(size_t bytes) noexcept;
+    void ReleaseTrackedBytes(size_t bytes) noexcept;
 
     size_t m_perThreadSize;
     IAllocator* m_backingAllocator;
+    mutable Threading::SpinLock m_stateLock;
+    mutable ThreadLocalLinearAllocatorState* m_stateHead = nullptr;
+    Atomic<size_t> m_allocatedBytes{0};
+    AllocatorStatsTracker m_stats;
 };
 
 } // namespace Engine::Memory

@@ -300,6 +300,43 @@ if(BUILD_TESTING)
                                ${CMAKE_CURRENT_SOURCE_DIR}
                                ${ENGINE_INCLUDE})
 
+    add_library(FoundationDiagnostics STATIC ${FOUNDATION_SOURCE})
+    if(WIN32)
+        target_sources(FoundationDiagnostics PRIVATE src/Foundation/Memory/VirtualMemoryWin32.cpp)
+    else()
+        target_sources(FoundationDiagnostics PRIVATE src/Foundation/Memory/VirtualMemoryPosix.cpp)
+    endif()
+    target_compile_definitions(FoundationDiagnostics PRIVATE
+                               CGLM_FORCE_DEPTH_ZERO_TO_ONE
+                               _CRT_SECURE_NO_WARNINGS
+                               TRACY_ENABLE
+                               TRACY_ON_DEMAND
+                               TRACY_NO_SYSTEM_TRACING
+                               ENGINE_MEMORY_DIAGNOSTICS=1
+                               ENGINE_MEMORY_TRACK_OWNERSHIP=1)
+    if(WIN32)
+        target_compile_definitions(FoundationDiagnostics PRIVATE
+                                   WIN32_LEAN_AND_MEAN
+                                   NOMINMAX)
+    endif()
+    target_include_directories(FoundationDiagnostics SYSTEM PRIVATE
+                               ${CMAKE_CURRENT_SOURCE_DIR}
+                               ${CGLM_INCLUDE_DIR}
+                               ${TLSF_INCLUDE_DIR}
+                               ${STACK_WALKER_DIR}
+                               ${RAPID_HASH_DIR}
+                               ${ENGINE_INCLUDE}
+                               ${VENDOR_INCLUDE})
+
+    add_executable(VoidDiagnosticsTests ${VOID_TEST_SOURCE})
+    target_link_libraries(VoidDiagnosticsTests PRIVATE FoundationDiagnostics GTest::gtest_main)
+    target_include_directories(VoidDiagnosticsTests PRIVATE
+                               ${CMAKE_CURRENT_SOURCE_DIR}
+                               ${ENGINE_INCLUDE})
+    target_compile_definitions(VoidDiagnosticsTests PRIVATE
+                               ENGINE_MEMORY_DIAGNOSTICS=1
+                               ENGINE_MEMORY_TRACK_OWNERSHIP=1)
+
     add_executable(VoidContainerBenchmarks
         tests/foundation/containers/container_benchmarks.cpp
         vender/tlsf/tlsf.c
@@ -313,8 +350,21 @@ if(BUILD_TESTING)
                            $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<NOT:$<CONFIG:Debug>>>:/O2 /Ob2>
                            $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<NOT:$<CONFIG:Debug>>>:-O3>)
 
+    add_executable(VoidAllocatorBenchmarks
+        tests/memory/allocator_benchmarks.cpp
+    )
+    target_link_libraries(VoidAllocatorBenchmarks PRIVATE Foundation)
+    target_include_directories(VoidAllocatorBenchmarks PRIVATE
+                               ${CMAKE_CURRENT_SOURCE_DIR}
+                               ${ENGINE_INCLUDE})
+    target_compile_definitions(VoidAllocatorBenchmarks PRIVATE NDEBUG)
+    target_compile_options(VoidAllocatorBenchmarks PRIVATE
+                           $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<NOT:$<CONFIG:Debug>>>:/O2 /Ob2>
+                           $<$<AND:$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<NOT:$<CONFIG:Debug>>>:-O3>)
+
     include(GoogleTest)
     gtest_discover_tests(VoidTests)
+    gtest_discover_tests(VoidDiagnosticsTests TEST_PREFIX "Diagnostics.")
 endif()
 
 ###External

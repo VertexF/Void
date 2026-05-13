@@ -24,6 +24,8 @@ public:
     [[nodiscard]] size_t AllocatedSize() const override;
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
+    [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     void Reset();
     [[nodiscard]] size_t GetCapacity() const noexcept;
@@ -38,6 +40,7 @@ private:
     size_t m_offset = 0;
     IAllocator* m_backingAllocator = nullptr;
     bool m_ownsBuffer = false;
+    AllocatorStatsTracker m_stats;
 };
 
 } // namespace Engine::Memory

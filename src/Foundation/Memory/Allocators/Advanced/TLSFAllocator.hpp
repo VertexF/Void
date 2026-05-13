@@ -12,7 +12,7 @@ namespace Engine::Memory {
     
 /// @brief Two-Level Segregated Fit (TLSF) Allocator
 /// @details Constant time O(1) complexity for both allocate and free.
-///          Low fragmentation, good for general purpose heap allocations.
+///          Low-fragmentation pool allocator for allocations up to kMinBlockSize alignment.
 class TLSFAllocator : public IAllocator {
 public:
     /// @brief Create TLSF allocator

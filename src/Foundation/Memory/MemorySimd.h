@@ -6,7 +6,7 @@
 // ============================================================================
 // Size-based dispatch for Fill operations:
 //   < 64 bytes:   scalar loop (SIMD overhead not worth it)
-//   64B – 256KB:  AVX2 aligned stores (through cache)
+//   64B - 256KB:  AVX2 aligned stores (through cache)
 //   >= 256KB:     AVX2 non-temporal stores (bypass cache, avoid pollution)
 // ============================================================================
 #include <Foundation/CompilerTraits.hpp>
@@ -25,8 +25,8 @@ namespace Engine::Memory::Detail {
 
 // Size-based dispatch thresholds (empirically tuned, MSVC 19.50 / Intel):
 //   < kSimdMinBytes:     scalar (SIMD setup overhead not worth it)
-//   kSimdMinBytes–kErms: AVX2 aligned stores (3-5x faster than rep stosd at these sizes)
-//   kErms–kNT:           Fill / rep stosd ERMS fast-path (L3-resident, hardware-optimized)
+//   kSimdMinBytes-kErms: AVX2 aligned stores (3-5x faster than rep stosd at these sizes)
+//   kErms-kNT:           Fill / rep stosd ERMS fast-path (L3-resident, hardware-optimized)
 //   >= kNT:              AVX2 non-temporal stores (bypass cache hierarchy entirely)
 //
 // The ERMS tier exists because Intel's rep stosd microcode uses a store-buffer fast-path
@@ -67,7 +67,7 @@ inline bool HasAvx2RuntimeSupport() noexcept {
 }
 
 // ============================================================================
-// 4-byte (int/float) fill — AVX2
+// 4-byte (int/float) fill - AVX2
 // ============================================================================
 inline void SimdFill4(void* dest, uint32 pattern, usize count) noexcept {
     const usize totalBytes = count * 4;
@@ -79,7 +79,7 @@ inline void SimdFill4(void* dest, uint32 pattern, usize count) noexcept {
         return;
     }
 
-    // Medium (16KB–4MB): rep stosd via Fill — ERMS hardware fast-path
+    // Medium (16KB-4MB): rep stosd via Fill - ERMS hardware fast-path
     if (totalBytes >= kErmsThreshold && totalBytes < kNonTemporalThreshold) {
         auto* p = static_cast<uint32*>(dest);
         int val;
@@ -107,7 +107,7 @@ inline void SimdFill4(void* dest, uint32 pattern, usize count) noexcept {
     const usize endOffset = totalBytes - (totalBytes & 31);
 
     if (totalBytes >= kNonTemporalThreshold) {
-        // Non-temporal stores — bypass cache for huge fills
+        // Non-temporal stores - bypass cache for huge fills
         for (; offset + 128 <= endOffset; offset += 128) {
             auto* p = reinterpret_cast<__m256i*>(dst + offset);
             _mm256_stream_si256(p, val);
@@ -120,7 +120,7 @@ inline void SimdFill4(void* dest, uint32 pattern, usize count) noexcept {
         }
         _mm_sfence();
     } else {
-        // Small-medium (64B–16KB): AVX2 cached stores
+        // Small-medium (64B-16KB): AVX2 cached stores
         for (; offset + 128 <= endOffset; offset += 128) {
             auto* p = reinterpret_cast<__m256i*>(dst + offset);
             _mm256_store_si256(p, val);
@@ -140,7 +140,7 @@ inline void SimdFill4(void* dest, uint32 pattern, usize count) noexcept {
 }
 
 // ============================================================================
-// 8-byte (int64/double/pointer) fill — AVX2
+// 8-byte (int64/double/pointer) fill - AVX2
 // ============================================================================
 inline void SimdFill8(void* dest, uint64 pattern, usize count) noexcept {
     const usize totalBytes = count * 8;
@@ -151,7 +151,7 @@ inline void SimdFill8(void* dest, uint64 pattern, usize count) noexcept {
         return;
     }
 
-    // Medium (16KB–4MB): rep stosq via Fill — ERMS hardware fast-path
+    // Medium (16KB-4MB): rep stosq via Fill - ERMS hardware fast-path
     if (totalBytes >= kErmsThreshold && totalBytes < kNonTemporalThreshold) {
         auto* p = static_cast<uint64*>(dest);
         uint64 val = pattern;
@@ -207,14 +207,14 @@ inline void SimdFill8(void* dest, uint64 pattern, usize count) noexcept {
 }
 
 // ============================================================================
-// 1-byte fill — just MemSet (already optimal)
+// 1-byte fill - just MemSet (already optimal)
 // ============================================================================
 inline void SimdFill1(void* dest, uint8 pattern, usize count) noexcept {
     MemSet(dest, pattern, count);
 }
 
 // ============================================================================
-// 2-byte (short/char16_t) fill — AVX2
+// 2-byte (short/char16_t) fill - AVX2
 // ============================================================================
 inline void SimdFill2(void* dest, uint16 pattern, usize count) noexcept {
     const usize totalBytes = count * 2;
@@ -225,7 +225,7 @@ inline void SimdFill2(void* dest, uint16 pattern, usize count) noexcept {
         return;
     }
 
-    // Medium (16KB–4MB): Fill — ERMS hardware fast-path
+    // Medium (16KB-4MB): Fill - ERMS hardware fast-path
     if (totalBytes >= kErmsThreshold && totalBytes < kNonTemporalThreshold) {
         auto* p = static_cast<uint16*>(dest);
         Fill(p, p + count, pattern);
@@ -282,7 +282,7 @@ inline void SimdFill2(void* dest, uint16 pattern, usize count) noexcept {
 #endif // ENGINE_HAS_AVX2
 
 // ============================================================================
-// Dispatch: SimdFill<T> — picks the right lane width
+// Dispatch: SimdFill<T> - picks the right lane width
 // ============================================================================
 template<typename T>
 inline void SimdFill(T* dest, usize count, const T& value) noexcept {
@@ -343,7 +343,7 @@ inline void SimdCopyBytes(void* dest, const void* src, usize bytes) noexcept {
         return;
     }
 
-    // Large (>= 8MB): Non-temporal streaming — bypasses destination cache allocation.
+    // Large (>= 8MB): Non-temporal streaming - bypasses destination cache allocation.
     // Regular loads + NT stores avoid RFO. NTA prefetch minimizes source pollution.
     const uintptr dAddr = reinterpret_cast<uintptr>(d);
     const usize misalign = dAddr & 31;
@@ -387,7 +387,7 @@ inline void RepMovsbCopy(void* dest, const void* src, usize bytes) noexcept {
 
 #endif // ENGINE_HAS_AVX2
 
-/// @brief Optimized byte copy — dispatches to SIMD for large buffers.
+/// @brief Optimized byte copy - dispatches to SIMD for large buffers.
 /// @pre src and dest must NOT overlap. For overlapping regions, use memmove.
 inline void SimdCopy(void* dest, const void* src, usize bytes) noexcept {
 #if ENGINE_HAS_AVX2

@@ -19,7 +19,7 @@ namespace Engine::Memory {
 // Default Deleter
 // ============================================================================
 
-/// @brief Default deleter — calls destructor and deallocates
+/// @brief Default deleter - calls destructor and deallocates
 /// @details In freestanding builds, uses MAL::Free. In hosted builds,
 ///          falls back to operator delete. Override with custom deleters
 ///          for pool/arena allocations.
@@ -64,12 +64,12 @@ struct AllocatorDeleter {
 };
 
 // ============================================================================
-// UniquePtr — Single Object
+// UniquePtr - Single Object
 // ============================================================================
 
 /// @brief Single-ownership smart pointer with zero overhead
 /// @details Same size as raw pointer when using empty deleter (DefaultDeleter).
-///          Move-only — no copies allowed. Deterministic destruction.
+///          Move-only - no copies allowed. Deterministic destruction.
 template<typename T, typename Deleter = DefaultDeleter<T>>
 class UniquePtr {
 public:
@@ -188,7 +188,7 @@ public:
 };
 
 // ============================================================================
-// UniquePtr — Array Specialization
+// UniquePtr - Array Specialization
 // ============================================================================
 
 template<typename T, typename Deleter>

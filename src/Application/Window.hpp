@@ -1,7 +1,7 @@
 #ifndef WINDOW_HDR
 #define WINDOW_HDR
 
-#include "Foundation/Array.hpp"
+#include "Foundation/Platform.hpp"
 
 struct SDL_Window;
 

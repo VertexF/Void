@@ -1,7 +1,7 @@
 #ifndef FOUNDATION_MEMORY_ALIGNED_ALLOCATOR_HDR
 #define FOUNDATION_MEMORY_ALIGNED_ALLOCATOR_HDR
 
-// AlignedAllocator — SIMD-aligned memory allocation
+// AlignedAllocator - SIMD-aligned memory allocation
 // ============================================================================
 // Guarantees alignment >= requested for SIMD operations (particle systems,
 // vertex buffers, audio processing, matrix pools).
@@ -16,7 +16,7 @@
 #include <cstdlib>
 #include <limits>
 
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     #include <Foundation/Threading/Lock/SpinLock.hpp>
     #include <unordered_set>
 #endif
@@ -98,7 +98,7 @@ public:
 
         m_allocated += size;
         m_stats.RecordAllocation(size);
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
         Threading::SpinLockGuard guard(m_lock);
         m_liveAllocations.insert(aligned);
 #endif
@@ -108,7 +108,7 @@ public:
     void Free(void* ptr) override {
         if (!ptr) return;
 
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
         {
             Threading::SpinLockGuard guard(m_lock);
             const auto it = m_liveAllocations.find(ptr);
@@ -153,14 +153,11 @@ public:
         if (!ptr) {
             return false;
         }
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
         Threading::SpinLockGuard guard(m_lock);
         return m_liveAllocations.find(ptr) != m_liveAllocations.end();
 #else
-        const auto* aligned = static_cast<const uint8*>(ptr);
-        const auto* header = reinterpret_cast<const Detail::AlignedAllocationHeader*>(
-            aligned - sizeof(Detail::AlignedAllocationHeader));
-        return header->magic == Detail::kAlignedAllocationMagic;
+        return false;
 #endif
     }
 
@@ -175,7 +172,7 @@ private:
     IAllocator* m_backing;
     size_t m_allocated;
     AllocatorStatsTracker m_stats;
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     std::unordered_set<void*> m_liveAllocations;
     mutable Threading::SpinLock m_lock;
 #endif

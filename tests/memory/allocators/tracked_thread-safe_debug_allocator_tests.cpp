@@ -6,6 +6,7 @@
 #include <Foundation/Memory/Debug/LeakDetector.hpp>
 #include <Foundation/Memory/Debug/MemoryProfiler.hpp>
 #include <Foundation/Memory/MemoryTagScope.hpp>
+#include <Foundation/Memory/VirtualMemory.hpp>
 
 #include <gtest/gtest.h>
 
@@ -20,6 +21,44 @@ namespace {
 {
     return (reinterpret_cast<uintptr_t>(ptr) % alignment) == 0;
 }
+
+class NoAccessPointerProbe {
+public:
+    NoAccessPointerProbe()
+        : m_vm(CreateVirtualMemory())
+    {
+        if (m_vm) {
+            m_pageSize = m_vm->PageSize();
+            m_reserved = m_vm->Reserve(m_pageSize);
+        }
+    }
+
+    ~NoAccessPointerProbe()
+    {
+        if (m_vm && m_reserved) {
+            m_vm->Release(m_reserved);
+        }
+    }
+
+    [[nodiscard]] void* Pointer() const noexcept
+    {
+        return m_reserved ? static_cast<void*>(static_cast<uint8*>(m_reserved) + (m_pageSize / 2u)) : nullptr;
+    }
+
+private:
+    UniquePtr<IVirtualMemory> m_vm;
+    void* m_reserved = nullptr;
+    size_t m_pageSize = 0;
+};
+
+struct DebugHeaderMirror {
+    size_t size = 0;
+    size_t adjustment = 0;
+    MemoryTag tag = MemoryTag::Default;
+    uint32 magic = 0;
+};
+
+constexpr size_t kDebugGuardSize = 16;
 
 } // namespace
 
@@ -69,6 +108,31 @@ TEST(TrackedAllocator, RejectsInvalidAndDoubleFreeWithoutTouchingCounters)
 
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
     EXPECT_EQ(allocator.GetAllocationCount(), 0u);
+    EXPECT_EQ(backing.AllocatedSize(), 0u);
+}
+
+TEST(TrackedAllocator, HeaderCorruptionDoesNotUnregisterLiveAllocation)
+{
+    MallocAllocator backing;
+    TrackedAllocator allocator(&backing);
+
+    void* ptr = allocator.Allocate(64, 16);
+    ASSERT_NE(ptr, nullptr);
+    auto* header = reinterpret_cast<AllocationHeader*>(static_cast<uint8*>(ptr) - sizeof(AllocationHeader));
+    const size_t savedPadding = header->padding;
+
+    const size_t failuresBefore = allocator.GetStats().failedAllocationCount;
+    header->padding = 0;
+    allocator.Free(ptr);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresBefore);
+    }
+    EXPECT_TRUE(allocator.Owns(ptr));
+    EXPECT_EQ(allocator.AllocatedSize(), 64u);
+
+    header->padding = savedPadding;
+    allocator.Free(ptr);
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
     EXPECT_EQ(backing.AllocatedSize(), 0u);
 }
 
@@ -133,7 +197,7 @@ TEST(AlignedAllocator, TracksUserBytesAndFreesBackingAllocation)
     void* ptr = allocator.Allocate(80, 24);
     ASSERT_NE(ptr, nullptr);
     EXPECT_TRUE(IsAligned(ptr, 64));
-    EXPECT_TRUE(allocator.Owns(ptr));
+    EXPECT_EQ(allocator.Owns(ptr), kAllocatorOwnershipTrackingEnabled);
     EXPECT_EQ(allocator.AllocatedSize(), 80u);
     EXPECT_GT(backing.AllocatedSize(), 80u);
 
@@ -142,6 +206,15 @@ TEST(AlignedAllocator, TracksUserBytesAndFreesBackingAllocation)
     allocator.Free(ptr);
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
     EXPECT_EQ(backing.AllocatedSize(), 0u);
+}
+
+TEST(AlignedAllocator, OwnsDoesNotProbeForeignMemory)
+{
+    AlignedAllocator allocator;
+    NoAccessPointerProbe probe;
+    ASSERT_NE(probe.Pointer(), nullptr);
+
+    EXPECT_FALSE(allocator.Owns(probe.Pointer()));
 }
 
 TEST(DebugAllocator, TracksLeakDetectorProfilerAndSupportsReallocate)
@@ -215,6 +288,33 @@ TEST(DebugAllocator, RejectsInvalidAndDoubleFreeThroughLiveRegistry)
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
     EXPECT_EQ(leakDetector.GetLiveAllocationCount(), 0u);
     EXPECT_EQ(profiler.GetLiveBytes(), 0u);
+    EXPECT_EQ(backing.AllocatedSize(), 0u);
+}
+
+TEST(DebugAllocator, HeaderCorruptionDoesNotUnregisterLiveAllocation)
+{
+    MallocAllocator backing;
+    DebugAllocator allocator(&backing);
+
+    void* ptr = allocator.Allocate(48, 16);
+    ASSERT_NE(ptr, nullptr);
+    auto* header = reinterpret_cast<DebugHeaderMirror*>(
+        static_cast<uint8*>(ptr) - kDebugGuardSize - sizeof(DebugHeaderMirror));
+    const uint32 savedMagic = header->magic;
+
+    const size_t failuresBefore = allocator.GetStats().failedAllocationCount;
+    header->magic = 0;
+    EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::HeaderCorrupt);
+    allocator.Free(ptr);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresBefore);
+    }
+    EXPECT_TRUE(allocator.Owns(ptr));
+    EXPECT_EQ(allocator.AllocatedSize(), 48u);
+
+    header->magic = savedMagic;
+    allocator.Free(ptr);
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
     EXPECT_EQ(backing.AllocatedSize(), 0u);
 }
 

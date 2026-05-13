@@ -26,8 +26,8 @@ public:
     [[nodiscard]] AllocatorStats GetStats() const override;
     [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
-    [[nodiscard]] IAllocator* GetBackingAllocator() const noexcept { return m_backingAllocator; }
-    void SetBackingAllocator(IAllocator* allocator) noexcept { m_backingAllocator = allocator; }
+    [[nodiscard]] IAllocator* GetBackingAllocator() const noexcept;
+    void SetBackingAllocator(IAllocator* allocator) noexcept;
 
 private:
     IAllocator* m_backingAllocator = nullptr;

@@ -116,7 +116,7 @@ public:
 
     [[nodiscard]] bool AreLargePagesAvailable() noexcept override
     {
-        // Cache the result — privilege won't change during process lifetime
+        // Cache the result - privilege won't change during process lifetime
         static bool s_checked = false;
         static bool s_available = false;
 
@@ -173,7 +173,7 @@ public:
         ULONG highestNode = 0;
         if (!GetNumaHighestNodeNumber(&highestNode) || numaNode > highestNode)
         {
-            // Invalid node — fall back to default allocation
+            // Invalid node - fall back to default allocation
             return ReserveAndCommit(size);
         }
 
@@ -187,7 +187,7 @@ public:
 
         if (!ptr)
         {
-            // NUMA allocation failed — fall back to default allocation
+            // NUMA allocation failed - fall back to default allocation
             return ReserveAndCommit(size);
         }
 

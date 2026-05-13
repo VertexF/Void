@@ -48,6 +48,25 @@ TLSCachingAllocator::~TLSCachingAllocator()
     FlushCacheInternal(GetCache());
 }
 
+TLSCachingAllocator::ThreadLocalCache::~ThreadLocalCache()
+{
+    for (CachedBlock& block : blocks) {
+        IAllocator* backingAllocator = block.backingAllocator;
+        if (!block.ptr || !backingAllocator) {
+            block = {};
+            continue;
+        }
+
+        TLSHeader* header = HeaderFromUserPointer(block.ptr);
+        if (header->magic == kTLSCachedMagic) {
+            header->magic = 0;
+        }
+        backingAllocator->Free(RawFromHeader(header));
+        block = {};
+    }
+    count = 0;
+}
+
 TLSCachingAllocator::ThreadLocalCache& TLSCachingAllocator::GetCache()
 {
     return t_cache;
@@ -65,7 +84,8 @@ void TLSCachingAllocator::FlushCacheInternal(ThreadLocalCache& cache)
                 if (header->magic == kTLSCachedMagic) {
                     header->magic = 0;
                 }
-                m_backingAllocator->Free(RawFromHeader(header));
+                IAllocator* backingAllocator = cache.blocks[i].backingAllocator ? cache.blocks[i].backingAllocator : m_backingAllocator;
+                backingAllocator->Free(RawFromHeader(header));
             }
             cache.blocks[i] = {};
         } else {
@@ -96,7 +116,7 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
             cache.blocks[i].alignment >= alignment) {
             void* ptr = cache.blocks[i].ptr;
             HeaderFromUserPointer(ptr)->magic = kTLSMagic;
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
             RegisterLiveAllocation(ptr);
 #endif
             // Swap with last element and remove
@@ -133,7 +153,7 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
     header->alignment = alignment;
     header->adjustment = static_cast<size_t>(aligned - rawBytes);
     header->magic = kTLSMagic;
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     RegisterLiveAllocation(aligned);
 #endif
 
@@ -151,7 +171,7 @@ void* TLSCachingAllocator::Reallocate(void* ptr, size_t newSize, size_t alignmen
         return nullptr;
     }
 
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     if (!Owns(ptr)) {
         ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "TLSCachingAllocator: reallocate pointer is not live");
         return nullptr;
@@ -187,19 +207,31 @@ void TLSCachingAllocator::Free(void* ptr)
         return;
     }
 
-#if !defined(NDEBUG)
-    if (!UnregisterLiveAllocation(ptr)) {
-        ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "TLSCachingAllocator: invalid or double free");
-        return;
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
+    {
+        Threading::SpinLockGuard guard(m_liveLock);
+        const auto it = m_liveAllocations.find(ptr);
+        if (it == m_liveAllocations.end()) {
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "TLSCachingAllocator: invalid or double free");
+            return;
+        }
+
+        auto* header = HeaderFromUserPointer(ptr);
+        if (header->magic != kTLSMagic) {
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "TLSCachingAllocator: free header is not live");
+            return;
+        }
+        m_liveAllocations.erase(it);
     }
 #endif
 
-    // Read header to get size
     auto* header = HeaderFromUserPointer(ptr);
+#if !ENGINE_MEMORY_TRACK_OWNERSHIP
     if (header->magic != kTLSMagic) {
         ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "TLSCachingAllocator: free header is not live");
         return;
     }
+#endif
     size_t size = header->size;
     m_stats.RecordFree(size);
 
@@ -219,6 +251,7 @@ void TLSCachingAllocator::Free(void* ptr)
         cache.blocks[cache.count].ptr = ptr;
         cache.blocks[cache.count].size = size;
         cache.blocks[cache.count].alignment = header->alignment;
+        cache.blocks[cache.count].backingAllocator = m_backingAllocator;
         cache.blocks[cache.count].owner = this;
         ++cache.count;
         return;
@@ -244,12 +277,11 @@ bool TLSCachingAllocator::Owns(void* ptr) const
     if (!ptr) {
         return false;
     }
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     Threading::SpinLockGuard guard(m_liveLock);
     return m_liveAllocations.find(ptr) != m_liveAllocations.end();
 #else
-    auto* header = HeaderFromUserPointer(ptr);
-    return header->magic == kTLSMagic;
+    return false;
 #endif
 }
 
@@ -278,18 +310,7 @@ void TLSCachingAllocator::FlushCache()
     FlushCacheInternal(GetCache());
 }
 
-#if !defined(NDEBUG)
-bool TLSCachingAllocator::UnregisterLiveAllocation(void* ptr)
-{
-    Threading::SpinLockGuard guard(m_liveLock);
-    const auto it = m_liveAllocations.find(ptr);
-    if (it == m_liveAllocations.end()) {
-        return false;
-    }
-    m_liveAllocations.erase(it);
-    return true;
-}
-
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
 void TLSCachingAllocator::RegisterLiveAllocation(void* ptr)
 {
     if (!ptr) {

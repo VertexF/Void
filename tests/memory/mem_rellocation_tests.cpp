@@ -14,7 +14,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <new>
+#include <thread>
 
 namespace Engine::Memory {
 namespace {
@@ -169,6 +173,40 @@ TEST(ArenaAllocators, LinearAndFrameAllocatorsRejectForwardMarkers)
     EXPECT_FALSE(frame.Owns(static_cast<uint8*>(framePtr) + 40));
 }
 
+TEST(ArenaAllocators, ArenaStatsExposeReservedFreeAndFailures)
+{
+    LinearAllocator linear(256);
+    void* linearPtr = linear.Allocate(64, 16);
+    ASSERT_NE(linearPtr, nullptr);
+    AllocatorStats linearStats = linear.GetDetailedStats();
+    EXPECT_EQ(linearStats.reservedBytes, 256u);
+    EXPECT_GT(linearStats.freeBytes, 0u);
+    EXPECT_EQ(linear.Allocate(1024, 16), nullptr);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(linear.GetStats().failedAllocationCount, 0u);
+    }
+    linear.Reset();
+    EXPECT_EQ(linear.GetStats().liveBytes, 0u);
+
+    FrameAllocator frame(256);
+    void* framePtr = frame.Allocate(64, 16);
+    ASSERT_NE(framePtr, nullptr);
+    AllocatorStats frameStats = frame.GetDetailedStats();
+    EXPECT_EQ(frameStats.reservedBytes, 256u);
+    EXPECT_GT(frameStats.freeBytes, 0u);
+    frame.BeginFrame();
+    EXPECT_EQ(frame.GetStats().liveBytes, 0u);
+
+    StackAllocator stack(256);
+    void* stackPtr = stack.Allocate(64, 16);
+    ASSERT_NE(stackPtr, nullptr);
+    AllocatorStats stackStats = stack.GetDetailedStats();
+    EXPECT_EQ(stackStats.reservedBytes, 256u);
+    EXPECT_GT(stackStats.freeBytes, 0u);
+    stack.Free(stackPtr);
+    EXPECT_EQ(stack.GetStats().liveBytes, 0u);
+}
+
 TEST(ArenaAllocators, PoolAllocatorReusesFixedBlocks)
 {
     PoolAllocator allocator(128, 4, nullptr, 16);
@@ -253,6 +291,42 @@ TEST(ArenaAllocators, ThreadLinearAllocatorsReset)
     EXPECT_EQ(emptyThreadLocal.Allocate(16, 16), nullptr);
     EXPECT_EQ(emptyThreadLocal.Reallocate(nullptr, 16, 16), nullptr);
     EXPECT_FALSE(emptyThreadLocal.Owns(&localValue));
+}
+
+TEST(ArenaAllocators, ThreadLocalLinearDestructorReclaimsRegisteredWorkerState)
+{
+    MallocAllocator backing;
+    ThreadSafeAllocator safeBacking(&backing);
+    std::atomic<int> workerState{0};
+    std::atomic<bool> releaseWorker{false};
+
+    alignas(ThreadLocalLinearAllocator) std::byte storage[sizeof(ThreadLocalLinearAllocator)];
+    auto* allocator = new (storage) ThreadLocalLinearAllocator(4096, &safeBacking);
+
+    std::thread worker([&] {
+        void* ptr = allocator->Allocate(512, 16);
+        if (!ptr) {
+            workerState.store(-1, std::memory_order_release);
+            return;
+        }
+        workerState.store(1, std::memory_order_release);
+        while (!releaseWorker.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+    });
+
+    while (workerState.load(std::memory_order_acquire) == 0) {
+        std::this_thread::yield();
+    }
+
+    ASSERT_EQ(workerState.load(std::memory_order_acquire), 1);
+    EXPECT_NE(backing.AllocatedSize(), 0u);
+
+    allocator->~ThreadLocalLinearAllocator();
+    EXPECT_EQ(backing.AllocatedSize(), 0u);
+
+    releaseWorker.store(true, std::memory_order_release);
+    worker.join();
 }
 
 } // namespace Engine::Memory

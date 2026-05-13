@@ -89,7 +89,7 @@ ENGINE_API bool ReportVerifyFailure(
 // NOTE: ENGINE_ASSERT_FMT is defined at the bottom of this file.
 // Call sites using ENGINE_ASSERT_FMT must explicitly include <Core/Containers/Format.h>.
 // We DO NOT include it here to avoid a circular dependency:
-// Assert.h → Format.h → StringBuilder.h → String.h → Assert.h
+// Assert.h -> Format.h -> StringBuilder.h -> String.h -> Assert.h
 // ============================================================================
 
 #if defined(ENGINE_BUILD_DEBUG)

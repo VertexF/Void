@@ -95,7 +95,7 @@ struct ControlBlockPtr final : ControlBlockBase {
     }
 };
 
-/// @brief Control block with embedded object (MakeShared — single allocation)
+/// @brief Control block with embedded object (MakeShared - single allocation)
 template<typename T>
 struct ControlBlockInplace final : ControlBlockBase {
     alignas(T) unsigned char Storage[sizeof(T)];
@@ -224,7 +224,7 @@ public:
         Ptr_ = P;
     }
 
-    // Aliasing constructor — shares ownership with Other, points to P
+    // Aliasing constructor - shares ownership with Other, points to P
     template<typename U>
     SharedPtr(const SharedPtr<U>& Other, T* P) noexcept
         : Ptr_(P), Ctrl_(Other.Ctrl_) {
@@ -435,7 +435,7 @@ public:
 };
 
 // ============================================================================
-// MakeShared — Single-Allocation Construction
+// MakeShared - Single-Allocation Construction
 // ============================================================================
 
 /// @brief Construct T with single allocation (object + control block together)

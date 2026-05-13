@@ -13,9 +13,8 @@ namespace Engine::Threading {
 // Mutex
 // ============================================================================
 
-/// @brief Lightweight mutex using platform primitives
-/// @details Windows: SRWLOCK (zero-init, no heap, ~pointer-sized)
-///          POSIX: pthread_mutex_t
+/// @brief Mutex wrapper around the current standard-library backend.
+/// @details Exposes std::mutex for condition_variable interop.
 class Mutex {
 public:
     Mutex(const char* debugName = nullptr) noexcept
@@ -51,7 +50,7 @@ private:
 // LockGuard
 // ============================================================================
 
-/// @brief RAII lock wrapper — locks on construction, unlocks on destruction
+/// @brief RAII lock wrapper. Locks on construction, unlocks on destruction.
 template<typename MutexType>
 class LockGuard {
 public:
@@ -82,10 +81,10 @@ public:
         Mutex_->Lock();
     }
 
-    // Deferred — don't lock yet
+    // Deferred construction does not acquire the lock.
     UniqueLock(MutexType& M, DeferLockTag) noexcept : Mutex_(&M), Owns_(false) {}
 
-    // Try — attempt lock, non-blocking
+    // Try construction attempts a non-blocking lock.
     UniqueLock(MutexType& M, TryLockTag) noexcept : Mutex_(&M), Owns_(M.TryLock()) {}
 
     ~UniqueLock() noexcept {
@@ -127,7 +126,7 @@ private:
 // ScopedLock (multi-mutex)
 // ============================================================================
 
-/// @brief RAII wrapper for a single mutex (multi-mutex version is TODO)
+/// @brief RAII wrapper for a single mutex.
 template<typename MutexType>
 class ScopedLock {
 public:
@@ -146,7 +145,7 @@ private:
 // ============================================================================
 
 /// @brief Condition variable for thread synchronization
-/// @details Windows: CONDITION_VARIABLE (SRW-backed). POSIX: pthread_cond_t.
+/// @details Uses std::condition_variable with the Mutex native handle.
 class ConditionVariable {
 public:
     ConditionVariable() noexcept = default;

@@ -242,9 +242,11 @@ TEST(MemoryProfiler, StoresAllocatorStatsSnapshots)
     ASSERT_TRUE(profiler.GetAllocatorStats("MallocAllocator", stats));
     EXPECT_STREQ(stats.name, "MallocAllocator");
     EXPECT_EQ(stats.liveBytes, 0u);
-    EXPECT_GE(stats.peakBytes, 96u);
-    EXPECT_EQ(stats.allocationCount, 1u);
-    EXPECT_EQ(stats.freeCount, 1u);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GE(stats.peakBytes, 96u);
+        EXPECT_EQ(stats.allocationCount, 1u);
+        EXPECT_EQ(stats.freeCount, 1u);
+    }
 }
 
 TEST(MemoryManager, CapturesRegisteredAllocatorStatsIntoProfiler)
@@ -265,13 +267,17 @@ TEST(MemoryManager, CapturesRegisteredAllocatorStatsIntoProfiler)
     ASSERT_TRUE(MemoryManager::GetAllocatorStats(MakeView("main-malloc"), stats));
     EXPECT_STREQ(stats.name, "main-malloc");
     EXPECT_EQ(stats.liveBytes, 128u);
-    EXPECT_GE(stats.peakBytes, 128u);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GE(stats.peakBytes, 128u);
+    }
 
     allocator.Free(ptr);
     MemoryManager::CaptureAllAllocatorStats();
     ASSERT_TRUE(MemoryManager::GetAllocatorStats(MakeView("main-malloc"), stats));
     EXPECT_EQ(stats.liveBytes, 0u);
-    EXPECT_EQ(stats.freeCount, 1u);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_EQ(stats.freeCount, 1u);
+    }
 
     MemoryManager::UnregisterAllocator(MakeView("main-malloc"));
     MemoryManager::Profiler(nullptr);
@@ -297,9 +303,12 @@ TEST(MemoryManager, DumpsAllocatorDiagnosticsForEditorHud)
     bool foundLiveAllocator = false;
     for (const AllocatorStats& stats : snapshots) {
         if (stats.name && std::strcmp(stats.name, allocator.Name()) == 0) {
-            foundLiveAllocator = stats.liveBytes == 160u &&
-                stats.peakBytes >= 160u &&
-                stats.allocationCount >= 1u;
+            foundLiveAllocator = stats.liveBytes == 160u;
+            if constexpr (kAllocatorDetailedStatsEnabled) {
+                foundLiveAllocator = foundLiveAllocator &&
+                    stats.peakBytes >= 160u &&
+                    stats.allocationCount >= 1u;
+            }
         }
     }
     EXPECT_TRUE(foundLiveAllocator);

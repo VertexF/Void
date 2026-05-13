@@ -49,7 +49,7 @@ void* MallocAllocator::Allocate(size_t size, size_t alignment)
         }
     }
 
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     {
         MemoryProfilingSuppressionScope suppressMetadataProfile;
         Threading::SpinLockGuard guard(m_liveLock);
@@ -69,7 +69,7 @@ void* MallocAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         Free(ptr);
         return nullptr;
     }
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     if (!Owns(ptr)) {
         ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "MallocAllocator: reallocate pointer is not live");
         return nullptr;
@@ -78,6 +78,10 @@ void* MallocAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
 
     byte* aligned = static_cast<byte*>(ptr);
     auto* header = reinterpret_cast<AllocationHeader*>(aligned - sizeof(AllocationHeader));
+    if (header->padding != kMallocMagic) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "MallocAllocator: reallocate header corrupted");
+        return nullptr;
+    }
     size_t oldSize = header->size;
 
     if (oldSize == newSize) {
@@ -102,13 +106,20 @@ void MallocAllocator::Free(void* ptr)
         return;
     }
 
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     {
         MemoryProfilingSuppressionScope suppressMetadataProfile;
         Threading::SpinLockGuard guard(m_liveLock);
         const auto it = m_liveAllocations.find(ptr);
         if (it == m_liveAllocations.end()) {
             ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "MallocAllocator: invalid or double free");
+            return;
+        }
+
+        byte* aligned = static_cast<byte*>(ptr);
+        auto* header = reinterpret_cast<AllocationHeader*>(aligned - sizeof(AllocationHeader));
+        if (header->padding != kMallocMagic) {
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "MallocAllocator: allocation header corrupted");
             return;
         }
         m_liveAllocations.erase(it);
@@ -152,19 +163,20 @@ bool MallocAllocator::Owns(void* ptr) const
     if (!ptr) {
         return false;
     }
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     MemoryProfilingSuppressionScope suppressMetadataProfile;
     Threading::SpinLockGuard guard(m_liveLock);
     return m_liveAllocations.find(ptr) != m_liveAllocations.end();
 #else
-    const auto* header = reinterpret_cast<const AllocationHeader*>(static_cast<const byte*>(ptr) - sizeof(AllocationHeader));
-    return header->padding == kMallocMagic;
+    return false;
 #endif
 }
 
 AllocatorStats MallocAllocator::GetStats() const
 {
-    return m_stats.Snapshot(Name());
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    stats.liveBytes = m_allocated.Load(MemoryOrder::Relaxed);
+    return stats;
 }
 
 } // namespace Engine::Memory

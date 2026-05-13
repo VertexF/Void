@@ -88,12 +88,15 @@ void SecuredAllocator::Free(void* ptr)
 
     Threading::SpinLockGuard guard(m_lock);
     const auto it = m_allocs.find(ptr);
-    if (it != m_allocs.end()) {
-        m_allocatedTotal -= it->second.userSize;
-        m_stats.RecordFree(it->second.userSize);
-        m_vm->Release(it->second.baseAddress);
-        m_allocs.erase(it);
+    if (it == m_allocs.end()) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "SecuredAllocator: free pointer is not live");
+        return;
     }
+
+    m_allocatedTotal -= it->second.userSize;
+    m_stats.RecordFree(it->second.userSize);
+    m_vm->Release(it->second.baseAddress);
+    m_allocs.erase(it);
 }
 
 void* SecuredAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
@@ -161,11 +164,16 @@ void SecuredAllocator::MakeReadOnly(void* ptr)
 {
     Threading::SpinLockGuard guard(m_lock);
     const auto it = m_allocs.find(ptr);
-    if (it != m_allocs.end()) {
-        (void)m_vm->Protect(
+    if (it == m_allocs.end()) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "SecuredAllocator: read-only pointer is not live");
+        return;
+    }
+
+    if (!m_vm->Protect(
             it->second.committedAddress,
             it->second.committedSize,
-            IVirtualMemory::MemoryProtection::ReadOnly);
+            IVirtualMemory::MemoryProtection::ReadOnly)) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InternalFailure, "SecuredAllocator: read-only protection failed");
     }
 }
 
@@ -173,11 +181,16 @@ void SecuredAllocator::MakeReadWrite(void* ptr)
 {
     Threading::SpinLockGuard guard(m_lock);
     const auto it = m_allocs.find(ptr);
-    if (it != m_allocs.end()) {
-        (void)m_vm->Protect(
+    if (it == m_allocs.end()) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "SecuredAllocator: read-write pointer is not live");
+        return;
+    }
+
+    if (!m_vm->Protect(
             it->second.committedAddress,
             it->second.committedSize,
-            IVirtualMemory::MemoryProtection::ReadWrite);
+            IVirtualMemory::MemoryProtection::ReadWrite)) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InternalFailure, "SecuredAllocator: read-write protection failed");
     }
 }
 
@@ -190,13 +203,17 @@ void SecuredAllocator::ScrubAndFree(void* ptr)
         Threading::SpinLockGuard guard(m_lock);
         const auto it = m_allocs.find(ptr);
         if (it == m_allocs.end()) {
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "SecuredAllocator: scrub pointer is not live");
             return;
         }
         userSize = it->second.userSize;
         committedAddress = it->second.committedAddress;
         committedSize = it->second.committedSize;
     }
-    (void)m_vm->Protect(committedAddress, committedSize, IVirtualMemory::MemoryProtection::ReadWrite);
+    if (!m_vm->Protect(committedAddress, committedSize, IVirtualMemory::MemoryProtection::ReadWrite)) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InternalFailure, "SecuredAllocator: scrub protection failed");
+        return;
+    }
     MemSet(ptr, 0, userSize);
     Free(ptr);
 }

@@ -2,6 +2,8 @@
 #include <Foundation/Memory/Alignment.hpp>
 #include <Utility/Move.hpp>
 
+#include <limits>
+
 namespace Engine::Memory {
 
 namespace {
@@ -78,6 +80,7 @@ LinearAllocator& LinearAllocator::operator=(LinearAllocator&& other) noexcept
 void* LinearAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_buffer || size == 0) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -90,12 +93,17 @@ void* LinearAllocator::Allocate(size_t size, size_t alignment)
     auto* base = static_cast<byte*>(m_buffer);
     byte* current = base + m_offset;
     const size_t adjustment = AlignmentAdjustment(current, alignment);
-    if (m_offset + adjustment + size > m_capacity) {
+    if (m_offset > (std::numeric_limits<size_t>::max)() - adjustment ||
+        size > (std::numeric_limits<size_t>::max)() - m_offset - adjustment ||
+        m_offset + adjustment + size > m_capacity) {
+        m_stats.RecordFailedAllocation();
         return nullptr;
     }
 
+    const size_t previousOffset = m_offset;
     const size_t alignedOffset = m_offset + adjustment;
     m_offset = alignedOffset + size;
+    m_stats.RecordAllocation(m_offset - previousOffset);
     return base + alignedOffset;
 }
 
@@ -108,6 +116,11 @@ void* LinearAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         Free(ptr);
         return nullptr;
     }
+    if (!Owns(ptr)) {
+        m_stats.RecordFailedAllocation();
+        return nullptr;
+    }
+    m_stats.RecordFailedAllocation();
     return nullptr;
 }
 
@@ -136,9 +149,30 @@ bool LinearAllocator::Owns(void* ptr) const
     return p >= start && p < end;
 }
 
+AllocatorStats LinearAllocator::GetStats() const
+{
+    AllocatorStats stats = m_stats.Snapshot(Name());
+    stats.liveBytes = m_offset;
+    if (stats.peakBytes < stats.liveBytes) {
+        stats.peakBytes = stats.liveBytes;
+    }
+    return stats;
+}
+
+AllocatorStats LinearAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
+    stats.reservedBytes = m_capacity;
+    stats.committedBytes = m_capacity;
+    stats.freeBytes = m_capacity >= m_offset ? m_capacity - m_offset : 0;
+    stats.largestFreeBlockBytes = stats.freeBytes;
+    return stats;
+}
+
 void LinearAllocator::Reset()
 {
     m_offset = 0;
+    m_stats.ResetLive();
 }
 
 size_t LinearAllocator::GetMarker() const
@@ -150,6 +184,9 @@ void LinearAllocator::RewindToMarker(size_t marker)
 {
     if (marker <= m_offset) {
         m_offset = marker;
+        if (marker == 0) {
+            m_stats.ResetLive();
+        }
     }
 }
 

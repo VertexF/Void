@@ -46,7 +46,7 @@ namespace Engine {
     // register-width moves. Superior to runtime MemCopy/MemSet for small,
     // known-size transfers (struct copies, SIMD lane shuffles, etc.).
 
-    /// @brief Copy exactly N bytes — unrolled at compile time for small sizes.
+    /// @brief Copy exactly N bytes - unrolled at compile time for small sizes.
     template<size_t N>
     inline void FastCopy(void* dst, const void* src) noexcept
     {
@@ -80,7 +80,7 @@ namespace Engine {
         }
     }
 
-    /// @brief Set exactly N bytes to a value — unrolled at compile time.
+    /// @brief Set exactly N bytes to a value - unrolled at compile time.
     template<size_t N>
     inline void FastSet(void* dst, uint8_t value) noexcept
     {
@@ -108,7 +108,7 @@ namespace Engine {
     }
 
     /// @brief Zero-initialize a trivially copyable struct.
-    /// Safer than MemZero with raw pointers — preserves type information.
+    /// Safer than MemZero with raw pointers - preserves type information.
     template<typename T>
     inline void ZeroStruct(T& obj) noexcept
     {

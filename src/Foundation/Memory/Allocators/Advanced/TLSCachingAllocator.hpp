@@ -8,7 +8,7 @@
 
 #include <array>
 
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     #include <Foundation/Threading/Lock/SpinLock.hpp>
     #include <unordered_set>
 #endif
@@ -41,10 +41,13 @@ public:
         void* ptr = nullptr;
         size_t size = 0;
         size_t alignment = 0;
+        IAllocator* backingAllocator = nullptr;
         const TLSCachingAllocator* owner = nullptr; // Track which allocator created this block
     };
 
     struct ThreadLocalCache {
+        ~ThreadLocalCache();
+
         std::array<CachedBlock, kDefaultCacheSize> blocks{};
         size_t count = 0;
     };
@@ -97,8 +100,7 @@ public:
 private:
     [[nodiscard]] ThreadLocalCache& GetCache();
     void FlushCacheInternal(ThreadLocalCache& cache);
-#if !defined(NDEBUG)
-    [[nodiscard]] bool UnregisterLiveAllocation(void* ptr);
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     void RegisterLiveAllocation(void* ptr);
 #endif
 
@@ -107,7 +109,7 @@ private:
     Atomic<size_t> m_cacheHits{0};
     Atomic<size_t> m_cacheMisses{0};
     AllocatorStatsTracker m_stats;
-#if !defined(NDEBUG)
+#if ENGINE_MEMORY_TRACK_OWNERSHIP
     std::unordered_set<void*> m_liveAllocations;
     mutable Threading::SpinLock m_liveLock;
 #endif
