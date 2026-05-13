@@ -30,6 +30,7 @@ public:
     [[nodiscard]] const char* Name() const override { return "SecuredAllocator"; }
     [[nodiscard]] bool Owns(void* ptr) const override;
     [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     // ========================================================================
     // Security Operations

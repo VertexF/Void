@@ -71,4 +71,17 @@ AllocatorStats ThreadSafeAllocator::GetStats() const
     return stats;
 }
 
+AllocatorStats ThreadSafeAllocator::GetDetailedStats() const
+{
+    if (!m_backingAllocator) {
+        AllocatorStats stats{};
+        stats.name = Name();
+        return stats;
+    }
+    Threading::LockGuard guard(m_mutex);
+    AllocatorStats stats = m_backingAllocator->GetDetailedStats();
+    stats.name = Name();
+    return stats;
+}
+
 } // namespace Engine::Memory

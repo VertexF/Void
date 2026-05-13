@@ -51,6 +51,7 @@ public:
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
     [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
     
     // ========================================================================
     // Pool Allocator Specific

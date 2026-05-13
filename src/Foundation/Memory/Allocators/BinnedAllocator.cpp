@@ -266,6 +266,12 @@ AllocatorStats BinnedAllocator::GetStats() const
 {
     AllocatorStats stats = m_stats.Snapshot(Name());
     stats.liveBytes = m_allocatedBytes.Load(MemoryOrder::Relaxed);
+    return stats;
+}
+
+AllocatorStats BinnedAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
 
     Threading::SpinLockGuard guard(m_lock);
     size_t pageCount = 0;

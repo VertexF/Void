@@ -39,6 +39,11 @@ namespace Engine::Memory {
         size_t fragmentationBytes = 0;
     };
 
+    enum class AllocatorStatsDetail : uint8 {
+        Fast,
+        Detailed
+    };
+
     class AllocatorStatsTracker final {
     public:
         void RecordAllocation(size_t size) noexcept {
@@ -170,13 +175,18 @@ namespace Engine::Memory {
         /// @brief Check if allocator owns this Pointer
         virtual bool Owns(void* ptr) const = 0;
 
-        /// @brief Snapshot allocator diagnostics. Allocators with richer telemetry override this.
+        /// @brief Snapshot cheap allocator counters only. Must avoid structural free-list/page walks.
         virtual AllocatorStats GetStats() const {
             AllocatorStats stats{};
             stats.name = Name();
             stats.liveBytes = AllocatedSize();
             stats.peakBytes = stats.liveBytes;
             return stats;
+        }
+
+        /// @brief Snapshot full allocator telemetry. May take structural locks and scan free lists.
+        virtual AllocatorStats GetDetailedStats() const {
+            return GetStats();
         }
     };
 

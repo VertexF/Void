@@ -144,6 +144,11 @@ public:
     [[nodiscard]] AllocatorStats GetStats() const override {
         AllocatorStats stats = m_stats.Snapshot(Name());
         stats.liveBytes = m_totalAllocated;
+        return stats;
+    }
+
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override {
+        AllocatorStats stats = GetStats();
         if (m_initialBegin && m_initialEnd > m_initialBegin) {
             stats.reservedBytes += static_cast<usize>(m_initialEnd - m_initialBegin);
         }

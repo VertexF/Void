@@ -1,10 +1,12 @@
 #include <Foundation/Memory/Allocator.hpp>
 #include <Foundation/Memory/AllocatorDiagnostics.hpp>
+#include <Foundation/Memory/Allocators/BinnedAllocator.hpp>
 #include <Foundation/Memory/Allocators/MallocAllocator.hpp>
 #include <Foundation/Memory/Debug/DebugAllocator.hpp>
 #include <Foundation/Memory/Debug/MemoryProfiler.hpp>
 #include <Foundation/Memory/MemoryManager.hpp>
 #include <Foundation/Memory/MemoryTagScope.hpp>
+#include <Foundation/Memory/TLSFAllocator.hpp>
 
 #include <gtest/gtest.h>
 
@@ -150,6 +152,37 @@ TEST(AllocatorDiagnostics, ClassifiesStrictFailureKinds)
     EXPECT_TRUE(IsStrictAllocatorFailure(AllocatorFailureKind::Corruption));
 }
 
+TEST(AllocatorDiagnostics, FastStatsSkipStructuralFragmentationScans)
+{
+    BinnedAllocator binnedAllocator;
+    void* binnedBlock = binnedAllocator.Allocate(64, 16);
+    ASSERT_NE(binnedBlock, nullptr);
+
+    AllocatorStats fast = binnedAllocator.GetStats();
+    EXPECT_EQ(fast.freeBytes, 0u);
+    EXPECT_EQ(fast.largestFreeBlockBytes, 0u);
+    EXPECT_EQ(fast.fragmentationBytes, 0u);
+
+    AllocatorStats detailed = binnedAllocator.GetDetailedStats();
+    EXPECT_GT(detailed.freeBytes, 0u);
+    EXPECT_GE(detailed.freeBytes, detailed.largestFreeBlockBytes);
+    binnedAllocator.Free(binnedBlock);
+
+    TLSFAllocator tlsfAllocator(4096);
+    void* tlsfBlock = tlsfAllocator.Allocate(64, 16);
+    ASSERT_NE(tlsfBlock, nullptr);
+
+    fast = tlsfAllocator.GetStats();
+    EXPECT_EQ(fast.freeBytes, 0u);
+    EXPECT_EQ(fast.largestFreeBlockBytes, 0u);
+    EXPECT_EQ(fast.fragmentationBytes, 0u);
+
+    detailed = tlsfAllocator.GetDetailedStats();
+    EXPECT_GT(detailed.freeBytes, 0u);
+    EXPECT_GE(detailed.freeBytes, detailed.largestFreeBlockBytes);
+    tlsfAllocator.Free(tlsfBlock);
+}
+
 TEST(MemoryManager, DebugAllocatorReportsBudgetPressureBeforeAllocation)
 {
     MemoryManager::Shutdown();
@@ -291,6 +324,30 @@ TEST(MemoryManager, DumpsAllocatorDiagnosticsForEditorHud)
     allocator.Free(ptr);
     MemoryManager::UnregisterAllocator(MakeView("hud-malloc"));
     MemoryManager::Profiler(nullptr);
+    MemoryManager::Shutdown();
+}
+
+TEST(MemoryManager, SnapshotCanChooseFastOrDetailedAllocatorTelemetry)
+{
+    MemoryManager::Shutdown();
+    BinnedAllocator allocator;
+
+    MemoryManager::Initialize();
+    MemoryManager::RegisterAllocator(MakeView("binned"), &allocator);
+
+    void* ptr = allocator.Allocate(64, 16);
+    ASSERT_NE(ptr, nullptr);
+
+    Vector<AllocatorStats> fastSnapshots = MemoryManager::SnapshotAllocatorStats(AllocatorStatsDetail::Fast);
+    Vector<AllocatorStats> detailedSnapshots = MemoryManager::SnapshotAllocatorStats(AllocatorStatsDetail::Detailed);
+    ASSERT_FALSE(fastSnapshots.empty());
+    ASSERT_FALSE(detailedSnapshots.empty());
+
+    EXPECT_EQ(fastSnapshots[0].freeBytes, 0u);
+    EXPECT_GT(detailedSnapshots[0].freeBytes, 0u);
+
+    allocator.Free(ptr);
+    MemoryManager::UnregisterAllocator(MakeView("binned"));
     MemoryManager::Shutdown();
 }
 

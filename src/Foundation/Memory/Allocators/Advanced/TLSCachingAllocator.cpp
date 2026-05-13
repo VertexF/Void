@@ -256,8 +256,14 @@ bool TLSCachingAllocator::Owns(void* ptr) const
 AllocatorStats TLSCachingAllocator::GetStats() const
 {
     AllocatorStats stats = m_stats.Snapshot(Name());
+    return stats;
+}
+
+AllocatorStats TLSCachingAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
     if (m_backingAllocator) {
-        const AllocatorStats backing = m_backingAllocator->GetStats();
+        const AllocatorStats backing = m_backingAllocator->GetDetailedStats();
         stats.reservedBytes = backing.reservedBytes;
         stats.committedBytes = backing.committedBytes;
         stats.freeBytes = backing.freeBytes;

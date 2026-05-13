@@ -187,7 +187,7 @@ void RunFragmentationRecoverability(
         live.push_back(allocation);
     }
 
-    ExpectFragmentationInvariant(name, allocator.GetStats());
+    ExpectFragmentationInvariant(name, allocator.GetDetailedStats());
 
     Vector<TortureAllocation> recovered;
     recovered.reserve(64);
@@ -213,7 +213,7 @@ void RunFragmentationRecoverability(
     }
 
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
-    ExpectFragmentationInvariant(name, allocator.GetStats());
+    ExpectFragmentationInvariant(name, allocator.GetDetailedStats());
 
     void* recoveredBlock = allocator.Allocate(finalRecoverySize, 16);
     ASSERT_NE(recoveredBlock, nullptr);

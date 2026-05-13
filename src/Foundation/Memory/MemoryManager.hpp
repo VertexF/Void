@@ -33,11 +33,11 @@ public:
     static void RegisterOOMCallback(OOMCallback callback);
     static void Profiler(MemoryProfiler* profiler);
     static MemoryProfiler* Profiler();
-    static bool CaptureAllocatorStats(StringView name);
-    static void CaptureAllAllocatorStats();
+    static bool CaptureAllocatorStats(StringView name, AllocatorStatsDetail detail = AllocatorStatsDetail::Detailed);
+    static void CaptureAllAllocatorStats(AllocatorStatsDetail detail = AllocatorStatsDetail::Detailed);
     static bool GetAllocatorStats(StringView name, AllocatorStats& outStats);
     static Vector<AllocatorStats> GetAllocatorStatsSnapshots();
-    static Vector<AllocatorStats> SnapshotAllocatorStats();
+    static Vector<AllocatorStats> SnapshotAllocatorStats(AllocatorStatsDetail detail = AllocatorStatsDetail::Detailed);
     static std::string DumpAllocatorStatsJson();
     static std::string DumpAllocatorStatsText();
     static bool IsProfilingSuppressed() noexcept;
@@ -51,7 +51,9 @@ private:
     };
 
     static std::string ToString(StringView name);
-    static std::vector<NamedAllocatorStats> SnapshotRegisteredAllocatorStats(bool publishToProfiler);
+    static std::vector<NamedAllocatorStats> SnapshotRegisteredAllocatorStats(
+        bool publishToProfiler,
+        AllocatorStatsDetail detail);
 
     std::unordered_map<std::string, IAllocator*> m_allocators;
     size_t m_budgets[static_cast<size_t>(MemoryTag::Count)] = {0};

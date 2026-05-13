@@ -56,7 +56,9 @@ std::string MemoryManager::ToString(StringView name)
     return std::string(name.text, name.length);
 }
 
-std::vector<MemoryManager::NamedAllocatorStats> MemoryManager::SnapshotRegisteredAllocatorStats(bool publishToProfiler)
+std::vector<MemoryManager::NamedAllocatorStats> MemoryManager::SnapshotRegisteredAllocatorStats(
+    bool publishToProfiler,
+    AllocatorStatsDetail detail)
 {
     MemoryManager* instance = g_instance;
     if (!instance) {
@@ -78,7 +80,9 @@ std::vector<MemoryManager::NamedAllocatorStats> MemoryManager::SnapshotRegistere
             continue;
         }
 
-        AllocatorStats stats = entry.second->GetStats();
+        AllocatorStats stats = detail == AllocatorStatsDetail::Detailed
+            ? entry.second->GetDetailedStats()
+            : entry.second->GetStats();
         if (!stats.name || stats.name[0] == '\0') {
             stats.name = entry.second->Name();
         }
@@ -226,7 +230,7 @@ MemoryProfiler* MemoryManager::Profiler()
     return instance->m_profiler;
 }
 
-bool MemoryManager::CaptureAllocatorStats(StringView name)
+bool MemoryManager::CaptureAllocatorStats(StringView name, AllocatorStatsDetail detail)
 {
     Initialize();
     IAllocator* allocator = nullptr;
@@ -247,15 +251,17 @@ bool MemoryManager::CaptureAllocatorStats(StringView name)
         return false;
     }
 
-    AllocatorStats stats = allocator->GetStats();
+    AllocatorStats stats = detail == AllocatorStatsDetail::Detailed
+        ? allocator->GetDetailedStats()
+        : allocator->GetStats();
     profiler->UpdateAllocatorStats(key.c_str(), stats);
     return true;
 }
 
-void MemoryManager::CaptureAllAllocatorStats()
+void MemoryManager::CaptureAllAllocatorStats(AllocatorStatsDetail detail)
 {
     Initialize();
-    (void)SnapshotRegisteredAllocatorStats(true);
+    (void)SnapshotRegisteredAllocatorStats(true, detail);
 }
 
 bool MemoryManager::GetAllocatorStats(StringView name, AllocatorStats& outStats)
@@ -286,10 +292,10 @@ Vector<AllocatorStats> MemoryManager::GetAllocatorStatsSnapshots()
     return profiler ? profiler->GetAllocatorStatsSnapshots() : Vector<AllocatorStats>{};
 }
 
-Vector<AllocatorStats> MemoryManager::SnapshotAllocatorStats()
+Vector<AllocatorStats> MemoryManager::SnapshotAllocatorStats(AllocatorStatsDetail detail)
 {
     Vector<AllocatorStats> stats;
-    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true);
+    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, detail);
     stats.reserve(snapshots.size());
     for (const NamedAllocatorStats& snapshot : snapshots) {
         stats.push_back(snapshot.stats);
@@ -299,7 +305,7 @@ Vector<AllocatorStats> MemoryManager::SnapshotAllocatorStats()
 
 std::string MemoryManager::DumpAllocatorStatsJson()
 {
-    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true);
+    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, AllocatorStatsDetail::Detailed);
 
     std::string out;
     out.reserve(128 + snapshots.size() * 320);
@@ -332,7 +338,7 @@ std::string MemoryManager::DumpAllocatorStatsJson()
 
 std::string MemoryManager::DumpAllocatorStatsText()
 {
-    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true);
+    const std::vector<NamedAllocatorStats> snapshots = SnapshotRegisteredAllocatorStats(true, AllocatorStatsDetail::Detailed);
 
     std::string out;
     out.reserve(snapshots.size() * 240);

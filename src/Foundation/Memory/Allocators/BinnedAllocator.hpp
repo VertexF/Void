@@ -30,6 +30,7 @@ public:
     [[nodiscard]] const char* Name() const override;
     [[nodiscard]] bool Owns(void* ptr) const override;
     [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     [[nodiscard]] void* GetBaseAddress() const noexcept { return m_baseAddress; }
     void RefillBin(Bin& bin, uint32 sizeClass);

@@ -324,6 +324,12 @@ bool BuddyAllocator::Owns(void* ptr) const
 AllocatorStats BuddyAllocator::GetStats() const
 {
     AllocatorStats stats = m_stats.Snapshot(Name());
+    return stats;
+}
+
+AllocatorStats BuddyAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
     Threading::SpinLockGuard guard(m_lock);
     stats.liveBytes = m_allocatedBytes;
     stats.reservedBytes = m_totalSize;

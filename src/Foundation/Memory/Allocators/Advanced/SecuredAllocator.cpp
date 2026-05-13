@@ -142,6 +142,12 @@ bool SecuredAllocator::Owns(void* ptr) const
 AllocatorStats SecuredAllocator::GetStats() const
 {
     AllocatorStats stats = m_stats.Snapshot(Name());
+    return stats;
+}
+
+AllocatorStats SecuredAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
     Threading::SpinLockGuard guard(m_lock);
     stats.liveBytes = m_allocatedTotal;
     for (const auto& entry : m_allocs) {

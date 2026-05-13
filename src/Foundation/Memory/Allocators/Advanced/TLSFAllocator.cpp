@@ -249,6 +249,12 @@ namespace Engine::Memory {
     AllocatorStats TLSFAllocator::GetStats() const
     {
         AllocatorStats stats = m_stats.Snapshot(Name());
+        return stats;
+    }
+
+    AllocatorStats TLSFAllocator::GetDetailedStats() const
+    {
+        AllocatorStats stats = GetStats();
         Threading::SpinLockGuard guard(m_lock);
         stats.liveBytes = m_allocatedBytes;
         stats.reservedBytes = m_poolSize;

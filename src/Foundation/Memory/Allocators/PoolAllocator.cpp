@@ -288,9 +288,15 @@ bool PoolAllocator::Owns(void* ptr) const
 AllocatorStats PoolAllocator::GetStats() const
 {
     AllocatorStats stats = m_stats.Snapshot(Name());
-    const size_t freeBlocks = GetFreeBlockCount();
     stats.liveBytes = AllocatedSize();
     stats.liveAllocationCount = GetAllocatedBlockCount();
+    return stats;
+}
+
+AllocatorStats PoolAllocator::GetDetailedStats() const
+{
+    AllocatorStats stats = GetStats();
+    const size_t freeBlocks = GetFreeBlockCount();
     stats.reservedBytes = m_blockSize * m_blockCount;
     stats.committedBytes = stats.reservedBytes;
     stats.freeBytes = freeBlocks * m_blockSize;

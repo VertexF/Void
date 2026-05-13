@@ -41,6 +41,7 @@ public:
     const char* Name() const override;
     bool Owns(void* ptr) const override;
     [[nodiscard]] AllocatorStats GetStats() const override;
+    [[nodiscard]] AllocatorStats GetDetailedStats() const override;
 
     // ========================================================================
     // TLSF Specific
