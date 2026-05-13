@@ -1,4 +1,5 @@
 #include <Foundation/Memory/TLSFAllocator.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Operations.hpp>
 
 #if defined(_MSC_VER)
@@ -74,7 +75,7 @@ namespace Engine::Memory {
     void* TLSFAllocator::Allocate(size_t size, size_t alignment)
     {
         if (size == 0) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "TLSFAllocator: zero-size allocation");
             return nullptr;
         }
         if (!IsPowerOfTwo(alignment)) {
@@ -84,7 +85,7 @@ namespace Engine::Memory {
             alignment = alignof(MaxAlignT);
         }
         if (alignment > kMinBlockSize) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::UnsupportedOperation, "TLSFAllocator: requested alignment exceeds block granularity");
             return nullptr;
         }
 
@@ -100,7 +101,7 @@ namespace Engine::Memory {
 
         Block* block = FindSuitableBlock(size, fl, sl);
         if (!block) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "TLSFAllocator: no suitable free block");
             return nullptr;
         }
 
@@ -154,7 +155,7 @@ namespace Engine::Memory {
         }
 
         if (!Owns(ptr)) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "TLSFAllocator: reallocate pointer is not live");
             return nullptr;
         }
 
@@ -176,7 +177,7 @@ namespace Engine::Memory {
             MemCopy(newPtr, ptr, oldSize);
             Free(ptr);
         } else {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "TLSFAllocator: reallocate allocation failed");
         }
         return newPtr;
     }
@@ -187,7 +188,7 @@ namespace Engine::Memory {
 
         Threading::SpinLockGuard guard(m_lock);
         if (!IsLiveBlock(ptr)) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "TLSFAllocator: invalid or double free");
             return;
         }
 

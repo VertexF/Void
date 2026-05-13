@@ -174,7 +174,11 @@ TEST(ArenaAllocators, PoolAllocatorReusesFixedBlocks)
     PoolAllocator allocator(128, 4, nullptr, 16);
     int stackValue = 0;
     EXPECT_FALSE(allocator.Owns(&stackValue));
+    const size_t failuresBeforeInvalidFree = allocator.GetStats().failedAllocationCount;
     allocator.Free(&stackValue);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresBeforeInvalidFree);
+    }
     EXPECT_EQ(allocator.Allocate(0, 16), nullptr);
     EXPECT_EQ(allocator.Reallocate(nullptr, 0, 16), nullptr);
 
@@ -203,7 +207,11 @@ TEST(ArenaAllocators, PoolAllocatorReusesFixedBlocks)
 
     allocator.Free(a);
     EXPECT_FALSE(allocator.Owns(a));
+    const size_t failuresBeforeDoubleFree = allocator.GetStats().failedAllocationCount;
     allocator.Free(a);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresBeforeDoubleFree);
+    }
     allocator.Free(b);
     EXPECT_EQ(allocator.GetAllocatedBlockCount(), 0u);
 

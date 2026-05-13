@@ -1,4 +1,5 @@
 #include <Foundation/Memory/Operations.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Allocators/Advanced/TLSCachingAllocator.hpp>
 #include <Foundation/Memory/Allocator.hpp>
 #include <Foundation/Memory/Alignment.hpp>
@@ -82,7 +83,7 @@ void TLSCachingAllocator::FlushCacheInternal(ThreadLocalCache& cache)
 void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
 {
     if (size == 0) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "TLSCachingAllocator: zero-size allocation");
         return nullptr;
     }
 
@@ -121,7 +122,7 @@ void* TLSCachingAllocator::Allocate(size_t size, size_t alignment)
     const size_t totalSize = size + kHeaderSize + alignment - 1;
     void* raw = m_backingAllocator->Allocate(totalSize, alignof(MaxAlignT));
     if (!raw) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "TLSCachingAllocator: backing allocation failed");
         return nullptr;
     }
 
@@ -152,14 +153,14 @@ void* TLSCachingAllocator::Reallocate(void* ptr, size_t newSize, size_t alignmen
 
 #if !defined(NDEBUG)
     if (!Owns(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "TLSCachingAllocator: reallocate pointer is not live");
         return nullptr;
     }
 #endif
 
     auto* header = HeaderFromUserPointer(ptr);
     if (header->magic != kTLSMagic) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "TLSCachingAllocator: reallocate header is not live");
         return nullptr;
     }
     size_t oldSize = header->size;
@@ -175,7 +176,7 @@ void* TLSCachingAllocator::Reallocate(void* ptr, size_t newSize, size_t alignmen
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
     } else {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "TLSCachingAllocator: reallocate allocation failed");
     }
     return newPtr;
 }
@@ -188,7 +189,7 @@ void TLSCachingAllocator::Free(void* ptr)
 
 #if !defined(NDEBUG)
     if (!UnregisterLiveAllocation(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "TLSCachingAllocator: invalid or double free");
         return;
     }
 #endif
@@ -196,7 +197,7 @@ void TLSCachingAllocator::Free(void* ptr)
     // Read header to get size
     auto* header = HeaderFromUserPointer(ptr);
     if (header->magic != kTLSMagic) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "TLSCachingAllocator: free header is not live");
         return;
     }
     size_t size = header->size;

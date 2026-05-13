@@ -1,4 +1,5 @@
 #include <Foundation/Memory/Operations.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Debug/DebugAllocator.hpp>
 #include <Foundation/Memory/Debug/LeakDetector.hpp>
 #include <Foundation/Memory/Debug/MemoryProfiler.hpp>
@@ -7,8 +8,6 @@
 #include <Foundation/Memory/Alignment.hpp>
 #include <Utility/Assert.hpp>
 #include <Foundation/Threading/Atomic.hpp>
-
-#include <cstdio>
 
 namespace Engine::Memory {
 
@@ -45,7 +44,7 @@ DebugAllocator::DebugAllocator(IAllocator* backingAllocator,
 void* DebugAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_backingAllocator || size == 0) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "DebugAllocator: invalid allocation request");
         return nullptr;
     }
 
@@ -65,7 +64,7 @@ void* DebugAllocator::Allocate(size_t size, size_t alignment)
         raw = m_backingAllocator->Allocate(totalSize, alignof(MaxAlignT));
     }
     if (!raw) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "DebugAllocator: backing allocation failed");
         return nullptr;
     }
 
@@ -112,7 +111,7 @@ void* DebugAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "DebugAllocator: reallocate pointer is not live");
         return nullptr;
     }
 
@@ -132,7 +131,7 @@ void* DebugAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
     } else {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "DebugAllocator: reallocate allocation failed");
     }
     return newPtr;
 }
@@ -147,7 +146,7 @@ void DebugAllocator::Free(void* ptr)
         Threading::SpinLockGuard guard(m_liveLock);
         const auto it = m_liveAllocations.find(ptr);
         if (it == m_liveAllocations.end()) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "DebugAllocator: invalid or double free");
             return;
         }
         m_liveAllocations.erase(it);
@@ -164,8 +163,7 @@ void DebugAllocator::Free(void* ptr)
     // Check pre-guard
     for (size_t i = 0; i < kGuardSize; ++i) {
         if (static_cast<uint8>((aligned - kGuardSize)[i]) != kPreGuardPattern) {
-            ENGINE_ASSERT_MSG(false, "Memory corruption detected: Pre-guard overwritten!");
-            fprintf(stderr, "[MAL] Memory corruption detected: Pre-guard overwritten at %p\n", ptr);
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "DebugAllocator: pre-guard overwritten");
             break;
         }
     }
@@ -173,8 +171,7 @@ void DebugAllocator::Free(void* ptr)
     // Check post-guard
     for (size_t i = 0; i < kGuardSize; ++i) {
         if (static_cast<uint8>((aligned + size)[i]) != kPostGuardPattern) {
-            ENGINE_ASSERT_MSG(false, "Memory corruption detected: Post-guard overwritten!");
-            fprintf(stderr, "[MAL] Memory corruption detected: Post-guard overwritten at %p\n", ptr);
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "DebugAllocator: post-guard overwritten");
             break;
         }
     }

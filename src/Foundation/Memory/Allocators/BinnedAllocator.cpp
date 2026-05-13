@@ -1,4 +1,5 @@
 #include <Foundation/Memory/Allocators/BinnedAllocator.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Binned/CoreHeap.hpp>
 #include <Foundation/Memory/Alignment.hpp>
 #include <Foundation/Memory/MemoryManager.hpp>
@@ -40,7 +41,7 @@ BinnedAllocator::~BinnedAllocator()
 void* BinnedAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_backingAllocator || size == 0) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "BinnedAllocator: invalid allocation request");
         return nullptr;
     }
 
@@ -77,7 +78,7 @@ void* BinnedAllocator::AllocateSmall(size_t size, size_t alignment)
     if (!page) {
         page = AllocatePage(sizeClass, blockSize);
         if (!page) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BinnedAllocator: page allocation failed");
             return nullptr;
         }
         page->next = m_pages[sizeClass];
@@ -86,7 +87,7 @@ void* BinnedAllocator::AllocateSmall(size_t size, size_t alignment)
 
     void* block = page->bin.Allocate();
     if (!block) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BinnedAllocator: bin allocation failed");
         return nullptr;
     }
 
@@ -111,7 +112,7 @@ void* BinnedAllocator::AllocateLarge(size_t size, size_t alignment)
     const size_t requiredSize = RequiredBlockSize(size, alignment);
     void* raw = m_backingAllocator->Allocate(requiredSize, alignof(MaxAlignT));
     if (!raw) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BinnedAllocator: large allocation failed");
         return nullptr;
     }
 
@@ -147,7 +148,7 @@ void* BinnedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "BinnedAllocator: reallocate pointer is not live");
         return nullptr;
     }
 
@@ -172,7 +173,7 @@ void* BinnedAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         MemCopy(newPtr, ptr, oldSize < newSize ? oldSize : newSize);
         Free(ptr);
     } else {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BinnedAllocator: reallocate allocation failed");
     }
     return newPtr;
 }
@@ -190,14 +191,14 @@ void BinnedAllocator::Free(void* ptr)
         Threading::SpinLockGuard guard(m_lock);
         AllocationHeader* header = HeaderFromPointer(ptr);
         if (!header || header->magic != kMagic) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "BinnedAllocator: invalid free pointer");
             return;
         }
 
         const auto largeIt = m_largeAllocations.find(ptr);
         if (largeIt != m_largeAllocations.end()) {
             if ((header->flags & kLargeAllocationFlag) == 0) {
-                m_stats.RecordFailedAllocation();
+                ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "BinnedAllocator: large allocation header corrupted");
                 return;
             }
             m_largeAllocations.erase(largeIt);
@@ -207,7 +208,7 @@ void BinnedAllocator::Free(void* ptr)
         } else {
             Page* page = FindPageContainingPointer(ptr);
             if (!page || header->page != page || !IsPointerInPageBlock(*page, ptr, *header)) {
-                m_stats.RecordFailedAllocation();
+                ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "BinnedAllocator: invalid small allocation pointer");
                 return;
             }
             size = header->requestedSize;

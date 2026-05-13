@@ -1,4 +1,5 @@
 #include <Foundation/Memory/Allocator.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Allocators/MallocAllocator.hpp>
 #include <Foundation/Memory/Debug/DebugAllocator.hpp>
 #include <Foundation/Memory/Debug/MemoryProfiler.hpp>
@@ -138,6 +139,15 @@ TEST(MemoryAllocator, TypedArraySupportsOverAlignedElements)
 
     DeleteArray(GetDefaultAllocator(), values);
     EXPECT_EQ(OverAlignedObject::Destroyed, 3);
+}
+
+TEST(AllocatorDiagnostics, ClassifiesStrictFailureKinds)
+{
+    EXPECT_FALSE(IsStrictAllocatorFailure(AllocatorFailureKind::InvalidRequest));
+    EXPECT_FALSE(IsStrictAllocatorFailure(AllocatorFailureKind::OutOfMemory));
+    EXPECT_TRUE(IsStrictAllocatorFailure(AllocatorFailureKind::InvalidPointer));
+    EXPECT_TRUE(IsStrictAllocatorFailure(AllocatorFailureKind::DoubleFree));
+    EXPECT_TRUE(IsStrictAllocatorFailure(AllocatorFailureKind::Corruption));
 }
 
 TEST(MemoryManager, DebugAllocatorReportsBudgetPressureBeforeAllocation)

@@ -1,4 +1,5 @@
 #include <Foundation/Memory/Operations.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Allocators/Advanced/SecuredAllocator.hpp>
 #include <Foundation/Memory/Alignment.hpp>
 
@@ -34,7 +35,7 @@ SecuredAllocator::~SecuredAllocator()
 void* SecuredAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_vm || size == 0) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "SecuredAllocator: invalid allocation request");
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -47,13 +48,13 @@ void* SecuredAllocator::Allocate(size_t size, size_t alignment)
     const size_t pageSize = m_vm->PageSize();
     const size_t alignmentPadding = alignment - 1;
     if (size > (std::numeric_limits<size_t>::max)() - alignmentPadding) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "SecuredAllocator: allocation size overflow");
         return nullptr;
     }
 
     const size_t committedSize = RoundUpToPage(size + alignmentPadding, pageSize);
     if (committedSize > (std::numeric_limits<size_t>::max)() - (pageSize * 2)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "SecuredAllocator: guarded allocation size overflow");
         return nullptr;
     }
 
@@ -61,14 +62,14 @@ void* SecuredAllocator::Allocate(size_t size, size_t alignment)
     const size_t totalSize = committedSize + (pageSize * 2);
     void* base = m_vm->Reserve(totalSize);
     if (!base) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "SecuredAllocator: virtual reserve failed");
         return nullptr;
     }
 
     void* committedAddress = static_cast<uint8*>(base) + pageSize;
     if (!m_vm->Commit(committedAddress, committedSize)) {
         m_vm->Release(base);
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "SecuredAllocator: virtual commit failed");
         return nullptr;
     }
 
@@ -108,7 +109,7 @@ void* SecuredAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         Threading::SpinLockGuard guard(m_lock);
         const auto it = m_allocs.find(ptr);
         if (it == m_allocs.end()) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "SecuredAllocator: reallocate pointer is not live");
             return nullptr;
         }
         oldSize = it->second.userSize;
@@ -121,7 +122,7 @@ void* SecuredAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
     } else {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "SecuredAllocator: reallocate allocation failed");
     }
     return newPtr;
 }

@@ -29,14 +29,22 @@ TEST(MallocAllocator, RejectsInvalidFreeDoubleFreeAndInvalidReallocate)
     MallocAllocator allocator;
     int stackValue = 0;
 
+    const size_t initialFailures = allocator.GetStats().failedAllocationCount;
     allocator.Free(&stackValue);
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
     EXPECT_EQ(allocator.Reallocate(&stackValue, 128, 16), nullptr);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, initialFailures);
+    }
 
     void* ptr = allocator.Allocate(48, 16);
     ASSERT_NE(ptr, nullptr);
     allocator.Free(ptr);
+    const size_t failuresAfterValidFree = allocator.GetStats().failedAllocationCount;
     allocator.Free(ptr);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresAfterValidFree);
+    }
 
     EXPECT_EQ(allocator.AllocatedSize(), 0u);
 }

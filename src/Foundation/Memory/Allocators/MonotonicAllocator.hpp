@@ -8,6 +8,7 @@
 //   - Any scope where you allocate many, free all at once
 
 #include <Foundation/Memory/Allocator.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Alignment.hpp>
 #include <Foundation/Platform.hpp>
 #include <Foundation/Memory/Operations.hpp>
@@ -73,7 +74,7 @@ public:
 
         const usize required = RequiredBytes(size, alignment);
         if (required == 0) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "MonotonicAllocator: allocation size overflow");
             return nullptr;
         }
 
@@ -82,7 +83,7 @@ public:
 
         void* ptr = TryAllocateFromCurrent(size, alignment);
         if (!ptr) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "MonotonicAllocator: allocation failed after block growth");
         }
         return ptr;
     }
@@ -107,13 +108,13 @@ public:
             return nullptr;
         }
         if (!Owns(ptr)) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "MonotonicAllocator: reallocate pointer is not live");
             return nullptr;
         }
 
         auto* header = reinterpret_cast<AllocationRecord*>(static_cast<uint8*>(ptr) - sizeof(AllocationRecord));
         if (header->magic != kAllocationMagic || header->generation != m_generation) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "MonotonicAllocator: allocation record is not live");
             return nullptr;
         }
 
@@ -127,7 +128,7 @@ public:
 
         void* newPtr = Allocate(newSize, alignment);
         if (!newPtr) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "MonotonicAllocator: reallocate allocation failed");
             return nullptr;
         }
 
@@ -271,7 +272,7 @@ private:
         void* raw = m_upstream.Allocate(totalSize, alignof(Block));
         ENGINE_ASSERT_MSG(raw != nullptr, "MonotonicAllocator: upstream allocation failed");
         if (!raw) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "MonotonicAllocator: upstream block allocation failed");
             return;
         }
 

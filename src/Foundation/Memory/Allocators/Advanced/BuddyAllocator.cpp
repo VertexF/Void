@@ -5,6 +5,7 @@
 // ============================================================================
 
 #include <Foundation/Memory/Operations.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Allocators/Advanced/BuddyAllocator.hpp>
 #include <Foundation/Memory/MemoryTagScope.hpp>
 #include <Foundation/Memory/Alignment.hpp>
@@ -129,7 +130,7 @@ BuddyAllocator& BuddyAllocator::operator=(BuddyAllocator&& other) noexcept
 void* BuddyAllocator::Allocate(size_t size, size_t alignment)
 {
     if (!m_buffer || size == 0) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "BuddyAllocator: invalid allocation request");
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -141,17 +142,17 @@ void* BuddyAllocator::Allocate(size_t size, size_t alignment)
 
     const size_t headerSize = sizeof(Header);
     if (size > m_totalSize) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BuddyAllocator: requested size exceeds arena");
         return nullptr;
     }
     const size_t maxExtra = headerSize + alignment;
     if (size > (std::numeric_limits<size_t>::max)() - maxExtra) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "BuddyAllocator: allocation size overflow");
         return nullptr;
     }
     const size_t requiredSize = size + maxExtra;
     if (requiredSize > m_totalSize) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BuddyAllocator: required size exceeds arena");
         return nullptr;
     }
     size_t order = OrderForSize(requiredSize);
@@ -159,7 +160,7 @@ void* BuddyAllocator::Allocate(size_t size, size_t alignment)
     Threading::SpinLockGuard guard(m_lock);
 
     if (order >= m_levels) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BuddyAllocator: allocation order unavailable");
         return nullptr;
     }
 
@@ -168,7 +169,7 @@ void* BuddyAllocator::Allocate(size_t size, size_t alignment)
         ++currentOrder;
     }
     if (currentOrder >= m_levels) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BuddyAllocator: no suitable free block");
         return nullptr;
     }
 
@@ -212,7 +213,7 @@ void* BuddyAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "BuddyAllocator: reallocate pointer is not live");
         return nullptr;
     }
 
@@ -252,7 +253,7 @@ void* BuddyAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         MemCopy(newPtr, ptr, copySize);
         Free(ptr);
     } else {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "BuddyAllocator: reallocate allocation failed");
     }
     return newPtr;
 }
@@ -265,7 +266,7 @@ void BuddyAllocator::Free(void* ptr)
 
     Threading::SpinLockGuard guard(m_lock);
     if (!IsLiveAllocation(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "BuddyAllocator: invalid or double free");
         return;
     }
 

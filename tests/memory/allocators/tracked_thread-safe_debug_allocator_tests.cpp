@@ -230,6 +230,17 @@ TEST(DebugAllocator, ReportsGuardOverwritesWithoutFreeingAllocation)
     auto* bytes = static_cast<uint8*>(ptr);
     bytes[24] = 0x41u;
     EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::PostGuardCorrupt);
+    const size_t failuresBeforePostGuardFree = allocator.GetStats().failedAllocationCount;
+    allocator.Free(ptr);
+    if constexpr (kAllocatorDetailedStatsEnabled) {
+        EXPECT_GT(allocator.GetStats().failedAllocationCount, failuresBeforePostGuardFree);
+    }
+    EXPECT_EQ(allocator.AllocatedSize(), 0u);
+    EXPECT_EQ(backing.AllocatedSize(), 0u);
+
+    ptr = allocator.Allocate(24, 16);
+    ASSERT_NE(ptr, nullptr);
+    bytes = static_cast<uint8*>(ptr);
     bytes[24] = 0xBBu;
     EXPECT_EQ(allocator.ValidateAllocation(ptr), DebugAllocator::AllocationValidation::Valid);
 

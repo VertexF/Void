@@ -9,6 +9,7 @@
 // ============================================================================
 
 #include <Foundation/Memory/Allocator.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Alignment.hpp>
 #include <Foundation/Platform.hpp>
 
@@ -48,7 +49,7 @@ public:
 
     [[nodiscard]] void* Allocate(size_t size, size_t alignment = alignof(max_align_t)) override {
         if (size == 0) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "AlignedAllocator: zero-size allocation");
             return nullptr;
         }
         if (!IsPowerOfTwo(m_minAlignment)) {
@@ -64,7 +65,7 @@ public:
 
         constexpr size_t headerSize = sizeof(Detail::AlignedAllocationHeader);
         if (size > (std::numeric_limits<size_t>::max)() - headerSize - alignment) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "AlignedAllocator: allocation size overflow");
             return nullptr;
         }
 
@@ -84,7 +85,7 @@ public:
         }
 
         if (!raw) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "AlignedAllocator: allocation failed");
             return nullptr;
         }
 
@@ -112,7 +113,7 @@ public:
             Threading::SpinLockGuard guard(m_lock);
             const auto it = m_liveAllocations.find(ptr);
             if (it == m_liveAllocations.end()) {
-                m_stats.RecordFailedAllocation();
+                ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "AlignedAllocator: invalid or double free");
                 return;
             }
             m_liveAllocations.erase(it);
@@ -122,7 +123,7 @@ public:
         auto* aligned = static_cast<uint8*>(ptr);
         auto* header = reinterpret_cast<Detail::AlignedAllocationHeader*>(aligned - sizeof(Detail::AlignedAllocationHeader));
         if (header->magic != Detail::kAlignedAllocationMagic) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "AlignedAllocator: allocation header corrupted");
             return;
         }
         const size_t size = header->size;

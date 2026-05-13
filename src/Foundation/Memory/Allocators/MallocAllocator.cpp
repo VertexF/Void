@@ -1,4 +1,5 @@
 #include <Foundation/Memory/Operations.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Allocators/MallocAllocator.hpp>
 #include <Foundation/Memory/Alignment.hpp>
 #include <Foundation/Memory/MemoryManager.hpp>
@@ -15,7 +16,7 @@ constexpr size_t kMallocMagic = 0x4D414C43u; // MALC
 void* MallocAllocator::Allocate(size_t size, size_t alignment)
 {
     if (size == 0) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "MallocAllocator: zero-size allocation");
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
@@ -27,7 +28,7 @@ void* MallocAllocator::Allocate(size_t size, size_t alignment)
 
     void* raw = malloc(totalSize);
     if (!raw) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "MallocAllocator: allocation failed");
         return nullptr;
     }
 
@@ -70,7 +71,7 @@ void* MallocAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 #if !defined(NDEBUG)
     if (!Owns(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "MallocAllocator: reallocate pointer is not live");
         return nullptr;
     }
 #endif
@@ -90,7 +91,7 @@ void* MallocAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
         Free(ptr);
     }
     if (!newPtr) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "MallocAllocator: reallocate allocation failed");
     }
     return newPtr;
 }
@@ -107,6 +108,7 @@ void MallocAllocator::Free(void* ptr)
         Threading::SpinLockGuard guard(m_liveLock);
         const auto it = m_liveAllocations.find(ptr);
         if (it == m_liveAllocations.end()) {
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "MallocAllocator: invalid or double free");
             return;
         }
         m_liveAllocations.erase(it);
@@ -116,7 +118,7 @@ void MallocAllocator::Free(void* ptr)
     byte* aligned = static_cast<byte*>(ptr);
     auto* header = reinterpret_cast<AllocationHeader*>(aligned - sizeof(AllocationHeader));
     if (header->padding != kMallocMagic) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::Corruption, "MallocAllocator: allocation header corrupted");
         return;
     }
     size_t size = header->size;

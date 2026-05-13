@@ -1,4 +1,5 @@
 #include <Foundation/Memory/Operations.hpp>
+#include <Foundation/Memory/AllocatorDiagnostics.hpp>
 #include <Foundation/Memory/Allocators/PoolAllocator.hpp>
 #include <Foundation/Memory/Allocator.hpp>
 #include <Foundation/Memory/MemoryTagScope.hpp>
@@ -134,14 +135,14 @@ PoolAllocator& PoolAllocator::operator=(PoolAllocator&& other) noexcept
 void* PoolAllocator::Allocate(size_t size, size_t alignment)
 {
     if (size == 0 || size > m_blockSize) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "PoolAllocator: invalid allocation size");
         return nullptr;
     }
     if (!IsPowerOfTwo(alignment)) {
         alignment = m_blockAlignment;
     }
     if (alignment > m_blockAlignment) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidRequest, "PoolAllocator: unsupported alignment");
         return nullptr;
     }
 
@@ -149,7 +150,7 @@ void* PoolAllocator::Allocate(size_t size, size_t alignment)
 
     FreeBlock* block = m_freeList.Load(MemoryOrder::Relaxed);
     if (!block) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::OutOfMemory, "PoolAllocator: pool exhausted");
         return nullptr;
     }
 
@@ -181,7 +182,7 @@ void* PoolAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     }
 
     if (!Owns(ptr)) {
-        m_stats.RecordFailedAllocation();
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "PoolAllocator: reallocate pointer is not live");
         return nullptr;
     }
 
@@ -197,7 +198,7 @@ void* PoolAllocator::Reallocate(void* ptr, size_t newSize, size_t alignment)
     // Resizing beyond block size is not supported by PoolAllocator.
     // We could potentially allocate a new block and copy, but usually 
     // pool users expect fixed size. If we return nullptr, user handles it.
-    m_stats.RecordFailedAllocation();
+    ReportAllocatorFailure(m_stats, AllocatorFailureKind::UnsupportedOperation, "PoolAllocator: resize exceeds fixed block size");
     return nullptr;
 }
 
@@ -212,11 +213,13 @@ void PoolAllocator::Free(void* ptr)
     const auto* end = start + (m_blockSize * m_blockCount);
     const auto* p = static_cast<const uint8*>(ptr);
     if (!m_buffer || p < start || p >= end) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "PoolAllocator: free pointer outside pool");
         return;
     }
 
     const size_t offset = static_cast<size_t>(p - start);
     if ((offset % m_blockSize) != 0) {
+        ReportAllocatorFailure(m_stats, AllocatorFailureKind::InvalidPointer, "PoolAllocator: free pointer is not a block start");
         return;
     }
 
@@ -225,7 +228,7 @@ void PoolAllocator::Free(void* ptr)
         const size_t byteIndex = index / 8;
         const uint8 mask = static_cast<uint8>(1u << (index % 8));
         if ((m_allocatedBitmap[byteIndex] & mask) == 0) {
-            m_stats.RecordFailedAllocation();
+            ReportAllocatorFailure(m_stats, AllocatorFailureKind::DoubleFree, "PoolAllocator: invalid or double free");
             return;
         }
     }
