@@ -2,6 +2,7 @@
 #define GPU_RESOURCE_HDR
 
 #include "Foundation/Platform.hpp"
+#include "Foundation/Array.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -205,6 +206,9 @@ struct BufferCreation
 
 struct TextureCreation 
 {
+    ~TextureCreation();
+
+    Array<uint8_t*> images;
     void* initialData = nullptr;
     uint32_t layerCount = 1;
     uint16_t width = 1;
@@ -225,6 +229,7 @@ struct TextureCreation
     TextureCreation& setFormatType(VkFormat newFormat, VkImageType newImageType, VkImageViewType newImageViewType);
     TextureCreation& setName(const char* inName);
     TextureCreation& setData(void* data);
+    TextureCreation& setImages(const Array<uint8_t*>& inImages, uint32_t imageCount);
 };
 
 struct SamplerCreation 

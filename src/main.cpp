@@ -15,6 +15,8 @@
 #include "cglm/struct/cam.h"
 
 #include "vender/imgui/imgui.h"
+#define MA_NO_DEVICE_IO
+#include "vender/miniaudio.c"
 //#include "vender/tracy/tracy/Tracy.hpp"
 
 #include "Foundation/File.hpp"
@@ -126,13 +128,12 @@ namespace
 
         //Create the single texture.
         TextureCreation creation{};
-        creation.setData(skyboxImageArray.data)
-            .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
+        creation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
             .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
             .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(width), 1)
+            .setImages(skyboxImageArray, skyboxImageArray.size)
             .setName(name);
-        creation.layerCount = 6;
-        TextureHandle newTexture = gpu.createTextureTEMP(creation, skyboxImageArray);
+        TextureHandle newTexture = gpu.createTexture(creation);
 
         return newTexture;
     }
@@ -143,6 +144,14 @@ int main(int argc, char** argv)
     //Init services
     MemoryService::instance()->init(/*heapSize=*/ void_giga(1ull), /*stackSize=*/ void_mega(8), /*physicsStackSiz=*/ void_mega(40));
     timeServiceInit();
+
+    //ma_result result;
+    //ma_engine engine;
+
+    //result = ma_engine_init(NULL, &engine);
+    //if (result != MA_SUCCESS) {
+    //    return -1;
+    //}
 
     HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
     StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;

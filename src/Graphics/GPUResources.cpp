@@ -78,6 +78,14 @@ BufferCreation& BufferCreation::setName(const char* inName)
     return *this;
 }
 
+TextureCreation::~TextureCreation() 
+{
+    if (images.size > 0) 
+    {
+        images.shutdown();
+    }
+}
+
 TextureCreation& TextureCreation::setSize(uint16_t newWidth, uint16_t newHeight, uint16_t newDepth)
 {
     width = newWidth;
@@ -113,6 +121,14 @@ TextureCreation& TextureCreation::setName(const char* inName)
 TextureCreation& TextureCreation::setData(void* data) 
 {
     initialData = data;
+    return *this;
+}
+
+TextureCreation& TextureCreation::setImages(const Array<uint8_t*>& inImages, uint32_t imageCount)
+{
+    images.init(&MemoryService::instance()->systemAllocator, imageCount, imageCount);
+    images.copyArray(inImages);
+    layerCount = imageCount;
     return *this;
 }
 

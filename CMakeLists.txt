@@ -227,6 +227,9 @@ add_library(External STATIC
     vender/meshoptimizer/src/vertexcodec.cpp
     vender/meshoptimizer/src/vertexfilter.cpp
     vender/meshoptimizer/src/vfetchoptimizer.cpp
+
+	vender/miniaudio.h
+	vender/miniaudio.c
 )
 
 set_target_properties(External PROPERTIES SYSTEM ON)

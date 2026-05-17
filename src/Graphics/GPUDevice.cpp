@@ -663,7 +663,6 @@ void GPUDevice::init(const DeviceCreation& creation)
     vprint("GPU Device init.\n");
     allocator = creation.allocator;
     tempAllocator = creation.tempAllocator;
-    stringBuffer.init(1024 * 1024, creation.allocator);
 
     VkResult result;
     vulkanAllocationCallbacks = nullptr;
@@ -1229,8 +1228,6 @@ void GPUDevice::shutdown()
     vkDestroyDevice(vulkanDevice, vulkanAllocationCallbacks);
     vkDestroyInstance(vulkanInstance, vulkanAllocationCallbacks);
 
-    stringBuffer.shutdown();
-
     vprint("GPU Device Shutdown.\n");
 }
 
@@ -1322,7 +1319,7 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
     return handle;
 }
 
-TextureHandle GPUDevice::createTextureTEMP(const TextureCreation& creation, const Array<uint8_t*>& images)
+TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
 {
     uint32_t resourceIndex = textures.obtainResource();
     TextureHandle handle = { resourceIndex };
@@ -1336,7 +1333,7 @@ TextureHandle GPUDevice::createTextureTEMP(const TextureCreation& creation, cons
     vulkanCreateTexture(*this, creation, handle, texture);
 
     //Copy buffer data if present
-    if (creation.initialData)
+    if (creation.initialData || creation.images.capacity >= 1)
     {
         //Create stating buffer
         VkBufferCreateInfo bufferInfo{};
@@ -1356,10 +1353,17 @@ TextureHandle GPUDevice::createTextureTEMP(const TextureCreation& creation, cons
         VkBuffer stagingBuffer;
         check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &stagingBuffer, &stagingAllocation, &allocationInfo));
 
-        for(uint32_t i = 0; i < creation.layerCount; ++i)
+        if (creation.images.capacity >= 1)
         {
-            //Copy buffer data
-            vmaCopyMemoryToAllocation(VMAAllocator, images[i], stagingAllocation, imageSize * i, imageSize);
+            for (uint32_t i = 0; i < creation.layerCount; ++i)
+            {
+                //Copy buffer data
+                vmaCopyMemoryToAllocation(VMAAllocator, creation.images[i], stagingAllocation, imageSize * i, imageSize);
+            }
+        }
+        else
+        {
+            vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, stagingAllocation, 0, totalBufferSize);
         }
         //Execute command buffer
         VkCommandBufferBeginInfo beginInfo{};
@@ -1442,96 +1446,6 @@ TextureHandle GPUDevice::createTextureTEMP(const TextureCreation& creation, cons
 
         vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierImageDependencyInfo);
 
-        vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
-
-        //Submit command buffer
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
-
-        vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(vulkanQueue);
-
-        //for (uint32_t i = 0; i < 6; ++i)
-        //{
-            vmaDestroyBuffer(VMAAllocator, stagingBuffer, stagingAllocation);
-            //vmaDestroyBuffer(VMAAllocator, stagingBuffer[1], stagingAllocation);
-        //}
-        //TODO: Maybe I need to free the command buffer.
-        vkResetCommandBuffer(commandBuffer->vkCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-    }
-
-    return handle;
-}
-
-TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
-{
-    uint32_t resourceIndex = textures.obtainResource();
-    TextureHandle handle = { resourceIndex };
-    if (resourceIndex == INVALID_INDEX)
-    {
-        return handle;
-    }
-
-    Texture* texture = accessTexture(handle);
-
-    vulkanCreateTexture(*this, creation, handle, texture);
-
-    //Copy buffer data if present
-    if (creation.initialData)
-    {
-        //Create stating buffer
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-
-        //uint32_t imageSize = (creation.width * creation.height * 4) * creation.layerCount;
-        uint32_t imageSize = (creation.width * creation.height * 4);
-        bufferInfo.size = imageSize;
-
-        VmaAllocationCreateInfo memoryInfo{};
-        memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-        memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
-
-        VmaAllocationInfo allocationInfo{};
-        VkBuffer stagingBuffer;
-        VmaAllocation stagingAllocation;
-        check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &stagingBuffer, &stagingAllocation, &allocationInfo));
-
-        //Copy buffer data
-        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, stagingAllocation, 0, imageSize);
-
-        //Execute command buffer
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-        CommandBuffer* commandBuffer = getInstantCommandBuffer();
-        vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
-
-        VkBufferImageCopy region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;//creation.layerCount;
-
-        region.imageOffset = { 0, 0, 0 };
-        region.imageExtent = { creation.width, creation.height, creation.depth };
-
-        //Transition
-        transitionImageLayout(commandBuffer->vkCommandBuffer, texture->vkImage, texture->vkFormat,
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, false);
-        //Copy
-        vkCmdCopyBufferToImage(commandBuffer->vkCommandBuffer, stagingBuffer, texture->vkImage,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-        //Trasition
-        transitionImageLayout(commandBuffer->vkCommandBuffer, texture->vkImage, texture->vkFormat,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, false);
         vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
 
         //Submit command buffer

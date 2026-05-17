@@ -31,8 +31,6 @@ struct CommandBuffer
     void dispatch(uint32_t groupX, uint32_t groupY, uint32_t groupZ);
     void dispatchIndirect(BufferHandle handle, uint32_t offset);
 
-    void barrier(const ExecutionBarrier& barrier);
-
     void fillBuffer(BufferHandle buffer, uint32_t offset, uint32_t size, uint32_t data);
 
     void pushMarker(const char* name);
