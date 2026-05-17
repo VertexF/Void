@@ -23,7 +23,7 @@ Window* Window::instance()
 
 void Window::init(uint32_t inWidth, uint32_t inHeight, const char* title)
 {
-    if (SDL_Init(SDL_INIT_VIDEO) == false)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) == false)
     {
         VOID_ASSERTM(false, "SDL Init error : %s\n", SDL_GetError());
         return;

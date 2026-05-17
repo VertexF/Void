@@ -259,7 +259,7 @@ struct GPUDevice
     //Per frame synchronisation
     Array<VkSemaphore> imageAvailableSemaphore;
     Array<VkSemaphore> renderFinishSemaphore;
-    Array<VkFence> framesInFlight;
+    Array<VkFence> fences;
 
     TextureHandle depthTexture;
 
@@ -269,6 +269,7 @@ struct GPUDevice
     VkPresentModeKHR vulkanPresentMode;
     VkSwapchainKHR vulkanSwapchain;
     uint32_t swapchainImageCount;
+    const uint32_t framesInFlight = 3;
 
     VkDebugReportCallbackEXT vulkanDebugCallback;
     VkDebugUtilsMessengerEXT vulkanDebugUtilsMessenger;

@@ -1029,17 +1029,15 @@ vprint("Instance created.\n");
     fenceInfo.pNext = nullptr;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    imageAvailableSemaphore.init(allocator, swapchainImageCount, swapchainImageCount);
-    renderFinishSemaphore.init(allocator, swapchainImageCount, swapchainImageCount);
-    framesInFlight.init(allocator, swapchainImageCount, swapchainImageCount);
+    imageAvailableSemaphore.init(allocator, framesInFlight, framesInFlight);
+    fences.init(allocator, framesInFlight, framesInFlight);
 
     vprint("Semaphores created.\n");
-    for (uint32_t i = 0; i < swapchainImageCount; ++i)
+    for (uint32_t i = 0; i < framesInFlight; ++i)
     {
         vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &imageAvailableSemaphore[i]);
-        vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &renderFinishSemaphore[i]);
 
-        vkCreateFence(vulkanDevice, &fenceInfo, vulkanAllocationCallbacks, &framesInFlight[i]);
+        vkCreateFence(vulkanDevice, &fenceInfo, vulkanAllocationCallbacks, &fences[i]);
     }
 
     gpuTimestampManager = reinterpret_cast<GPUTimestampManager*>(memory);
@@ -1128,16 +1126,14 @@ void GPUDevice::shutdown()
     vkDeviceWaitIdle(vulkanDevice);
     commandBufferRing.shutdown();
 
-    for (uint32_t i = 0; i < swapchainImageCount; ++i)
+    for (uint32_t i = 0; i < framesInFlight; ++i)
     {
         vkDestroySemaphore(vulkanDevice, imageAvailableSemaphore[i], vulkanAllocationCallbacks);
-        vkDestroySemaphore(vulkanDevice, renderFinishSemaphore[i], vulkanAllocationCallbacks);
-        vkDestroyFence(vulkanDevice, framesInFlight[i], vulkanAllocationCallbacks);
+        vkDestroyFence(vulkanDevice, fences[i], vulkanAllocationCallbacks);
     }
 
-    renderFinishSemaphore.shutdown();
     imageAvailableSemaphore.shutdown();
-    framesInFlight.shutdown();
+    fences.shutdown();
 
     gpuTimestampManager->shutdown();
     //Add pending bindless textures to delete.
@@ -1200,6 +1196,7 @@ void GPUDevice::shutdown()
 
     //Destroy swapchain
     destroySwapchain();
+    renderFinishSemaphore.shutdown();
     vkDestroySurfaceKHR(vulkanInstance, vulkanWindowSurface, vulkanAllocationCallbacks);
 
     vmaDestroyAllocator(VMAAllocator);
@@ -2293,7 +2290,7 @@ void GPUDevice::setPresentMode(VkPresentModeKHR mode)
 void GPUDevice::frameCountersAdvanced()
 {
     previousFrame = currentFrame;
-    currentFrame = (currentFrame + 1) % swapchainImageCount;
+    currentFrame = (currentFrame + 1) % framesInFlight;
 
     ++absoluteFrame;
 }
@@ -2332,7 +2329,6 @@ void GPUDevice::createSwapchain()
 {
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkanPhysicalDevice, vulkanWindowSurface, &surfaceCapabilities);
-
     swapchainImageCount = surfaceCapabilities.minImageCount + 1;
 
     if (surfaceCapabilities.maxImageCount > 0 && swapchainImageCount > surfaceCapabilities.maxImageCount)
@@ -2342,7 +2338,7 @@ void GPUDevice::createSwapchain()
 
     swapchainWidth = static_cast<uint16_t>(Window::instance()->width);
     swapchainHeight = static_cast<uint16_t>(Window::instance()->height);
-    
+
     VkSwapchainCreateInfoKHR swapchainCreateInfo{};
     swapchainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchainCreateInfo.surface = vulkanWindowSurface;
@@ -2367,6 +2363,18 @@ void GPUDevice::createSwapchain()
     vkGetSwapchainImagesKHR(vulkanDevice, vulkanSwapchain, &swapchainImageCount, vulkanSwapchainImages.data);
 
     vulkanSwapchainImageViews.init(allocator, swapchainImageCount, swapchainImageCount);
+
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    if (renderFinishSemaphore.allocator == nullptr)
+    {
+        renderFinishSemaphore.init(allocator, swapchainImageCount, swapchainImageCount);
+    }
+    else 
+    {
+        renderFinishSemaphore.setSize(swapchainImageCount);
+    }
 
     for (uint32_t imageCount = 0; imageCount < swapchainImageCount; ++imageCount)
     {
@@ -2397,6 +2405,9 @@ void GPUDevice::createSwapchain()
         imageName.appendF("Swapchain_Image_%d", imageCount);
 
         setResourceName(VK_OBJECT_TYPE_IMAGE, (uint64_t)(vulkanSwapchainImages[imageCount]), imageName.getText(0));
+
+        vkCreateSemaphore(vulkanDevice, &semaphoreInfo, vulkanAllocationCallbacks, &renderFinishSemaphore[imageCount]);
+
     }
 
     swapchainIsValid = true;
@@ -2409,6 +2420,11 @@ void GPUDevice::destroySwapchain()
         vkDestroyImageView(vulkanDevice, vulkanSwapchainImageViews[imageCount], vulkanAllocationCallbacks);
     }
 
+    for (uint32_t i = 0; i < swapchainImageCount; ++i)
+    {
+        vkDestroySemaphore(vulkanDevice, renderFinishSemaphore[i], vulkanAllocationCallbacks);
+    }
+
     vkDestroySwapchainKHR(vulkanDevice, vulkanSwapchain, vulkanAllocationCallbacks);
 
     vulkanSwapchainImages.shutdown();
@@ -2417,6 +2433,7 @@ void GPUDevice::destroySwapchain()
 
 void GPUDevice::resizeSwapchain()
 {
+    check(vkDeviceWaitIdle(vulkanDevice));
     //Destroy swapchain images.
     destroySwapchain();
     vkDestroySurfaceKHR(vulkanInstance, vulkanWindowSurface, vulkanAllocationCallbacks);
@@ -2430,16 +2447,20 @@ void GPUDevice::resizeSwapchain()
     //Create swapchain
     createSwapchain();
 
-    //Resize depth texture, maintaining handle, using a dummy texture to destroy.
-    TextureHandle textureToDelete = { textures.obtainResource() };
-    Texture* vkTextureToDelete = accessTexture(textureToDelete);
-    vkTextureToDelete->handle = textureToDelete;
-    Texture* vkDepthTexture = accessTexture(depthTexture);
-    vulkanResizeTexture(*this, vkDepthTexture, vkTextureToDelete, swapchainWidth, swapchainHeight, 1);
+    destroyTextureInstant(depthTexture.index);
 
-    destroyTexture(textureToDelete);
-
-    check(vkDeviceWaitIdle(vulkanDevice));
+    TextureCreation depthTextureCreation{};
+    depthTextureCreation.initialData = nullptr;
+    depthTextureCreation.width = swapchainWidth;
+    depthTextureCreation.height = swapchainHeight;
+    depthTextureCreation.depth = 1;
+    depthTextureCreation.mipmaps = 1;
+    depthTextureCreation.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    depthTextureCreation.format = VK_FORMAT_D32_SFLOAT;
+    depthTextureCreation.imageType = VK_IMAGE_TYPE_2D;
+    depthTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
+    depthTextureCreation.name = "DepthImage_Texture";
+    depthTexture = createTexture(depthTextureCreation);
 }
 
 void GPUDevice::transitionDepthImage(TextureHandle texture)
@@ -2542,8 +2563,8 @@ bool GPUDevice::newFrame()
     //Fence wait and reset.
     if (swapchainIsValid)
     {
-        vkWaitForFences(vulkanDevice, 1, &framesInFlight[currentFrame], VK_TRUE, UINT64_MAX);
-        vkResetFences(vulkanDevice, 1, &framesInFlight[currentFrame]);
+        vkWaitForFences(vulkanDevice, 1, &fences[currentFrame], VK_TRUE, UINT64_MAX);
+        vkResetFences(vulkanDevice, 1, &fences[currentFrame]);
         VkResult result = vkAcquireNextImageKHR(vulkanDevice, vulkanSwapchain, UINT64_MAX, imageAvailableSemaphore[currentFrame], VK_NULL_HANDLE, &vulkanImageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
@@ -2685,7 +2706,7 @@ void GPUDevice::present()
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &renderFinishSemaphore[vulkanImageIndex];
 
-    vkQueueSubmit(vulkanQueue, 1, &submitInfo, framesInFlight[currentFrame]);
+    vkQueueSubmit(vulkanQueue, 1, &submitInfo, fences[currentFrame]);
 
     numQueuedCommandBuffers = 0;
 
