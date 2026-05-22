@@ -302,7 +302,7 @@ int main(int argc, char** argv)
 
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(UniformData))
-        .setName("debugRenderer");
+        .setName("debugGlobalBuffer");
     debugGlobalBuffer = gpu.createBindlessBuffer(bufferCreation);
 
     bufferCreation.reset()
@@ -327,9 +327,9 @@ int main(int argc, char** argv)
     float modelScale = 1.0f;
     bool fullscreen = false;
 
-    init();
-    loadAudio();
-
+    AudioSystem audioSystem;
+    audioSystem.init();
+    audioSystem.loadAudio();
 
     Player player;
     player.init();
@@ -381,7 +381,12 @@ int main(int argc, char** argv)
             }
             else if (inputHandler.isKeyJustReleased(Keys::KEY_SPACE))
             {
-                play();
+                audioSystem.playSoundEffect(sfx::Lazer);
+            }
+            else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
+            {
+                player.resetPosition();
+                gameCamera.resetPlayerCamera();
             }
 
             ////NOTE: This must be after the OS messages.
@@ -637,7 +642,7 @@ int main(int argc, char** argv)
 
     vkDeviceWaitIdle(gpu.vulkanDevice);
 
-    shutdown();
+    audioSystem.shutdown();
     skyboxImageArray.shutdown();
 
     gpu.destroyBuffer(positionalBuffer);

@@ -26,6 +26,7 @@ void Player::handleEvents(const InputHandler& input, const JPH::Vec3& cameraForw
 {
     // Determine controller input
     playerMovement = JPH::Vec3::sZero();
+    playerMovement.SetX(-1);
 
     if (input.isKeyDown(Keys::KEY_A))
     {
@@ -35,11 +36,6 @@ void Player::handleEvents(const InputHandler& input, const JPH::Vec3& cameraForw
     if (input.isKeyDown(Keys::KEY_D))
     {
         playerMovement.SetZ(-1);
-    }
-
-    if (input.isKeyDown(Keys::KEY_W))
-    {
-        playerMovement.SetX(-1);
     }
 
     if (input.isKeyDown(Keys::KEY_S))
@@ -71,9 +67,14 @@ void Player::update(float deltaTime)
 
     //Update velocity
     JPH::Vec3 currentVelocity = character->GetLinearVelocity();
-    JPH::Vec3 desiredVelocity = 3.3f * playerMovement;
-    JPH::Vec3 newVelocity = 0.75f * currentVelocity + 0.25f * desiredVelocity;
+    JPH::Vec3 desiredVelocity = 2200.f * playerMovement;
+    JPH::Vec3 newVelocity = 0.75f * currentVelocity + 0.25f * desiredVelocity * deltaTime;
         
     //Update the velocity
     character->SetLinearVelocity(newVelocity);
+}
+
+void Player::resetPosition()
+{
+    character->SetPosition({ 0.f, 0.f, 0.f });
 }

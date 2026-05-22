@@ -3,6 +3,8 @@
 #include "Foundation/Platform.hpp"
 #include "Foundation/Assert.hpp"
 #include "Foundation/Numerics.hpp"
+#include "Foundation/Memory.hpp"
+#include "Foundation/String.hpp"
 
 namespace 
 {
@@ -14,8 +16,6 @@ namespace
     ma_context context;
     ma_device_info* playbackDeviceInfos;
     ma_uint32 playbackDeviceCount = 0;
-    ma_sound sound;
-    ma_sound sound1;
 
     ma_sound musicSoundGroup;
     ma_sound effectsSoundGroup;
@@ -34,8 +34,11 @@ namespace
     }
 }
 
-void init() 
+void AudioSystem::init() 
 {
+    soundEffects.init(&MemoryService::instance()->systemAllocator, 16, 16);
+    music.init(&MemoryService::instance()->systemAllocator, 8, 8);
+
     resourceManagerConfig = ma_resource_manager_config_init();
     resourceManagerConfig.decodedFormat = ma_format_f32;
     resourceManagerConfig.decodedChannels = 0;
@@ -55,12 +58,12 @@ void init()
     VOID_ASSERTM(result == MA_SUCCESS, "Failed to initialize audio engine.\n");
 }
 
-void play()
+void AudioSystem::playSoundEffect(sfx::SFX_TYPE type)
 {
-    ma_sound_start(&sound1);
+    ma_sound_start(&soundEffects[type]);
 }
 
-void selectAudioDevice() 
+void AudioSystem::selectAudioDevice()
 {
     /* We have our devices, so now we want to get the user to select the devices they want to output to. */
     ma_result result;
@@ -150,7 +153,7 @@ void selectAudioDevice()
     VOID_ASSERTM(result == MA_SUCCESS, "Could not initalise the engine.\n");
 }
 
-void loadAudio() 
+void AudioSystem::loadAudio()
 {
     ma_result result = ma_sound_group_init(&sEngines, 0, nullptr, &musicSoundGroup);
     VOID_ASSERTM(result == MA_SUCCESS, "Failed to create music sound group.\n");
@@ -160,21 +163,51 @@ void loadAudio()
     VOID_ASSERTM(result == MA_SUCCESS, "Failed to create effects sound group.\n");
     ma_sound_set_volume(&effectsSoundGroup, 0.4);
 
-    result = ma_sound_init_from_file(&sEngines, "Assets/Audio/Lufia2Battle.flac", 0, &musicSoundGroup, NULL, &sound);
-    VOID_ASSERTM(result == MA_SUCCESS, "Could not load file %s\n", "Assets/Audio/Lufia2Battle.flac");
+    const char* basePath = "Assets/Audio/%s";
+    StringBuffer fullAddress;
+    fullAddress.init(1048, &MemoryService::instance()->scratchAllocator);
+    uint32_t musicMarker = MemoryService::instance()->scratchAllocator.getMarker();
+    for (uint32_t i = 0; i < sfx::COUNT; ++i) 
+    {
+        const char* fullpath = fullAddress.appendUseF(basePath, sfx::toString((sfx::SFX_TYPE)i));
 
-    result = ma_sound_init_from_file(&sEngines, "Assets/Audio/GSHCollect.flac", 0, &effectsSoundGroup, NULL, &sound1);
-    VOID_ASSERTM(result == MA_SUCCESS, "Could not load file %s\n", "Assets/Audio/GSHCollect.flac");
+        result = ma_sound_init_from_file(&sEngines, fullpath, 0, &musicSoundGroup, NULL, &soundEffects[i]);
+        VOID_ASSERTM(result == MA_SUCCESS, "Could not load file %s\n", fullpath);
+    }
+    MemoryService::instance()->scratchAllocator.freeMarker(musicMarker);
 
-    /* Loop the sound so we can continuously hear it. */
-    ma_sound_set_looping(&sound, MA_TRUE);
-    ma_sound_start(&sound);
+    musicMarker = MemoryService::instance()->scratchAllocator.getMarker();
+    for (uint32_t i = 0; i < mus::COUNT; ++i)
+    {
+        const char* fullpath = fullAddress.appendUseF(basePath, mus::toString((mus::MUSIC_TYPE)i));
+
+        result = ma_sound_init_from_file(&sEngines, fullpath, 0, &musicSoundGroup, NULL, &music[i]);
+        VOID_ASSERTM(result == MA_SUCCESS, "Could not load file %s\n", fullpath);
+    }
+    MemoryService::instance()->scratchAllocator.freeMarker(musicMarker);
+    fullAddress.shutdown();
+
+    ma_sound_set_looping(&music[mus::Lufia2Battle], MA_TRUE);
+    ma_sound_start(&music[mus::Lufia2Battle]);
+
+    ma_sound_set_looping(&soundEffects[sfx::FlyingNoise], MA_TRUE);
+    ma_sound_start(&soundEffects[sfx::FlyingNoise]);
 }
 
-void shutdown() 
+void AudioSystem::shutdown()
 {
-    ma_sound_uninit(&sound);
-    ma_sound_uninit(&sound1);
+    for (uint32_t i = 0; i < sfx::COUNT; ++i)
+    {
+        ma_sound_uninit(&soundEffects[i]);
+    }
+
+    for (uint32_t i = 0; i < mus::COUNT; ++i)
+    {
+        ma_sound_uninit(&music[i]);
+    }
+
+    soundEffects.shutdown();
+    music.shutdown();
 
     ma_engine_uninit(&sEngines);
 

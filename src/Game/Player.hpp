@@ -18,6 +18,7 @@ struct Player
 	void init();
 	void handleEvents(const InputHandler& input, const JPH::Vec3& cameraForwardVector);
 	void update(float deltaTime);
+	void resetPosition();
 	JPH::Vec3 playerMovement;
 	JPH::CharacterSettings playerSettings;
 	JPH::Character* character;

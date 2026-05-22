@@ -153,7 +153,17 @@ void GameCamera::updatePlayerCamera(InputHandler* input, float windowWidth, floa
 
     const float tweenSpeed = rotationSpeed * deltaTime;
     internal3DCamera.rotate((targetPitch - internal3DCamera.pitch) * tweenSpeed, (targetYaw - internal3DCamera.yaw) * tweenSpeed);
-    internal3DCamera.position = glms_vec3_sub(position, glms_vec3_scale(internal3DCamera.direction, -10.f));
+    internal3DCamera.position = glms_vec3_sub(glms_vec3_sub(position, glms_vec3_scale(internal3DCamera.direction, -10.f)), { 0.f, -2.f, 0.f });
+}
+
+void GameCamera::resetPlayerCamera() 
+{
+    targetYaw = 0.f;
+    targetPitch = 0.f;
+
+    mouseDragging = false;
+    ignoreDraggingFrames = 3;
+    mouseSensitivity = 3.5f;
 }
 
 void GameCamera::applyJittering(float x, float y) 

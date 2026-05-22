@@ -38,21 +38,18 @@ namespace
 
     struct Entity
     {
-        Entity() : positionIndex(UINT32_MAX), modelIndex(UINT32_MAX), debugRendererIndex(UINT32_MAX), shape(nullptr)
-        {
-        }
-
+        JPH::Shape* shape;
         //If we do this we can have a gaint bindless positionally buffer that has everything in it we just index into the that position array.
-        uint32_t positionIndex;
+        uint32_t positionIndex = UINT32_MAX;
         //We can loop through all the entities and use that model index to fetch the meshDraw to be able to draw all the models regardless of the model.
         uint32_t modelIndex = UINT32_MAX;
+
         uint32_t debugModelIndex = UINT32_MAX;
 
-        uint32_t debugRendererIndex;
+        //This only exists if debugRendererIndex != UINT32_MAX. 
+        uint32_t debugRendererIndex = UINT32_MAX;
 
         JPH::BodyID bodyID;
-        //This only exists if debugRendererIndex != UINT32_MAX. 
-        JPH::Shape* shape;
 
         bool isDynamic;
         bool isPlayer = false;
@@ -137,8 +134,6 @@ struct Scene
     Array<Model> models;
     Array<Model> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;
-    Array<ma_sound> sounds;
-    Array<ma_sound> musics;
 
     HeapAllocator* allocator;
 };
