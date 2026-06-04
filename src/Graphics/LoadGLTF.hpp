@@ -103,7 +103,7 @@ struct Model
 
     SamplerHandle dummySampler;
     //This value tracks how many of the same model we have. This is to support instance rendering. 
-    uint32_t countOfModelType;
+    uint32_t instanceCount;
     bool isModel;
 };
 #endif // !LOAD_GLTF_HDR

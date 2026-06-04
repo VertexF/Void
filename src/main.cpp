@@ -45,7 +45,7 @@ namespace
     DescriptorSetHandle skyboxDescriptorSet;
 
     BufferHandle positionalBuffer[FRAMES_IN_FLIGHT];
-    BufferHandle debugRendererDataBuffer[FRAMES_IN_FLIGHT];
+    BufferHandle debugEntityDataBuffer[FRAMES_IN_FLIGHT];
     BufferHandle debugGlobalBuffer;
 
     struct SkyboxData
@@ -298,10 +298,10 @@ int main(int argc, char** argv)
         positionalBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
 
         bufferCreation.reset()
-            .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugRendererData) * scene.debugRendererData.size)
+            .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugEntityData) * scene.debugEntityData.size)
             .setName("debugRenderer")
-            .setData(scene.debugRendererData.data);
-        debugRendererDataBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
+            .setData(scene.debugEntityData.data);
+        debugEntityDataBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
     }
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(UniformData))
@@ -338,6 +338,7 @@ int main(int argc, char** argv)
     player.init();
 
     bool debugRenderer = true;
+    uint32_t element = 0;
     UniformData globalDebugData{};
     vec3s playerPosition{};
     while (Window::instance()->exitRequested == false)
@@ -390,6 +391,57 @@ int main(int argc, char** argv)
             {
                 player.resetPosition();
                 gameCamera.resetPlayerCamera();
+            }
+            else if (inputHandler.isKeyJustReleased(Keys::KEY_0))
+            {
+                //if not the last entity being deleted.
+                //Then minus from the largest entityIndex value.
+                //However this is hard to do because that value can be literally anywere in the array and it's not tied to any entity.
+                if (scene.entities.size != 0 && scene.entities.size > element)
+                {
+                    uint32_t sizee = scene.entities.size;
+
+                    Physics::instance().bodyInterface->RemoveBody(scene.entities[element].bodyID);
+
+                    //This is the issue we need a different way to sort this `entityIndex` issue.
+                    uint32_t entityDataIndex = scene.entities[element].entityIndex;
+
+                    if (scene.entities.size != 0)
+                    {
+                        scene.models[EntityModels::DUCK].instanceCount -= 1;
+                        scene.debugModels[DebugModels::SPHERE].instanceCount -= 1;
+                    }
+                    else
+                    {
+                        for (uint32_t i = 0; i < scene.models.size; ++i)
+                        {
+                            scene.models[i].instanceCount = 0;
+                        }
+
+                        for (uint32_t i = 0; i < scene.debugModels.size; ++i)
+                        {
+                            scene.debugModels[i].instanceCount = 0;
+                        }
+                    }
+
+                    if (scene.entities.size != 0)
+                    {
+                        //Delete
+                        scene.debugEntityData.deleteSwap(entityDataIndex);
+                        scene.entityData.deleteSwap(entityDataIndex);
+                        scene.entities.deleteSwap(entityDataIndex);
+
+                        for (uint32_t i = 0; i < scene.entities.size; ++i)
+                        {
+                            if (scene.entities[i].entityIndex >= entityDataIndex)
+                            {
+                                scene.entities[i].entityIndex--;
+                            }
+                        }
+                    }
+                }
+
+                element++;
             }
 
             ////NOTE: This must be after the OS messages.
@@ -461,10 +513,10 @@ int main(int argc, char** argv)
 
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
-            for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
+            for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
             {
                 const Entity& entity = scene.entities[entityIndex];
-                uint32_t entityIdx = scene.entities[entityIndex].positionIndex;
+                uint32_t entityIdx = scene.entities[entityIndex].entityIndex;
 
                 if (entity.isPlayer == false)
                 {
@@ -508,11 +560,11 @@ int main(int argc, char** argv)
 
                     if (modelIndexType == scene.models.size - 1)
                     {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, 0);
+                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, 0);
                     }
                     else
                     {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].countOfModelType, 0, 0, scene.models[modelIndexType + 1].countOfModelType);
+                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, scene.models[modelIndexType + 1].instanceCount);
                     }
                 }
             }
@@ -522,7 +574,7 @@ int main(int argc, char** argv)
                 //Debug
                 gpuCommands->bindPipeline(debugPipeline);
 
-                Buffer* debugBufferRendererData = gpu.accessBuffer(debugRendererDataBuffer[gpu.currentFrame]);
+                Buffer* debugBufferRendererData = gpu.accessBuffer(debugEntityDataBuffer[gpu.currentFrame]);
                 pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
 
                 globalDebugData.globalModel = globalModel;
@@ -532,28 +584,28 @@ int main(int argc, char** argv)
 
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalDebugData, debugGlobalData->vmaAllocation, 0, sizeof(UniformData));
 
-                for (uint32_t entityIndex = 0; entityIndex < scene.totalEntities; ++entityIndex)
+                for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
                 {
                     const Entity& entity = scene.entities[entityIndex];
-                    uint32_t entityIdx = entity.positionIndex;
+                    uint32_t entityIdx = entity.entityIndex;
                     if (entity.isPlayer == false)
                     {
                         if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
                         {
                             JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                            scene.debugRendererData[entityIdx].position = convertToMat4(newPos);
+                            scene.debugEntityData[entityIdx].position = convertToMat4(newPos);
                         }
                     }
                     else 
                     {
                         JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
-                        scene.debugRendererData[entityIdx].position = convertToMat4(newPos);
-                        //scene.debugRendererData[entityIdx].position.m31 += 0.6f;
-                        //scene.debugRendererData[entityIdx].position.m30 += 0.2f;
+                        scene.debugEntityData[entityIdx].position = convertToMat4(newPos);
+                        //scene.debugEntityData[entityIdx].position.m31 += 0.6f;
+                        //scene.debugEntityData[entityIdx].position.m30 += 0.2f;
                     }
                 }
 
-                vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.debugRendererData.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugRendererData) * scene.debugRendererData.size);
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.debugEntityData.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugEntityData) * scene.debugEntityData.size);
 
                 for (uint32_t modelIndexType = 0; modelIndexType < scene.debugModels.size; ++modelIndexType)
                 {
@@ -571,11 +623,11 @@ int main(int argc, char** argv)
                     //TODO: Add the data structures needed to allow for this.
                     if (modelIndexType == scene.debugModels.size - 1)
                     {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].countOfModelType, 0, 0, 0);
+                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, 0);
                     }
                     else
                     {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].countOfModelType, 0, 0, scene.debugModels[modelIndexType + 1].countOfModelType);
+                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, scene.debugModels[modelIndexType + 1].instanceCount);
                     }
                 }
             }
@@ -626,7 +678,7 @@ int main(int argc, char** argv)
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
         gpu.destroyBuffer(positionalBuffer[i]);
-        gpu.destroyBuffer(debugRendererDataBuffer[i]);
+        gpu.destroyBuffer(debugEntityDataBuffer[i]);
     }
 
     gpu.destroyDescriptorSet(skyboxDescriptorSet);

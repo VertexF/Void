@@ -16,8 +16,23 @@ struct HeapAllocator;
 
 namespace
 {
+    enum EntityModels
+    {
+        ROCK,
+        DUCK,
+
+        MODEL_COUNT
+    };
+
+    enum DebugModels
+    {
+        SPHERE,
+
+        DEBUG_COUNT
+    };
+
     //Here we are going to attempt full bindless for the debug renderer to make this as painless as possible in the future.
-    struct DebugRendererData
+    struct DebugEntityData
     {
         mat4s position;
         //We need this because the final matrix that comes out the glb after multiplying 
@@ -40,7 +55,7 @@ namespace
     {
         JPH::Shape* shape;
         //If we do this we can have a gaint bindless positionally buffer that has everything in it we just index into the that position array.
-        uint32_t positionIndex = UINT32_MAX;
+        uint32_t entityIndex = UINT32_MAX;
         //We can loop through all the entities and use that model index to fetch the meshDraw to be able to draw all the models regardless of the model.
         uint32_t modelIndex = UINT32_MAX;
 
@@ -122,15 +137,9 @@ struct Scene
     uint32_t currentLastEntity;
     uint32_t currentDebugRendererIndex;
 
-    //These arrays indices are now seperate into their own arrays.
-    static constexpr uint32_t rockModelIndex = 0;
-    static constexpr uint32_t duckModelIndex = 1;
-
-    static constexpr uint32_t debugSphereIndex = 0;
-
     Array<Entity> entities;
     Array<EntityData> entityData;
-    Array<DebugRendererData> debugRendererData;
+    Array<DebugEntityData> debugEntityData;
     Array<Model> models;
     Array<Model> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;
