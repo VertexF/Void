@@ -53,16 +53,10 @@ namespace
 
     struct Entity
     {
-        JPH::Shape* shape;
         //If we do this we can have a gaint bindless positionally buffer that has everything in it we just index into the that position array.
         uint32_t entityIndex = UINT32_MAX;
         //We can loop through all the entities and use that model index to fetch the meshDraw to be able to draw all the models regardless of the model.
         uint32_t modelIndex = UINT32_MAX;
-
-        uint32_t debugModelIndex = UINT32_MAX;
-
-        //This only exists if debugRendererIndex != UINT32_MAX. 
-        uint32_t debugRendererIndex = UINT32_MAX;
 
         JPH::BodyID bodyID;
 
@@ -124,6 +118,7 @@ struct Scene
 {
     void initScene(HeapAllocator* inAllocator, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout);
     void buildScene(Physics& physics);
+    void buildDebugScene(Physics& physics);
     void buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, uint32_t debugModelIndex, const vec3s& position, vec3s axis,
                               float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour, bool isPlayer = false);
     void buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axis, float angle);
@@ -132,10 +127,8 @@ struct Scene
     JPH::BodyCreationSettings sphereSettings;
     JPH::BodyCreationSettings sphereSettings2;
 
-    uint32_t totalEntities = 4444;
-    uint32_t totalColliders = 4;
-    uint32_t currentLastEntity;
-    uint32_t currentDebugRendererIndex;
+    uint32_t totalEntities = 40;
+    uint32_t currentLastEntity = 0;
 
     Array<Entity> entities;
     Array<EntityData> entityData;

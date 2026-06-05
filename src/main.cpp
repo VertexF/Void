@@ -278,7 +278,8 @@ int main(int argc, char** argv)
 
     Scene scene;
     scene.initScene(allocator, gpu, mainDescriptorSetLayout);
-    scene.buildScene(Physics::instance());
+    //scene.buildScene(Physics::instance());
+    scene.buildDebugScene(Physics::instance());
 
     // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
     // You should definitely not call this every frame or when e.g. streaming in a new level section as it is an expensive operation.
@@ -303,6 +304,7 @@ int main(int argc, char** argv)
             .setData(scene.debugEntityData.data);
         debugEntityDataBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
     }
+
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(UniformData))
         .setName("debugGlobalBuffer");
@@ -433,7 +435,7 @@ int main(int argc, char** argv)
 
                         for (uint32_t i = 0; i < scene.entities.size; ++i)
                         {
-                            if (scene.entities[i].entityIndex >= entityDataIndex)
+                            if (scene.entities[i].entityIndex > entityDataIndex)
                             {
                                 scene.entities[i].entityIndex--;
                             }
@@ -470,12 +472,9 @@ int main(int argc, char** argv)
             beginFrameTick = currentTick;
 
             Physics::instance().updatePhysics(deltaTime);
-
-            //Audio
-            //audio.play();
             
-            //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, {0.f, 0.f, 0.f, 0.f}, deltaTime);
+            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, {0.f, 0.f, 0.f, 0.f}, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
@@ -520,17 +519,16 @@ int main(int argc, char** argv)
 
                 if (entity.isPlayer == false)
                 {
-                    if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                    if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
                     {
                         EntityData physicsPosition{};
-                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entity.debugRendererIndex].bodyID);
+                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
                         scene.entityData[entityIdx].pos = convertToMat4(newPos);
-                        scene.entityData[entityIdx].colour = scene.entityData[entityIndex].colour;
                     }
                 }
                 else
                 {
-                    player.update(deltaTime);
+                    //player.update(deltaTime);
                     JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
                     scene.entityData[entityIdx].pos = convertToMat4(newPos);
                 }
@@ -538,7 +536,8 @@ int main(int argc, char** argv)
 
             vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
-            for (uint32_t modelIndexType = 0; modelIndexType < scene.models.size; ++modelIndexType)
+            uint32_t instanceCountOffset = 0;
+            for (int32_t modelIndexType = scene.models.size - 1; modelIndexType >= 0; --modelIndexType)
             {
                 for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
                 {
@@ -558,14 +557,9 @@ int main(int argc, char** argv)
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
 
-                    if (modelIndexType == scene.models.size - 1)
-                    {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, 0);
-                    }
-                    else
-                    {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, scene.models[modelIndexType + 1].instanceCount);
-                    }
+                    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
+
+                    instanceCountOffset += scene.models[modelIndexType].instanceCount;
                 }
             }
 
@@ -590,7 +584,7 @@ int main(int argc, char** argv)
                     uint32_t entityIdx = entity.entityIndex;
                     if (entity.isPlayer == false)
                     {
-                        if (entity.debugRendererIndex != UINT32_MAX && entity.isDynamic)
+                        if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
                         {
                             JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
                             scene.debugEntityData[entityIdx].position = convertToMat4(newPos);
@@ -607,7 +601,8 @@ int main(int argc, char** argv)
 
                 vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.debugEntityData.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugEntityData) * scene.debugEntityData.size);
 
-                for (uint32_t modelIndexType = 0; modelIndexType < scene.debugModels.size; ++modelIndexType)
+                instanceCountOffset = 0;
+                for (int32_t modelIndexType = scene.debugModels.size - 1; modelIndexType >= 0; --modelIndexType)
                 {
                     VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
 
@@ -620,15 +615,9 @@ int main(int argc, char** argv)
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
-                    //TODO: Add the data structures needed to allow for this.
-                    if (modelIndexType == scene.debugModels.size - 1)
-                    {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, 0);
-                    }
-                    else
-                    {
-                        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, scene.debugModels[modelIndexType + 1].instanceCount);
-                    }
+                    gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
+
+                    instanceCountOffset += scene.debugModels[modelIndexType].instanceCount;
                 }
             }
 

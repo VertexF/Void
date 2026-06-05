@@ -18,9 +18,6 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, DescriptorSet
     models[EntityModels::DUCK].loadModel("Assets/Models/out/Duck.glb", gpu, descriptorSetLayout);
 
     debugModels[DebugModels::SPHERE].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
-
-    currentLastEntity = 0;
-    currentDebugRendererIndex = 0;
 }
 
 void Scene::buildScene(Physics& physics)
@@ -102,6 +99,63 @@ void Scene::buildScene(Physics& physics)
     physics.bodyInterface->AddBodiesFinalize(bodiesToBeAdded.data, bodiesToBeAdded.size, addingState, JPH::EActivation::Activate);
 }
 
+void Scene::buildDebugScene(Physics& physics) 
+{
+    srand(time(0));
+
+    float sceneRadius = 200.f;
+    float blue = 0.f;
+    float radius = 13.5;
+
+    vec3s position{};
+    //Ducks
+    for (uint32_t duckIndex = 0; duckIndex < 20; ++duckIndex)
+    {
+        JPH::SphereShapeSettings rockSphereSetting2{ radius + (blue * 2.5f) };
+        rockSphereSetting2.SetEmbedded();
+        JPH::ShapeSettings::ShapeResult rockShapeResult2 = rockSphereSetting2.Create();
+        JPH::ShapeRefC rockShapeRef2 = rockShapeResult2.Get();
+
+        JPH::BodyCreationSettings rockShapeSettings;
+        rockShapeSettings.SetShape(rockShapeRef2);
+        rockShapeSettings.mRotation = JPH::Quat::sIdentity();
+
+        position.x = duckIndex * 60.f;
+
+        rockShapeSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
+        rockShapeSettings.mObjectLayer = Layers::MOVING;
+        rockShapeSettings.mMotionType = JPH::EMotionType::Dynamic;
+
+        buildRigidBodyEntity(physics, EntityModels::DUCK, DebugModels::SPHERE, position, { 0.f, 0.f, 0.f }, 0.f, rockShapeSettings, { 1.f - blue, 0.f, blue, 1.f });
+        blue += 0.025f;
+    }
+
+    //Rocks
+    for (uint32_t rockIndex = 0; rockIndex < 20; ++rockIndex)
+    {
+        JPH::SphereShapeSettings rockSphereSetting2{ radius + (blue * 2.5f) };
+        rockSphereSetting2.SetEmbedded();
+        JPH::ShapeSettings::ShapeResult rockShapeResult2 = rockSphereSetting2.Create();
+        JPH::ShapeRefC rockShapeRef2 = rockShapeResult2.Get();
+
+        JPH::BodyCreationSettings rockShapeSettings;
+        rockShapeSettings.SetShape(rockShapeRef2);
+        rockShapeSettings.mRotation = JPH::Quat::sIdentity();
+
+        position.x = (rockIndex * 60.f) + 30.f;
+
+        rockShapeSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
+        rockShapeSettings.mObjectLayer = Layers::NON_MOVING;
+        rockShapeSettings.mMotionType = JPH::EMotionType::Static;
+
+        buildRigidBodyEntity(physics, EntityModels::ROCK, DebugModels::SPHERE, position, { 0.f, 0.f, 0.f }, 0.f, rockShapeSettings, { 1.f - blue, 0.f, blue, 1.f });
+        blue += 0.025f;
+    }
+
+    JPH::BodyInterface::AddState addingState = physics.bodyInterface->AddBodiesPrepare(bodiesToBeAdded.data, bodiesToBeAdded.size);
+    physics.bodyInterface->AddBodiesFinalize(bodiesToBeAdded.data, bodiesToBeAdded.size, addingState, JPH::EActivation::Activate);
+}
+
 void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, uint32_t debugModelIndex, const vec3s& position, vec3s axis, 
                                  float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour, bool isPlayer /*= false*/)
 {
@@ -127,23 +181,19 @@ void Scene::buildRigidBodyEntity(const Physics& physics, uint32_t modelIndex, ui
     //TODO: Switch over the shapes that it might be.
     JPH::RMat44 shapePosition = physics.bodyInterface->GetWorldTransform(entities[currentLastEntity].bodyID);
 
-    debugEntityData[currentDebugRendererIndex].colour = colour;
-    debugEntityData[currentDebugRendererIndex].position = convertToMat4(shapePosition);
-    debugEntityData[currentDebugRendererIndex].model = convertToMat4(shapeModel);
-
-    entities[currentLastEntity].debugRendererIndex = currentDebugRendererIndex;
+    debugEntityData[currentLastEntity].colour = colour;
+    debugEntityData[currentLastEntity].position = convertToMat4(shapePosition);
+    debugEntityData[currentLastEntity].model = convertToMat4(shapeModel);
 
     entityData[currentLastEntity].pos = convertToMat4(shapePosition);
     entityData[currentLastEntity].colour = colour;
     entities[currentLastEntity].entityIndex = currentLastEntity;
     entities[currentLastEntity].modelIndex = modelIndex;
-    entities[currentLastEntity].debugModelIndex = debugModelIndex;
     entities[currentLastEntity].isPlayer = isPlayer;
     models[modelIndex].instanceCount++;
     debugModels[debugModelIndex].instanceCount++;
 
     currentLastEntity++;
-    currentDebugRendererIndex++;
 }
 
 void Scene::buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axis, float angle)
@@ -154,7 +204,6 @@ void Scene::buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axi
     entityData[currentLastEntity].colour = { 1.f, 0.f, 1.f, 1.f };
     entities[currentLastEntity].entityIndex = currentLastEntity;
     entities[currentLastEntity].modelIndex = modelIndex;
-    entities[currentLastEntity].debugRendererIndex = UINT32_MAX;
     models[modelIndex].instanceCount++;
 
     currentLastEntity++;
@@ -162,11 +211,11 @@ void Scene::buildNoneSoildEntity(uint32_t modelIndex, vec3s& position, vec3s axi
 
 void Scene::shutdownScene(GPUDevice& gpu, Physics& physics)
 {
-    for (uint32_t i = 0; i < totalColliders; ++i)
-    {
-        physics.bodyInterface->RemoveBody(entities[i].bodyID);
-        physics.bodyInterface->DestroyBody(entities[i].bodyID);
-    }
+    //for (uint32_t i = 0; i < totalColliders; ++i)
+    //{
+    //    physics.bodyInterface->RemoveBody(entities[i].bodyID);
+    //    physics.bodyInterface->DestroyBody(entities[i].bodyID);
+    //}
 
     for (uint32_t i = 0; i < models.size; ++i)
     {
