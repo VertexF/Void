@@ -73,6 +73,9 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/GPUResources.cpp
                 src/Graphics/LoadGLTF.hpp
                 src/Graphics/LoadGLTF.cpp
+				src/Graphics/Skybox.hpp
+                src/Graphics/Skybox.cpp
+				src/Graphics/ShaderData.hpp
 
 				src/Game/Scene.hpp
 				src/Game/Scene.cpp

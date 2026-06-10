@@ -14,8 +14,6 @@
 #include "Foundation/String.hpp"
 #include "Foundation/Array.hpp"
 
-#include <vector>
-
 struct Allocator;
 struct CommandBuffer;
 struct DeviceRenderFrame;

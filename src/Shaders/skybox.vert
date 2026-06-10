@@ -88,11 +88,10 @@ layout(scalar, push_constant) uniform entityIndex
 
 void main()
 {
-	mat4 currentView = sceneBufferReference.sceneData.view;
 	mat4 view = mat4(mat3(sceneBufferReference.sceneData.view));
 
 	int idx = indices[gl_VertexIndex];
-    vec4 pos1 = sceneBufferReference.sceneData.project * view * vec4(pos[idx], 1.0);
+    vec4 position = sceneBufferReference.sceneData.project * view * vec4(pos[idx], 1.0);
 	dir = pos[idx];
-	gl_Position = vec4(pos1.x, pos1.y, 0.f, pos1.w);
+	gl_Position = vec4(position.x, position.y, 0.f, position.w);
 }
