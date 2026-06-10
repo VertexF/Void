@@ -8,7 +8,6 @@
 
 struct UniformData
 {
-    mat4s viewPerspective;
     mat4s view;
     mat4s project;
     mat4s globalModel;

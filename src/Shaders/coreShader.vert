@@ -15,16 +15,17 @@ struct Vertices
     float16_t tu, tv;
 };
 
+//Here we are going to attempt full bindless for the debug renderer to make this as painless as possible in the future.
 struct ModelPosition
 {
-    mat4 pos;
+    mat4 pos; 
+    mat4 debugModel;
     vec4 colour;
     float padd[4];
 };
 
 struct SceneData
 {
-    mat4 viewPerspective;
     mat4 view;
     mat4 project;
     mat4 globalModel;
@@ -92,7 +93,7 @@ void main()
 
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
-    gl_Position = sceneBufferReference.sceneData.viewPerspective * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
+    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
     vPosition  =  sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
 
     vTexcoord0 = texcoord;

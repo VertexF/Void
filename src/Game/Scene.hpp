@@ -35,7 +35,6 @@ struct Scene
 
     Array<Entity> entities;
     Array<EntityData> entityData;
-    Array<DebugEntityData> debugEntityData;
     Array<Model> models;
     Array<Model> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;

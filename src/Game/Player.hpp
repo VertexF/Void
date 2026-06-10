@@ -20,7 +20,7 @@
 
 struct Player 
 {
-	void init(DebugEntityData& debugEntityData);
+	void init(EntityData& debugEntityData);
 	void handleEvents(const InputHandler& input, const JPH::Vec3& cameraForwardVector);
 	void update(float deltaTime, AudioSystem& audio);
 	void resetPosition();

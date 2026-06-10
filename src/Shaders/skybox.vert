@@ -28,7 +28,6 @@ const int indices[36] = int[36]
 
 struct SceneData
 {
-    mat4 viewPerspective;
 	mat4 view;
     mat4 project;
     mat4 globalModel;

@@ -32,13 +32,12 @@
 namespace
 {
     //TODO: Figure out if you need this stuff.
-    PipelineHandle cubePipeline;
+    PipelineHandle mainPipeline;
     PipelineHandle debugPipeline;
 
     DescriptorSetLayoutHandle mainDescriptorSetLayout;
 
     BufferHandle positionalBuffer[FRAMES_IN_FLIGHT];
-    BufferHandle debugEntityDataBuffer[FRAMES_IN_FLIGHT];
     BufferHandle debugGlobalBuffer;
 
     void uploadMaterial(MaterialData& meshData, const MeshDraw& meshDraw)
@@ -100,7 +99,7 @@ void Game::init()
     //Window::instance()->setFullscreen(true);
 
     //Create pipeline state
-    PipelineCreation pipelineCreation;
+    PipelineCreation pipelineCreation{};
 
     //Depth
     pipelineCreation.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -109,26 +108,26 @@ void Game::init()
     FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/coreShader.vert.spv", &MemoryService::instance()->scratchAllocator);
     FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShader.frag.spv", &MemoryService::instance()->scratchAllocator);
 
-    pipelineCreation.shaders.setName("Cube")
+    pipelineCreation.shaders.setName("main")
         .addStage(vertexShaderCode.data, uint32_t(vertexShaderCode.size), VK_SHADER_STAGE_VERTEX_BIT)
         .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
     //Descriptor set layout.
-    DescriptorSetLayoutCreation cubeRLLCreation{};
-    cubeRLLCreation
+    DescriptorSetLayoutCreation mainCreation{};
+    mainCreation
         .addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL, .name = "MaterialConstant" })
         .setSetIndex(0);
-    cubeRLLCreation.bindless = false;
+    mainCreation.bindless = false;
 
     //Setting it into pipeline.
     //This descriptor set layout will be ran every draw calls
-    mainDescriptorSetLayout = gpu.createDescriptorSetLayout(cubeRLLCreation);
+    mainDescriptorSetLayout = gpu.createDescriptorSetLayout(mainCreation);
     //This descriptor set layout will be ran every frame
     pipelineCreation.addDescriptorSetLayout(mainDescriptorSetLayout)
         .addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle);
 
-    cubePipeline = gpu.createPipeline(pipelineCreation);
+    mainPipeline = gpu.createPipeline(pipelineCreation);
 
     //Debug renderer
     PipelineCreation debugPipelineCreation{};
@@ -171,12 +170,6 @@ void Game::init()
             .setName("othername")
             .setData(scene.entityData.data);
         positionalBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
-
-        bufferCreation.reset()
-            .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugEntityData) * scene.debugEntityData.size)
-            .setName("debugRenderer")
-            .setData(scene.debugEntityData.data);
-        debugEntityDataBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
     }
 
     bufferCreation.reset()
@@ -231,7 +224,6 @@ void Game::loop()
             if (recreatePositionBuffer)
             {
                 gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
-                gpu.destroyBufferInstant(debugEntityDataBuffer[gpu.currentFrame].index);
 
                 BufferCreation bufferCreation{};
                 bufferCreation.reset()
@@ -239,12 +231,6 @@ void Game::loop()
                     .setName("othername")
                     .setData(scene.entityData.data);
                 positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
-
-                bufferCreation.reset()
-                    .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugEntityData) * scene.debugEntityData.size)
-                    .setName("debugRenderer")
-                    .setData(scene.debugEntityData.data);
-                debugEntityDataBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
 
                 recreatePositionBuffer = false;
             }
@@ -301,7 +287,6 @@ void Game::loop()
 
                     if (scene.entities.size != 0)
                     {
-                        scene.debugEntityData.erase(entityDataIndex);
                         scene.entityData.erase(entityDataIndex);
                         scene.entities.erase(element);
 
@@ -315,7 +300,6 @@ void Game::loop()
                     }
 
                     gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
-                    gpu.destroyBufferInstant(debugEntityDataBuffer[gpu.currentFrame].index);
 
                     BufferCreation bufferCreation{};
                     bufferCreation.reset()
@@ -323,12 +307,6 @@ void Game::loop()
                         .setName("othername")
                         .setData(scene.entityData.data);
                     positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
-
-                    bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugEntityData) * scene.debugEntityData.size)
-                        .setName("debugRenderer")
-                        .setData(scene.debugEntityData.data);
-                    debugEntityDataBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
 
                     recreatePositionBuffer = true;
                 }
@@ -397,7 +375,7 @@ void Game::loop()
             //globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             //Scene
-            gpuCommands->bindPipeline(cubePipeline);
+            gpuCommands->bindPipeline(mainPipeline);
 
             gpuCommands->bindlessDescriptorSet(1);
 
@@ -417,13 +395,13 @@ void Game::loop()
                     {
                         EntityData physicsPosition{};
                         JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
-                        scene.entityData[entityIdx].pos = convertToMat4(newPos);
+                        scene.entityData[entityIdx].position = convertToMat4(newPos);
                     }
                 }
                 else
                 {
                     JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
-                    scene.entityData[entityIdx].pos = convertToMat4(newPos);
+                    scene.entityData[entityIdx].position = convertToMat4(newPos);
                 }
             }
 
@@ -461,11 +439,9 @@ void Game::loop()
                 //Debug
                 gpuCommands->bindPipeline(debugPipeline);
 
-                Buffer* debugBufferRendererData = gpu.accessBuffer(debugEntityDataBuffer[gpu.currentFrame]);
-                pushConstants.modelPositionAddress = debugBufferRendererData->bufferAddress;
+                pushConstants.modelPositionAddress = positionBuff->bufferAddress;
 
                 globalSceneData.globalModel = globalModel;
-                globalSceneData.viewPerspective = gameCamera.internal3DCamera.viewProjection;
 
                 pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
 
@@ -480,7 +456,7 @@ void Game::loop()
                         if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
                         {
                             JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                            scene.debugEntityData[entityIdx].position = convertToMat4(newPos);
+                            scene.entityData[entityIdx].position = convertToMat4(newPos);
                         }
                     }
                     else
@@ -489,11 +465,11 @@ void Game::loop()
                         mat4s playerMatix = convertToMat4(newPos);
                         playerMatix.m31 += 0.6f;
                         playerMatix.m30 += 0.2f;
-                        scene.debugEntityData[entityIdx].position = playerMatix;
+                        scene.entityData[entityIdx].position = playerMatix;
                     }
                 }
 
-                vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.debugEntityData.data, debugBufferRendererData->vmaAllocation, 0, sizeof(DebugEntityData) * scene.debugEntityData.size);
+                vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
                 instanceCountOffset = 0;
                 for (int32_t modelIndexType = scene.debugModels.size - 1; modelIndexType >= 0; --modelIndexType)
@@ -545,7 +521,6 @@ void Game::shutdown()
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
         gpu.destroyBuffer(positionalBuffer[i]);
-        gpu.destroyBuffer(debugEntityDataBuffer[i]);
     }
 
     gpu.destroyBuffer(debugGlobalBuffer);
@@ -553,7 +528,7 @@ void Game::shutdown()
     scene.shutdownScene(gpu);
 
     gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
-    gpu.destroyPipeline(cubePipeline);
+    gpu.destroyPipeline(mainPipeline);
     gpu.destroyPipeline(debugPipeline);
 
     imgui->shutdown();

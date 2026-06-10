@@ -15,13 +15,13 @@ struct Vertices
 struct ModelPosition
 {
     mat4 pos;
+    mat4 debugModel;
     vec4 colour;
     float padd[4];
 };
 
 struct SceneData
 {
-    mat4 viewPerspective;
     mat4 view;
     mat4 project;
     mat4 globalModel;
@@ -63,7 +63,7 @@ void main()
 
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
-    gl_Position = sceneBufferReference.sceneData.viewPerspective * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * vec4(position, 1.0);
+    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * vec4(position, 1.0);
 
     textureID = gl_InstanceIndex;
 

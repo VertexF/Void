@@ -17,7 +17,7 @@ struct ModelPosition
     mat4 pos; 
     //all local nodes together needs to be the same as the collision geometry.
     //Meaning that model matrix we get out of the actual geometry needs to be given to the debug geometry if they tied together when creating the buffer.
-    mat4 model;
+    mat4 debugModel;
     //Colour will be used as a key for various different objects.
     vec4 colour;
     float padd[4];
@@ -25,7 +25,6 @@ struct ModelPosition
 
 struct SceneData
 {
-    mat4 viewPerspective;
     mat4 view;
     mat4 project;
     mat4 globalModel;
@@ -69,6 +68,6 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].py, 
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
-    gl_Position = sceneBufferReference.sceneData.viewPerspective * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * modelPositionsReference.modelPositions[gl_InstanceIndex].model * vec4(position, 1.0);
+    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * modelPositionsReference.modelPositions[gl_InstanceIndex].debugModel * vec4(position, 1.0);
     vColour = modelPositionsReference.modelPositions[gl_InstanceIndex].colour;
 }

@@ -6,7 +6,7 @@
 
 static constexpr float cCharacterRadiusStanding = 0.3f;
 
-void Player::init(DebugEntityData& debugEntityData)
+void Player::init(EntityData& entityData)
 {
     JPH::SphereShapeSettings playerSphereSettings{ 1.0f };
     playerSphereSettings.SetEmbedded();
@@ -41,9 +41,9 @@ void Player::init(DebugEntityData& debugEntityData)
         VOID_ERROR("Shape type not supported.\n");
     }
 
-    debugEntityData.colour = { 1.f, 1.f, 1.f, 1.f };
-    debugEntityData.position = glms_mat4_identity();
-    debugEntityData.model = convertToMat4(shapeModel);
+    entityData.colour = { 1.f, 1.f, 1.f, 1.f };
+    entityData.position = glms_mat4_identity();
+    entityData.debugModel = convertToMat4(shapeModel);
 
     //TODO - change for your allocator, check object life.
     character = new JPH::Character{ &playerSettings, JPH::RVec3Arg::sZero(), JPH::QuatArg::sIdentity(), 0, &Physics::instance().physicsSystem };

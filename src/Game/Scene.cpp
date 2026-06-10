@@ -13,7 +13,6 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, DescriptorSet
     entities.init(allocator, totalEntities, totalEntities);
 
     entityData.init(allocator, totalEntities, totalEntities);
-    debugEntityData.init(allocator, totalEntities, totalEntities);
     bodiesToBeAdded.init(allocator, totalEntities);
     models.init(allocator, 2, 2);
     debugModels.init(allocator, 1, 1);
@@ -186,12 +185,9 @@ void Scene::buildRigidBodyEntity(EntityModels modelType, DebugModels debugModelT
     //TODO: Switch over the shapes that it might be.
     JPH::RMat44 shapePosition = Physics::instance().bodyInterface->GetWorldTransform(bodyID);
 
-    debugEntityData[currentLastEntity].colour = colour;
-    debugEntityData[currentLastEntity].position = convertToMat4(shapePosition);
-    debugEntityData[currentLastEntity].model = convertToMat4(shapeModel);
-
-    entityData[currentLastEntity].pos = convertToMat4(shapePosition);
+    entityData[currentLastEntity].position = convertToMat4(shapePosition);
     entityData[currentLastEntity].colour = colour;
+    entityData[currentLastEntity].debugModel = convertToMat4(shapeModel);
 
     entities[currentLastEntity].entityIndex = currentLastEntity;
     entities[currentLastEntity].modelType = modelType;
@@ -205,7 +201,7 @@ void Scene::buildRigidBodyEntity(EntityModels modelType, DebugModels debugModelT
     {
         entities[currentLastEntity].entityData = void_allocat(Player, &MemoryService::instance()->systemAllocator);
         new (entities[currentLastEntity].entityData) Player;
-        static_cast<Player*>(entities[currentLastEntity].entityData)->init(debugEntityData[currentLastEntity]);
+        static_cast<Player*>(entities[currentLastEntity].entityData)->init(entityData[currentLastEntity]);
         JPH::BodyID playerBodyID = static_cast<Player*>(entities[currentLastEntity].entityData)->character->GetBodyID();
 
         entities[currentLastEntity].bodyID = playerBodyID;
@@ -227,8 +223,10 @@ void Scene::buildNoneSoildEntity(EntityModels modelType, EntityType entityType, 
 {
     vec3s scaledVector = glms_vec3_scale(axis, sinf(angle * 0.5f));
 
-    entityData[currentLastEntity].pos = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(position));
+    entityData[currentLastEntity].position = glms_mat4_mul(glms_rotate_make(cosf(angle * 0.5f), scaledVector), glms_translate_make(position));
     entityData[currentLastEntity].colour = { 1.f, 0.f, 1.f, 1.f };
+    entityData[currentLastEntity].debugModel = glms_mat4_identity();
+
     entities[currentLastEntity].entityIndex = currentLastEntity;
     entities[currentLastEntity].entityType = entityType;
     entities[currentLastEntity].modelType = modelType;
@@ -273,6 +271,5 @@ void Scene::shutdownScene(GPUDevice& gpu)
 
     entities.shutdown();
     entityData.shutdown();
-    debugEntityData.shutdown();
     bodiesToBeAdded.shutdown();
 }
