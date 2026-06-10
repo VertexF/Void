@@ -52,6 +52,7 @@ struct AudioSystem
 {
 	void init();
 	void playSoundEffect(sfx::SFX_TYPE type);
+	void stopSoundEffect(sfx::SFX_TYPE type);
 	void selectAudioDevice();
 	void loadAudio();
 	void shutdown();

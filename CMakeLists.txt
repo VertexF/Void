@@ -78,6 +78,9 @@ set(VOID_SOURCE src/main.cpp
 				src/Game/Scene.cpp
 				src/Game/Player.hpp
 				src/Game/Player.cpp
+				src/Game/Utils.hpp
+				src/Game/Game.hpp
+				src/Game/Game.cpp
 )
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})

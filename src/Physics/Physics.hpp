@@ -5,6 +5,9 @@
 #include "Foundation/Log.hpp"
 #include "Foundation/Memory.hpp"
 
+#include "Game/Player.hpp"
+#include "Game/Scene.hpp"
+
 #include <Jolt/Jolt.h>
 
 // Jolt includes
@@ -30,7 +33,8 @@ namespace Layers
 {
     static constexpr JPH::ObjectLayer NON_MOVING = 0;
     static constexpr JPH::ObjectLayer MOVING = 1;
-    static constexpr JPH::ObjectLayer NUM_LAYERS = 2;
+    static constexpr JPH::ObjectLayer CHARACTER = 2;
+    static constexpr JPH::ObjectLayer NUM_LAYERS = 3;
 };
 
 /// Class that determines if two object layers can collide
@@ -44,9 +48,11 @@ public:
         switch (inObject1)
         {
         case Layers::NON_MOVING:
-            return inObject2 == Layers::MOVING; // Non moving only collides with moving
+            return false; // Non moving only collides with moving
         case Layers::MOVING:
-            return true; // Moving collides with everything
+            return false; // Moving collides with everything
+        case Layers::CHARACTER:
+            return true;
         default:
             JPH_ASSERT(false);
             return false;
@@ -63,7 +69,8 @@ namespace BroadPhaseLayers
 {
     static constexpr JPH::BroadPhaseLayer NON_MOVING(0);
     static constexpr JPH::BroadPhaseLayer MOVING(1);
-    static constexpr uint32_t NUM_LAYERS(2);
+    static constexpr JPH::BroadPhaseLayer CHARACTER(2);//character
+    static constexpr uint32_t NUM_LAYERS(3);
 };
 
 // BroadPhaseLayerInterface implementation
@@ -78,6 +85,7 @@ public:
         // Create a mapping table from object to broad phase layer
         mObjectToBroadPhase[Layers::NON_MOVING] = BroadPhaseLayers::NON_MOVING;
         mObjectToBroadPhase[Layers::MOVING] = BroadPhaseLayers::MOVING;
+        mObjectToBroadPhase[Layers::CHARACTER] = BroadPhaseLayers::CHARACTER;
     }
 
     virtual uint32_t GetNumBroadPhaseLayers() const override
@@ -118,13 +126,32 @@ public:
         switch (inLayer1)
         {
         case Layers::NON_MOVING:
-            return inLayer2 == BroadPhaseLayers::MOVING;
+            return false;//return inLayer2 == BroadPhaseLayers::MOVING;
         case Layers::MOVING:
+            return false;
+        case Layers::CHARACTER:
             return true;
         default:
             JPH_ASSERT(false);
             return false;
         }
+    }
+};
+
+// An example activation listener
+class MyBodyActivationListener : public JPH::BodyActivationListener
+{
+public:
+    virtual ~MyBodyActivationListener() = default;
+
+    virtual void OnBodyActivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override
+    {
+        //vprint("A body got activated.\n");
+    }
+
+    virtual void OnBodyDeactivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override
+    {
+        //vprint("A body went to sleep.\n");
     }
 };
 
@@ -138,6 +165,30 @@ public:
     virtual JPH::ValidateResult	OnContactValidate(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::RVec3Arg inBaseOffset, const JPH::CollideShapeResult& inCollisionResult) override
     {
         //vprint("Contact validate validate.\n");
+
+        uintptr_t pointer1 = inBody1.GetUserData();
+        if (pointer1 != 0)
+        {
+            Entity* currentEntity = ((Entity*)pointer1);
+            switch (currentEntity->entityType)
+            {
+            case PLAYER:
+                static_cast<Player*>(currentEntity->entityData)->crashNoise();
+                break;
+            }
+        }
+
+        uintptr_t pointer2 = inBody2.GetUserData();
+        if (pointer2 != 0)
+        {
+            Entity* currentEntity = ((Entity*)pointer2);
+            switch (currentEntity->entityType)
+            {
+            case PLAYER:
+                static_cast<Player*>(currentEntity->entityData)->crashNoise();
+                break;
+            }
+        }
 
         // Allows you to ignore a contact before it is created (using layers to not make objects collide is cheaper!)
         return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
@@ -156,23 +207,6 @@ public:
     virtual void OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) override
     {
         //vprint("Contact validate removed.\n");
-    }
-};
-
-// An example activation listener
-class MyBodyActivationListener : public JPH::BodyActivationListener
-{
-public:
-    virtual ~MyBodyActivationListener() = default;
-
-    virtual void OnBodyActivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override
-    {
-        //vprint("A body got activated.\n");
-    }
-
-    virtual void OnBodyDeactivated(const JPH::BodyID& inBodyID, uint64_t inBodyUserData) override
-    {
-        //vprint("A body went to sleep.\n");
     }
 };
 

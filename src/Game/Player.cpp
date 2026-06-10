@@ -2,21 +2,49 @@
 
 #include "Physics/Physics.hpp"
 
+#include "Scene.hpp"
+
 static constexpr float cCharacterRadiusStanding = 0.3f;
 
-void Player::init()
+void Player::init(DebugEntityData& debugEntityData)
 {
-    JPH::SphereShapeSettings playerSphereSettings{ 1.f };
+    JPH::SphereShapeSettings playerSphereSettings{ 1.0f };
     playerSphereSettings.SetEmbedded();
 
     JPH::ShapeSettings::ShapeResult playerShapeResult = playerSphereSettings.Create();
     JPH::ShapeRefC playerShapeRef = playerShapeResult.Get();
 
     playerSettings.mMaxSlopeAngle = JPH::DegreesToRadians(45.0f);
-    playerSettings.mLayer = Layers::MOVING;
+    playerSettings.mLayer = Layers::CHARACTER;
     playerSettings.mShape = playerShapeRef;
     playerSettings.mFriction = 0.5f;
     playerSettings.mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -cCharacterRadiusStanding);
+
+    vec3s playerInitPostion{ 0.f, 0.f, 0.f };
+    JPH::BodyCreationSettings debugGeometryForPlayer{};
+    debugGeometryForPlayer.SetShape(playerShapeRef);
+    debugGeometryForPlayer.mPosition = JPH::Vec3Arg{ playerInitPostion.x, playerInitPostion.y, playerInitPostion.z };
+    debugGeometryForPlayer.mRotation = JPH::Quat::sIdentity();
+    debugGeometryForPlayer.mMotionType = JPH::EMotionType::Dynamic;
+    debugGeometryForPlayer.mObjectLayer = Layers::MOVING;
+
+    JPH::EShapeSubType shapeType = debugGeometryForPlayer.GetShape()->GetSubType();
+    JPH::RMat44 shapeModel;
+    switch (shapeType)
+    {
+    case JPH::EShapeSubType::Sphere:
+    {
+        shapeModel = JPH::RMat44::sScale(((JPH::SphereShape*)debugGeometryForPlayer.GetShape())->GetRadius());
+    }
+    break;
+    default:
+        VOID_ERROR("Shape type not supported.\n");
+    }
+
+    debugEntityData.colour = { 1.f, 1.f, 1.f, 1.f };
+    debugEntityData.position = glms_mat4_identity();
+    debugEntityData.model = convertToMat4(shapeModel);
+
     //TODO - change for your allocator, check object life.
     character = new JPH::Character{ &playerSettings, JPH::RVec3Arg::sZero(), JPH::QuatArg::sIdentity(), 0, &Physics::instance().physicsSystem };
     character->AddToPhysicsSystem(JPH::EActivation::Activate);
@@ -55,16 +83,8 @@ void Player::handleEvents(const InputHandler& input, const JPH::Vec3& cameraForw
     playerMovement = rotation * playerMovement;
 }
 
-void Player::update(float deltaTime)
+void Player::update(float deltaTime, AudioSystem& audio)
 {
-    //Cancel movement in opposite direction of normal when touching something we can't walk up
-    JPH::Vec3 normal = character->GetGroundNormal();
-    float dot = normal.Dot(playerMovement);
-    if (dot < 0.0f)
-    {
-        playerMovement -= (dot * normal) / normal.LengthSq();
-    }
-
     //Update velocity
     JPH::Vec3 currentVelocity = character->GetLinearVelocity();
     JPH::Vec3 desiredVelocity = 2200.f * playerMovement;
@@ -72,9 +92,20 @@ void Player::update(float deltaTime)
         
     //Update the velocity
     character->SetLinearVelocity(newVelocity);
+
+    if (soundEffect == true) 
+    {
+        audio.playSoundEffect(sfx::Lazer);
+        soundEffect = false;
+    }
 }
 
 void Player::resetPosition()
 {
     character->SetPosition({ 0.f, 0.f, 0.f });
+}
+
+void Player::crashNoise()
+{
+    soundEffect = true;
 }

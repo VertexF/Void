@@ -278,8 +278,8 @@ int main(int argc, char** argv)
 
     Scene scene;
     scene.initScene(allocator, gpu, mainDescriptorSetLayout);
-    //scene.buildScene(Physics::instance());
-    scene.buildDebugScene(Physics::instance());
+    scene.buildScene();
+    //scene.buildDebugScene();
 
     // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
     // You should definitely not call this every frame or when e.g. streaming in a new level section as it is an expensive operation.
@@ -336,13 +336,11 @@ int main(int argc, char** argv)
     audioSystem.init();
     audioSystem.loadAudio();
 
-    Player player;
-    player.init();
-
     bool debugRenderer = true;
     uint32_t element = 0;
     UniformData globalDebugData{};
     vec3s playerPosition{};
+    bool recreatePositionBuffer = false;
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
@@ -360,13 +358,33 @@ int main(int argc, char** argv)
         //New Frame
         if (Window::instance()->minimised == false)
         {
-            playerPosition = convertToVec3(player.character->GetPosition());
+            playerPosition = convertToVec3(static_cast<Player*>(scene.entities[0].entityData)->character->GetPosition());
 
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
             if (gpu.newFrame() == false)
             {
                 continue;
+            }
+
+            if (recreatePositionBuffer)
+            {
+                gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
+                gpu.destroyBufferInstant(debugEntityDataBuffer[gpu.currentFrame].index);
+
+                bufferCreation.reset()
+                    .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
+                    .setName("othername")
+                    .setData(scene.entityData.data);
+                positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
+
+                bufferCreation.reset()
+                    .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugEntityData) * scene.debugEntityData.size)
+                    .setName("debugRenderer")
+                    .setData(scene.debugEntityData.data);
+                debugEntityDataBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
+
+                recreatePositionBuffer = false;
             }
 
             mat4s globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
@@ -379,7 +397,7 @@ int main(int argc, char** argv)
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }
 
-            player.handleEvents(inputHandler, convertToVec3JPH(gameCamera.internal3DCamera.direction));
+            static_cast<Player*>(scene.entities[0].entityData)->handleEvents(inputHandler, convertToVec3JPH(gameCamera.internal3DCamera.direction));
 
             if (inputHandler.isKeyJustReleased(Keys::KEY_1))
             {
@@ -391,7 +409,7 @@ int main(int argc, char** argv)
             }
             else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
             {
-                player.resetPosition();
+                static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
                 gameCamera.resetPlayerCamera();
             }
             else if (inputHandler.isKeyJustReleased(Keys::KEY_0))
@@ -401,8 +419,6 @@ int main(int argc, char** argv)
                 //However this is hard to do because that value can be literally anywere in the array and it's not tied to any entity.
                 if (scene.entities.size != 0 && scene.entities.size > element)
                 {
-                    uint32_t sizee = scene.entities.size;
-
                     Physics::instance().bodyInterface->RemoveBody(scene.entities[element].bodyID);
 
                     //This is the issue we need a different way to sort this `entityIndex` issue.
@@ -410,28 +426,22 @@ int main(int argc, char** argv)
 
                     if (scene.entities.size != 0)
                     {
-                        scene.models[EntityModels::DUCK].instanceCount -= 1;
+                        if (scene.models[EntityModels::DUCK_MODEL].instanceCount == 0)
+                        {
+                            scene.models[EntityModels::ROCK_MODEL].instanceCount -= 1;
+                        }
+                        else 
+                        {
+                            scene.models[EntityModels::DUCK_MODEL].instanceCount -= 1;
+                        }
                         scene.debugModels[DebugModels::SPHERE].instanceCount -= 1;
-                    }
-                    else
-                    {
-                        for (uint32_t i = 0; i < scene.models.size; ++i)
-                        {
-                            scene.models[i].instanceCount = 0;
-                        }
-
-                        for (uint32_t i = 0; i < scene.debugModels.size; ++i)
-                        {
-                            scene.debugModels[i].instanceCount = 0;
-                        }
                     }
 
                     if (scene.entities.size != 0)
                     {
-                        //Delete
-                        scene.debugEntityData.deleteSwap(entityDataIndex);
-                        scene.entityData.deleteSwap(entityDataIndex);
-                        scene.entities.deleteSwap(entityDataIndex);
+                        scene.debugEntityData.erase(entityDataIndex);
+                        scene.entityData.erase(entityDataIndex);
+                        scene.entities.erase(element);
 
                         for (uint32_t i = 0; i < scene.entities.size; ++i)
                         {
@@ -441,9 +451,26 @@ int main(int argc, char** argv)
                             }
                         }
                     }
+
+                    gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
+                    gpu.destroyBufferInstant(debugEntityDataBuffer[gpu.currentFrame].index);
+
+                    bufferCreation.reset()
+                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
+                        .setName("othername")
+                        .setData(scene.entityData.data);
+                    positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
+
+                    bufferCreation.reset()
+                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(DebugEntityData) * scene.debugEntityData.size)
+                        .setName("debugRenderer")
+                        .setData(scene.debugEntityData.data);
+                    debugEntityDataBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
+
+                    recreatePositionBuffer = true;
                 }
 
-                element++;
+                //element++;
             }
 
             ////NOTE: This must be after the OS messages.
@@ -472,9 +499,11 @@ int main(int argc, char** argv)
             beginFrameTick = currentTick;
 
             Physics::instance().updatePhysics(deltaTime);
+
+            static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, audioSystem);
             
-            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, {0.f, 0.f, 0.f, 0.f}, deltaTime);
+            //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, {0.f, 0.f, 0.f, 0.f}, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
 
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
@@ -501,6 +530,7 @@ int main(int argc, char** argv)
             globalDebugData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
             vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 10.f));
             globalDebugData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
+            //globalDebugData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             //Scene
             gpuCommands->bindPipeline(cubePipeline);
@@ -517,7 +547,7 @@ int main(int argc, char** argv)
                 const Entity& entity = scene.entities[entityIndex];
                 uint32_t entityIdx = scene.entities[entityIndex].entityIndex;
 
-                if (entity.isPlayer == false)
+                if (entity.entityType != PLAYER)
                 {
                     if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
                     {
@@ -528,8 +558,7 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    //player.update(deltaTime);
-                    JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
+                    JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
                     scene.entityData[entityIdx].pos = convertToMat4(newPos);
                 }
             }
@@ -582,7 +611,7 @@ int main(int argc, char** argv)
                 {
                     const Entity& entity = scene.entities[entityIndex];
                     uint32_t entityIdx = entity.entityIndex;
-                    if (entity.isPlayer == false)
+                    if (entity.entityType != PLAYER)
                     {
                         if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
                         {
@@ -592,10 +621,11 @@ int main(int argc, char** argv)
                     }
                     else 
                     {
-                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(player.character->GetBodyID());
-                        scene.debugEntityData[entityIdx].position = convertToMat4(newPos);
-                        //scene.debugEntityData[entityIdx].position.m31 += 0.6f;
-                        //scene.debugEntityData[entityIdx].position.m30 += 0.2f;
+                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
+                        mat4s playerMatix = convertToMat4(newPos);
+                        playerMatix.m31 += 0.6f;
+                        playerMatix.m30 += 0.2f;
+                        scene.debugEntityData[entityIdx].position = playerMatix;
                     }
                 }
 
@@ -674,7 +704,7 @@ int main(int argc, char** argv)
     gpu.destroyBuffer(skyboxMaterialBuffer);
     gpu.destroyBuffer(debugGlobalBuffer);
 
-    scene.shutdownScene(gpu, Physics::instance());
+    scene.shutdownScene(gpu);
 
     gpu.destroySampler(skyboxSampler);
     gpu.destroyTexture(skyboxTextureHandle);

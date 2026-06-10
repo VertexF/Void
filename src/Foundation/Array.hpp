@@ -70,6 +70,16 @@ struct Array
         data[index] = data[--size];
     }
 
+    void erase(uint32_t index)
+    {
+        VOID_ASSERT(size > 0 && index < size);
+        for (uint32_t i = index; i < size - 1; ++i)
+        {
+            data[i] = data[i + 1];
+        }
+        size--;
+    }
+
     T& operator[](uint32_t index)
     {
         VOID_ASSERT(index < size);

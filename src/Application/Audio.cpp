@@ -63,6 +63,11 @@ void AudioSystem::playSoundEffect(sfx::SFX_TYPE type)
     ma_sound_start(&soundEffects[type]);
 }
 
+void AudioSystem::stopSoundEffect(sfx::SFX_TYPE type)
+{
+    ma_sound_stop(&soundEffects[type]);
+}
+
 void AudioSystem::selectAudioDevice()
 {
     /* We have our devices, so now we want to get the user to select the devices they want to output to. */
