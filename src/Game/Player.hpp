@@ -17,6 +17,7 @@
 //Thick about how you don't want to write implementation code in UI for example. This might be the same case.
 
 #include "Utils.hpp"
+#include "Graphics/ShaderData.hpp"
 
 struct Player 
 {

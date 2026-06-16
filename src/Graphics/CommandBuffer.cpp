@@ -72,7 +72,7 @@ void CommandBuffer::beginRendering()
     colourAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colourAttachment.clearValue = clears[0];
+    colourAttachment.clearValue = { 1.f, 1.f, 1.f, 1.f }; //0.7f, 0.9f, 1.f, 1.f = blue
 
     Texture* depthTexture = device->accessTexture(device->depthTexture);
 
@@ -86,7 +86,7 @@ void CommandBuffer::beginRendering()
     depthAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.clearValue = clears[1];
+    depthAttachment.clearValue = { 0.f, 0 };
 
     VkRenderingInfo renderingInfo{};
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -229,17 +229,6 @@ void CommandBuffer::setScissor(const Rect2DInt* rect)
     }
 
     vkCmdSetScissor(vkCommandBuffer, 0, 1, &vkScissor);
-}
-
-void CommandBuffer::clear(float red, float green, float blue, float alpha)
-{
-    clears[0].color = { red, green, blue, alpha };
-}
-
-void CommandBuffer::clearDepthStencil(float depth, uint8_t stencil)
-{
-    clears[1].depthStencil.depth = depth;
-    clears[1].depthStencil.stencil = stencil;
 }
 
 void CommandBuffer::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)

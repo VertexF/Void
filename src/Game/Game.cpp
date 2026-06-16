@@ -352,9 +352,6 @@ void Game::loop()
 
             gpu.beginRenderingTransition(gpuCommands);
             gpuCommands->beginRendering();
-            //gpuCommands->clear(0.7f, 0.9f, 1.f, 1.f);
-            gpuCommands->clear(1.f, 1.f, 1.f, 1.f);
-            gpuCommands->clearDepthStencil(0.f, 0);
 
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);

@@ -15,6 +15,19 @@ struct UniformData
     vec4s light;
 };
 
+//Here we are going to attempt full bindless for the debug renderer to make this as painless as possible in the future.
+struct EntityData
+{
+    mat4s position;
+    //We need this because the final matrix that comes out the glb after multiplying 
+    //all local nodes together needs to be the same as the collision geometry.
+    //Meaning that model matrix we get out of the actual geometry needs to be given to the debug geometry if they tied together when creating the buffer.
+    mat4s debugModel;
+    //Colour will be used as a key for various different objects.
+    vec4s colour;
+    float padd[4];
+};
+
 struct PushConstants
 {
     VkDeviceAddress vertexDataAddress;

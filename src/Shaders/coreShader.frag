@@ -177,13 +177,13 @@ void main()
 
     vec3 tangent = normalize(vTangent.xyz);
     vec3 bitangent = cross(normalize(vNormal), tangent) * vTangent.w;
+    vec3 N = normalize(vNormal);
 
-    TBN = mat3(tangent, bitangent, normalize(vNormal));
+    TBN = mat3(tangent, bitangent, N);
 
     vec3 V = normalize(sceneBufferReference.sceneData.eye.xyz - vPosition.xyz);
     vec3 L = normalize(sceneBufferReference.sceneData.light.xyz - vPosition.xyz);
     //NOTE: Normal textures are encoded to [0, 1] but we need it to be maped to [-1, 1] value.
-    vec3 N = normalize(vNormal);
     if (textures.z != INVALID_TEXTURE_INDEX) 
     {
         N = normalize(texture(globalTextures[nonuniformEXT(textures.z)], vTexcoord0).rgb * 2.0 - 1.0);
@@ -245,7 +245,7 @@ void main()
     float GGXL = NdotV * sqrt((-NdotL * alphaSquared + NdotL) * NdotL + alphaSquared);
     float GGXV = NdotL * sqrt((-NdotV * alphaSquared + NdotL) * NdotL + alphaSquared);
     float visibility = 0.5 / (GGXV + GGXL);
-
+    
     //Faster but less accurate.
     //float GGXL = NdotV * (NdotV * (1.0 - roughnessFactor)) + roughnessFactor;
     //float GGXV = NdotL * (NdotL * (1.0 - roughnessFactor)) + roughnessFactor;

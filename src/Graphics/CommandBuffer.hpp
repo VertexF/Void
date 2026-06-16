@@ -18,9 +18,6 @@ struct CommandBuffer
 
     void setViewport(const Viewport* viewport);
     void setScissor(const Rect2DInt* rect);
-        
-    void clear(float red, float green, float blue, float alpha);
-    void clearDepthStencil(float depth, uint8_t stencil);
 
     void draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, 
@@ -43,8 +40,6 @@ struct CommandBuffer
     VkDescriptorSet vkDescriptorSets[16];
 
     Pipeline* currentPipeline;
-    //0 = colour; 1 = depth stencil.
-    VkClearValue clears[2];
     bool isRecording;
 
     uint32_t handle;

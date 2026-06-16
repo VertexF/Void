@@ -11,6 +11,7 @@
 #include "Application/Audio.hpp"
 
 #include "Utils.hpp"
+#include "Graphics/ShaderData.hpp"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
