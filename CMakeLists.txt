@@ -84,8 +84,6 @@ set(VOID_SOURCE src/main.cpp
 				src/Game/Utils.hpp
 				src/Game/Game.hpp
 				src/Game/Game.cpp
-				src/Game/Asteroid.hpp
-				src/Game/Asteroid.cpp
 )
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})

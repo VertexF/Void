@@ -33,8 +33,10 @@ struct MeshDraw
     vec4s metallicRoughnessOcclusionFactor;
     vec3s scale;
     vec3s emissiveFactor;
+    vec3s specularValue;
 
     float alphaCutoff;
+    float iorFactor;
 
     BufferHandle vertexBuffer;
     BufferHandle indexBuffer;
@@ -68,9 +70,12 @@ struct MaterialData
     vec4s baseColourFactor;
     vec4s metallicRoughnessOcclusionFactor;
     float alphaCutoff;
+    float iorFactor;
 
     vec3s emissiveFactor;
     uint32_t emissiveTextureIndex;
+
+    vec3s specularValue;
     uint32_t flags;
 };
 

@@ -6,44 +6,17 @@
 
 static constexpr float cCharacterRadiusStanding = 0.3f;
 
-void Player::init(EntityData& entityData)
+void Player::init(EntityData& entityData, const JPH::ShapeRefC& shapeRef, const JPH::Mat44& modelShape)
 {
-    JPH::SphereShapeSettings playerSphereSettings{ 1.0f };
-    playerSphereSettings.SetEmbedded();
-
-    JPH::ShapeSettings::ShapeResult playerShapeResult = playerSphereSettings.Create();
-    JPH::ShapeRefC playerShapeRef = playerShapeResult.Get();
-
     playerSettings.mMaxSlopeAngle = JPH::DegreesToRadians(45.0f);
     playerSettings.mLayer = Layers::CHARACTER;
-    playerSettings.mShape = playerShapeRef;
+    playerSettings.mShape = shapeRef;
     playerSettings.mFriction = 0.5f;
     playerSettings.mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -cCharacterRadiusStanding);
 
-    vec3s playerInitPostion{ 0.f, 0.f, 0.f };
-    JPH::BodyCreationSettings debugGeometryForPlayer{};
-    debugGeometryForPlayer.SetShape(playerShapeRef);
-    debugGeometryForPlayer.mPosition = JPH::Vec3Arg{ playerInitPostion.x, playerInitPostion.y, playerInitPostion.z };
-    debugGeometryForPlayer.mRotation = JPH::Quat::sIdentity();
-    debugGeometryForPlayer.mMotionType = JPH::EMotionType::Dynamic;
-    debugGeometryForPlayer.mObjectLayer = Layers::MOVING;
-
-    JPH::EShapeSubType shapeType = debugGeometryForPlayer.GetShape()->GetSubType();
-    JPH::RMat44 shapeModel;
-    switch (shapeType)
-    {
-    case JPH::EShapeSubType::Sphere:
-    {
-        shapeModel = JPH::RMat44::sScale(((JPH::SphereShape*)debugGeometryForPlayer.GetShape())->GetRadius());
-    }
-    break;
-    default:
-        VOID_ERROR("Shape type not supported.\n");
-    }
-
     entityData.colour = { 1.f, 1.f, 1.f, 1.f };
     entityData.position = glms_mat4_identity();
-    entityData.debugModel = convertToMat4(shapeModel);
+    entityData.debugModel = convertToMat4(modelShape);
 
     //TODO - change for your allocator, check object life.
     character = new JPH::Character{ &playerSettings, JPH::RVec3Arg::sZero(), JPH::QuatArg::sIdentity(), 0, &Physics::instance().physicsSystem };
@@ -95,7 +68,7 @@ void Player::update(float deltaTime, AudioSystem& audio)
 
     if (soundEffect == true) 
     {
-        audio.playSoundEffect(sfx::Lazer);
+        //audio.playSoundEffect(sfx::Lazer);
         soundEffect = false;
     }
 }

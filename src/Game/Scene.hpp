@@ -28,6 +28,8 @@ struct Scene
     void buildNoneSoildEntity(EntityModels modelType, EntityType entityType, vec3s& position, vec3s axis, float angle);
     void shutdownScene(GPUDevice& gpu);
 
+    JPH::RMat44 getCollsionShape(JPH::EShapeSubType shapeType, const JPH::BodyCreationSettings& shapeSetting);
+
     JPH::BodyCreationSettings sphereSettings;
     JPH::BodyCreationSettings sphereSettings2;
 

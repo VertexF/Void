@@ -16,6 +16,8 @@ struct Game
     void loop();
     void shutdown();
 
+    void deleteEntity();
+
     GPUDevice gpu{};
     InputHandler inputHandler{};
     GameCamera gameCamera;

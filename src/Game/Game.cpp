@@ -59,6 +59,8 @@ namespace
         meshData.baseColourFactor = meshDraw.baseColourFactor;
         meshData.metallicRoughnessOcclusionFactor = meshDraw.metallicRoughnessOcclusionFactor;
         meshData.alphaCutoff = meshDraw.alphaCutoff;
+        meshData.iorFactor = meshDraw.iorFactor;
+        meshData.specularValue = meshDraw.specularValue;
         meshData.flags = meshDraw.flags;
 
         // NOTE: for left-handed systems (as defined in cglm) need to invert positive and negative Z.
@@ -106,7 +108,7 @@ void Game::init()
 
     //Shader state
     FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/coreShader.vert.spv", &MemoryService::instance()->scratchAllocator);
-    FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShader.frag.spv", &MemoryService::instance()->scratchAllocator);
+    FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShaderNew.frag.spv", &MemoryService::instance()->scratchAllocator);
 
     pipelineCreation.shaders.setName("main")
         .addStage(vertexShaderCode.data, uint32_t(vertexShaderCode.size), VK_SHADER_STAGE_VERTEX_BIT)
@@ -260,58 +262,10 @@ void Game::loop()
                 static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
                 gameCamera.resetPlayerCamera();
             }
-            else if (inputHandler.isKeyJustReleased(Keys::KEY_0))
+
+            if (toDeleteQueue.size > 0) 
             {
-                //if not the last entity being deleted.
-                //Then minus from the largest entityIndex value.
-                //However this is hard to do because that value can be literally anywere in the array and it's not tied to any entity.
-                if (scene.entities.size != 0 && scene.entities.size > element)
-                {
-                    Physics::instance().bodyInterface->RemoveBody(scene.entities[element].bodyID);
-
-                    //This is the issue we need a different way to sort this `entityIndex` issue.
-                    uint32_t entityDataIndex = scene.entities[element].entityIndex;
-
-                    if (scene.entities.size != 0)
-                    {
-                        if (scene.models[EntityModels::DUCK_MODEL].instanceCount == 0)
-                        {
-                            scene.models[EntityModels::ROCK_MODEL].instanceCount -= 1;
-                        }
-                        else
-                        {
-                            scene.models[EntityModels::DUCK_MODEL].instanceCount -= 1;
-                        }
-                        scene.debugModels[DebugModels::SPHERE].instanceCount -= 1;
-                    }
-
-                    if (scene.entities.size != 0)
-                    {
-                        scene.entityData.erase(entityDataIndex);
-                        scene.entities.erase(element);
-
-                        for (uint32_t i = 0; i < scene.entities.size; ++i)
-                        {
-                            if (scene.entities[i].entityIndex > entityDataIndex)
-                            {
-                                scene.entities[i].entityIndex--;
-                            }
-                        }
-                    }
-
-                    gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
-
-                    BufferCreation bufferCreation{};
-                    bufferCreation.reset()
-                        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
-                        .setName("othername")
-                        .setData(scene.entityData.data);
-                    positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
-
-                    recreatePositionBuffer = true;
-                }
-
-                //element++;
+                deleteEntity();
             }
 
             ////NOTE: This must be after the OS messages.
@@ -366,10 +320,10 @@ void Game::loop()
             globalSceneData.globalModel = globalModel;
             globalSceneData.view = gameCamera.internal3DCamera.view;
             globalSceneData.project = gameCamera.internal3DCamera.projection;
-            globalSceneData.eye = vec4s{ eye.x, eye.y, eye.z, 1.f };
+            globalSceneData.eye = vec4s{ gameCamera.internal3DCamera.direction.x, gameCamera.internal3DCamera.direction.y, gameCamera.internal3DCamera.direction.z, 1.f };
             vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 10.f));
-            globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
-            //globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
+            //globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
+            globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             //Scene
             gpuCommands->bindPipeline(mainPipeline);
@@ -392,13 +346,15 @@ void Game::loop()
                     {
                         EntityData physicsPosition{};
                         JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
-                        scene.entityData[entityIdx].position = convertToMat4(newPos);
+                        mat4s modelPosition = convertToMat4(newPos);
+                        scene.entityData[entityIdx].position = modelPosition;
                     }
                 }
                 else
                 {
                     JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
-                    scene.entityData[entityIdx].position = convertToMat4(newPos);
+                    mat4s modelPosition = convertToMat4(newPos);
+                    scene.entityData[entityIdx].position = modelPosition;
                 }
             }
 
@@ -426,9 +382,9 @@ void Game::loop()
                     gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 0);
 
                     gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
-
-                    instanceCountOffset += scene.models[modelIndexType].instanceCount;
                 }
+
+                instanceCountOffset += scene.models[modelIndexType].instanceCount;
             }
 
             if (debugRenderer)
@@ -523,6 +479,7 @@ void Game::shutdown()
     gpu.destroyBuffer(debugGlobalBuffer);
 
     scene.shutdownScene(gpu);
+    Physics::instance().shutdownPhysics();
 
     gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
     gpu.destroyPipeline(mainPipeline);
@@ -538,4 +495,55 @@ void Game::shutdown()
     Window::instance()->shutdown();
 
     MemoryService::instance()->shutdown();
+}
+
+void Game::deleteEntity() 
+{
+    //In the update loop.
+    if (toDeleteQueue.size < 0)
+    {
+        for (uint32_t i = 0; i < toDeleteQueue.size; ++i)
+        {
+            Entity entity = scene.entities[toDeleteQueue[i]];
+
+            if (scene.entities.size != 0 && scene.entities.size > element)
+            {
+                //Get the body id from entity index.
+                //Get the modelType and debug
+                Physics::instance().bodyInterface->RemoveBody(entity.bodyID);
+
+                scene.models[entity.modelType].instanceCount -= 1;
+                scene.debugModels[DebugModels::SPHERE].instanceCount -= 1;
+
+                if (scene.entities.size != 0)
+                {
+                    uint32_t indexToDelete = entity.entityIndex;
+
+                    scene.entityData.erase(indexToDelete);
+                    scene.entities.erase(indexToDelete);
+
+                    for (uint32_t j = 0; j < scene.entities.size; ++j)
+                    {
+                        if (scene.entities[j].entityIndex > indexToDelete)
+                        {
+                            scene.entities[j].entityIndex--;
+                        }
+                    }
+                }
+
+                gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
+
+                BufferCreation bufferCreation{};
+                bufferCreation.reset()
+                    .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
+                    .setName("othername")
+                    .setData(scene.entityData.data);
+                positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
+
+                recreatePositionBuffer = true;
+            }
+
+            toDeleteQueue.pop();
+        }
+    }
 }

@@ -88,6 +88,8 @@ void Physics::initPhysics()
     JPH::Trace = TraceImpl;
     JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
 
+    toDeleteQueue.init(&MemoryService::instance()->systemAllocator, 4);
+
     // Create a factory, this class is responsible for creating instances of classes based on their name or hash and is mainly used for deserialization of saved data.
     // It is not directly used in this example but still required.
     JPH::Factory::sInstance = new JPH::Factory();
@@ -135,4 +137,6 @@ void Physics::shutdownPhysics()
     //// Destroy the factory
     //delete JPH::Factory::sInstance;
     //JPH::Factory::sInstance = nullptr;
+
+    toDeleteQueue.shutdown();
 }

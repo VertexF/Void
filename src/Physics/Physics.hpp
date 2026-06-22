@@ -22,6 +22,11 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 
+namespace
+{
+    Array<uint32_t> toDeleteQueue;
+}
+
 // Disable common warnings triggered by Jolt, you can use JPH_SUPPRESS_WARNING_PUSH / JPH_SUPPRESS_WARNING_POP to store and restore the warning state
 JPH_SUPPRESS_WARNINGS
 
@@ -172,8 +177,11 @@ public:
             Entity* currentEntity = ((Entity*)pointer1);
             switch (currentEntity->entityType)
             {
-            case PLAYER:
+            case EntityType::PLAYER:
                 static_cast<Player*>(currentEntity->entityData)->crashNoise();
+                break;
+            case EntityType::ROCK:
+                toDeleteQueue.push(currentEntity->entityIndex);
                 break;
             }
         }
@@ -184,8 +192,11 @@ public:
             Entity* currentEntity = ((Entity*)pointer2);
             switch (currentEntity->entityType)
             {
-            case PLAYER:
+            case EntityType::PLAYER:
                 static_cast<Player*>(currentEntity->entityData)->crashNoise();
+                break;
+            case EntityType::ROCK:
+                toDeleteQueue.push(currentEntity->entityIndex);
                 break;
             }
         }

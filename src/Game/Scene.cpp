@@ -14,25 +14,38 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, DescriptorSet
 
     entityData.init(allocator, totalEntities, totalEntities);
     bodiesToBeAdded.init(allocator, totalEntities);
-    models.init(allocator, 2, 2);
+    models.init(allocator, 3, 3);
     debugModels.init(allocator, 1, 1);
 
     models[EntityModels::ROCK_MODEL].loadModel("Assets/Models/out/rock.glb", gpu, descriptorSetLayout);
-    models[EntityModels::DUCK_MODEL].loadModel("Assets/Models/out/Duck.glb", gpu, descriptorSetLayout);
+    models[EntityModels::DUCK_MODEL].loadModel("Assets/Models/out/metalDuck.glb", gpu, descriptorSetLayout);
+    models[EntityModels::SPEC_SPHERE_MODEL].loadModel("Assets/Models/out/specularSpheres2.glb", gpu, descriptorSetLayout);
 
     debugModels[DebugModels::SPHERE].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
 }
 
 void Scene::buildScene()
 {
+    JPH::SphereShapeSettings playerSphereSettings{ 1.0f };
+    playerSphereSettings.SetEmbedded();
+
+    JPH::ShapeSettings::ShapeResult playerShapeResult = playerSphereSettings.Create();
+    JPH::ShapeRefC playerShapeRef = playerShapeResult.Get();
+
+    vec3s playerInitPostion{ 0.f };
+    sphereSettings2.SetShape(playerShapeRef);
+    sphereSettings2.mPosition = JPH::Vec3Arg{ playerInitPostion.x, playerInitPostion.y, playerInitPostion.z };
+    sphereSettings2.mRotation = JPH::Quat::sIdentity();
+    sphereSettings2.mMotionType = JPH::EMotionType::Dynamic;
+    sphereSettings2.mObjectLayer = Layers::MOVING;
+    //This is the make player function. Eventually we need to clean all this up so we wont need to call this function to create a player.
+    buildRigidBodyEntity(EntityModels::DUCK_MODEL, DebugModels::SPHERE, EntityType::PLAYER, { 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 1.f, 1.f });
+
     JPH::SphereShapeSettings duckSphereSettings{ 1.5f };
     duckSphereSettings.SetEmbedded();
 
     JPH::ShapeSettings::ShapeResult duckShapeResult = duckSphereSettings.Create();
     JPH::ShapeRefC duckShapeRef = duckShapeResult.Get();
-
-    //This is the make player function. Eventually we need to clean all this up so we wont need to call this function to create a player.
-    buildRigidBodyEntity(EntityModels::DUCK_MODEL, DebugModels::SPHERE, EntityType::PLAYER, { 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 1.f, 1.f });
 
     vec3s position1{ 20.f, 59.f, 0.f };
     sphereSettings2.SetShape(duckShapeRef);
@@ -50,6 +63,14 @@ void Scene::buildScene()
     sphereSettings2.mObjectLayer = Layers::MOVING;
     buildRigidBodyEntity(EntityModels::DUCK_MODEL, DebugModels::SPHERE, EntityType::DUCK, position3, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
 
+    vec3s position4{ 5.f, 5.f, 5.f };
+    sphereSettings2.SetShape(duckShapeRef);
+    sphereSettings2.mPosition = JPH::Vec3Arg{ position4.x, position4.y, position4.z };
+    sphereSettings2.mRotation = JPH::Quat::sIdentity();
+    sphereSettings2.mMotionType = JPH::EMotionType::Static;
+    sphereSettings2.mObjectLayer = Layers::MOVING;
+    buildRigidBodyEntity(EntityModels::SPEC_SPHERE_MODEL, DebugModels::SPHERE, EntityType::SPEC_SPHERE, position4, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
+
     // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
     Physics::instance().bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(0.f, -16.f, 0.f));
@@ -58,7 +79,7 @@ void Scene::buildScene()
     srand(time(0));
 
     float sceneRadius = 2000.f;
-    for (uint32_t i = 3; i < totalEntities; ++i)
+    for (uint32_t i = 4; i < totalEntities; ++i)
     {
         vec3s position;
         position.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
@@ -160,30 +181,45 @@ void Scene::buildRigidBodyEntity(EntityModels modelType, DebugModels debugModelT
                                  float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour)
 {   
     //Note that this uses the shorthand version of creating and adding a body to the world
-    JPH::BodyID bodyID;
-    JPH::RMat44 shapeModel;
-    if (entityType != PLAYER)
-    {
-        bodyID = Physics::instance().bodyInterface->CreateBody(shapeSetting)->GetID();
-        bodiesToBeAdded.push(bodyID);
-        entities[currentLastEntity].bodyID = bodyID;
-        entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Dynamic;
-
-        JPH::EShapeSubType shapeType = shapeSetting.GetShape()->GetSubType();
-        switch (shapeType)
-        {
-        case JPH::EShapeSubType::Sphere:
-        {
-            shapeModel = JPH::RMat44::sScale(((JPH::SphereShape*)shapeSetting.GetShape())->GetRadius());
-        }
-        break;
-        default:
-            VOID_ERROR("Shape type not supported.\n");
-        }
-    }
+    JPH::BodyID bodyID = Physics::instance().bodyInterface->CreateBody(shapeSetting)->GetID();
+    bodiesToBeAdded.push(bodyID);
+    entities[currentLastEntity].bodyID = bodyID;
 
     //TODO: Switch over the shapes that it might be.
     JPH::RMat44 shapePosition = Physics::instance().bodyInterface->GetWorldTransform(bodyID);
+    JPH::RMat44 shapeModel = JPH::RMat44::sIdentity();
+
+    switch (entityType)
+    {
+    case EntityType::PLAYER:
+    {
+        shapeModel = getCollsionShape(JPH::EShapeSubType::Sphere, shapeSetting);
+        entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Dynamic;
+
+        entities[currentLastEntity].entityType = EntityType::PLAYER;
+        entities[currentLastEntity].entityData = void_allocat(Player, &MemoryService::instance()->systemAllocator);
+        new (entities[currentLastEntity].entityData) Player;
+
+        static_cast<Player*>(entities[currentLastEntity].entityData)->init(entityData[currentLastEntity], shapeSetting.GetShape(), shapeModel);
+
+        //We need to set up the entity we have just created to the physics so we can access the actual data that the collision detection corrisponds to.
+        Physics::instance().bodyInterface->SetUserData(bodyID, (uint64_t)&entities[currentLastEntity]);
+    }
+        break;
+    case EntityType::ROCK:
+        {
+            shapeModel = getCollsionShape(JPH::EShapeSubType::Sphere, shapeSetting);
+
+            entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Static;
+            entities[currentLastEntity].entityType = EntityType::ROCK;
+
+            Physics::instance().bodyInterface->SetUserData(bodyID, (uint64_t)&entities[currentLastEntity]);
+        }
+        break;
+    default:
+        Physics::instance().bodyInterface->SetUserData(bodyID, NULL);
+        break;
+    }
 
     entityData[currentLastEntity].position = convertToMat4(shapePosition);
     entityData[currentLastEntity].colour = colour;
@@ -191,30 +227,8 @@ void Scene::buildRigidBodyEntity(EntityModels modelType, DebugModels debugModelT
 
     entities[currentLastEntity].entityIndex = currentLastEntity;
     entities[currentLastEntity].modelType = modelType;
-    entities[currentLastEntity].entityType = entityType;
     models[modelType].instanceCount++;
     debugModels[debugModelType].instanceCount++;
-
-    switch (entityType)
-    {
-    case EntityType::PLAYER:
-    {
-        entities[currentLastEntity].entityData = void_allocat(Player, &MemoryService::instance()->systemAllocator);
-        new (entities[currentLastEntity].entityData) Player;
-        static_cast<Player*>(entities[currentLastEntity].entityData)->init(entityData[currentLastEntity]);
-        JPH::BodyID playerBodyID = static_cast<Player*>(entities[currentLastEntity].entityData)->character->GetBodyID();
-
-        entities[currentLastEntity].bodyID = playerBodyID;
-        entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Dynamic;
-
-        //We need to set up the entity we have just created to the physics so we can access the actual data that the collision detection corrisponds to.
-        Physics::instance().bodyInterface->SetUserData(playerBodyID, (uint64_t)&entities[currentLastEntity]);
-    }
-        break;
-    default:
-        Physics::instance().bodyInterface->SetUserData(bodyID, NULL);
-        break;
-    }
 
     currentLastEntity++;
 }
@@ -272,4 +286,18 @@ void Scene::shutdownScene(GPUDevice& gpu)
     entities.shutdown();
     entityData.shutdown();
     bodiesToBeAdded.shutdown();
+}
+
+JPH::RMat44 Scene::getCollsionShape(JPH::EShapeSubType shapeType, const JPH::BodyCreationSettings& shapeSetting)
+{
+    switch (shapeType)
+    {
+    case JPH::EShapeSubType::Sphere:
+    {
+        return JPH::RMat44::sScale(((JPH::SphereShape*)shapeSetting.GetShape())->GetRadius());
+    }
+    break;
+    default:
+        VOID_ERROR("Shape type not supported.\n");
+    }
 }

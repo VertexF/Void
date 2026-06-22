@@ -49,9 +49,11 @@ layout(scalar, set = 0, binding = 0) uniform MaterialConstant
     vec4 baseColourFactor;
     vec4 metallicRoughnessOcclusionFactor;
     float alphaCutoff;
-    
+    float iorFactor;
+
     vec3 emissiveFactor;
     uint emissiveTextureIndex;
+    vec3 specularValue;
     uint flags;
 };
 
@@ -162,11 +164,15 @@ layout(scalar, push_constant) uniform entityIndex
 
 void main()
 {
-    fragColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
+    vec4 baseColour = vec4(0.5);
+    baseColour.a = 1.f;
+    if(textures.x != INVALID_TEXTURE_INDEX)
+    {
+        baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
+    }
     //fragColour *= vColour;
 
     mat3 TBN = mat3(1.0);
-    vec4 baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
 
     //bool useAlphaMask = (flags & DrawFlags_AlphaMask) != 0;
     //if (useAlphaMask && baseColour.a < alphaCutoff)

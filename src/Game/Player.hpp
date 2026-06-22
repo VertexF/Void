@@ -21,7 +21,7 @@
 
 struct Player 
 {
-	void init(EntityData& debugEntityData);
+	void init(EntityData& entityData, const JPH::ShapeRefC& shapeRef, const JPH::Mat44& modelShape);
 	void handleEvents(const InputHandler& input, const JPH::Vec3& cameraForwardVector);
 	void update(float deltaTime, AudioSystem& audio);
 	void resetPosition();
@@ -29,6 +29,8 @@ struct Player
 	JPH::Vec3 playerMovement;
 	JPH::CharacterSettings playerSettings;
 	JPH::Character* character;
+
+	uint32_t entityIndex = UINT32_MAX;
 
 	bool soundEffect = false;
 };

@@ -42,9 +42,11 @@ layout(scalar, set = 0, binding = 0) uniform MaterialConstant
     vec4 baseColourFactor;
     vec4 metallicRoughnessOcclusionFactor;
     float alphaCutoff;
+    float iorFactor;
     
     vec3 emissiveFactor;
     uint emissiveTextureIndex;
+    vec3 specularValue;
     uint flags;
 };
 
@@ -76,6 +78,13 @@ layout(location = 2) out vec4 vTangent;
 layout(location = 3) out vec4 vPosition;
 layout(location = 4) out vec4 vColour;
 
+mat3 adjugate(in mat4 m)
+{
+    return mat3(cross(m[1].xyz, m[2].xyz), 
+                cross(m[2].xyz, m[0].xyz), 
+                cross(m[0].xyz, m[1].xyz));
+}
+
 void main()
 {
     vec3 position = vec3(vertexDataReference.vertexData[gl_VertexIndex].px, 
@@ -93,11 +102,13 @@ void main()
 
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
-    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
-    vPosition  =  sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model * vec4(position, 1.0);
+    mat4 modelPostion = modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model;
+
+    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * modelPostion * vec4(position, 1.0);
+    vPosition  =  sceneBufferReference.sceneData.globalModel * modelPostion * vec4(position, 1.0);
 
     vTexcoord0 = texcoord;
-    vNormal = mat3(modelInv) * normal;
+    vNormal = mat3(adjugate(modelPostion)) * normal;
 
     vTangent = tangent;
     vColour = vec4(1.f, 1.f, 1.f, 1.f);//modelPositionsReference.modelPositions[2].colour;

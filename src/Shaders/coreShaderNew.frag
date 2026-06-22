@@ -53,6 +53,7 @@ layout(scalar, set = 0, binding = 0) uniform MaterialConstant
     
     vec3 emissiveFactor;
     uint emissiveTextureIndex;
+    vec3 specularValue;
     uint flags;
 };
 
@@ -187,6 +188,48 @@ float diffuseLambert()
     return 1.0 / PI;
 }
 
+float directionalLight(vec3 lightDirection, vec3 normal, float lightIntensity)
+{
+    vec3 l = normalize(-lightDirection);
+    float NoL = clamp(dot(normal, l), 0.0, 1.0);
+
+    return lightIntensity * NoL;
+}
+
+float getSquareFalloffAttenuation(vec3 posToLight, float lightInvRadius)
+{
+	float distanceSquare = dot(posToLight, posToLight);
+	float factor = distanceSquare * lightInvRadius * lightInvRadius;
+	float smoothFactor = max(1.0 - factor * factor, 0.0);
+	return (smoothFactor * smoothFactor) / max(distanceSquare, 1e-4);
+}
+
+float getSpotAngleAttenuation(vec3 l, vec3 lightDir, float innerAngle, float outerAngle)
+{
+	//The scale and offset computations can be done CPU-side.
+	float cosOuter = cos(outerAngle);
+	float spotScale = 1.0 / max(cos(innerAngle) - cosOuter, 1e-4);
+	float spotOffset = -cosOuter * spotScale;
+	
+	float cd = dot(normalize(-lightDir), l);
+	float attenuation = clamp(cd * spotScale + spotOffset, 0.0, 1.0);
+	return attenuation * attenuation;
+}
+
+float spotLight()
+{
+    float lightIntensity = 100000.f;
+    float lightInvRadius = 1 / 500.f;
+    vec3 lightDir = -sceneBufferReference.sceneData.eye.xyz;
+    float innerAngle = PI / 20;
+    float outerAngle = PI / 6;
+    vec3 posToLight = sceneBufferReference.sceneData.light.xyz - vPosition.xyz;
+    vec3 L = normalize(posToLight);
+	
+	float attenuation = getSquareFalloffAttenuation(posToLight, lightInvRadius) * getSpotAngleAttenuation(L, lightDir, innerAngle, outerAngle);
+    return lightIntensity * attenuation;
+}
+
 void main()
 {
 //Only here to turn of lighting if I need it.
@@ -269,26 +312,32 @@ void main()
 
     vec3 h = normalize(V + l);
     float NoV = abs(dot(N, V)) + 1e-5;
-    float NoL = clamp(dot(N, l), 0.00001, 1.0);
-    float NoH = clamp(dot(N, h), 0.00001, 1.0);
-    float LoH = clamp(dot(l, h), 0.00001, 1.0);
+    float NoL = clamp(dot(N, L), 0, 1.0);
+    float NoH = clamp(dot(N, h), 0, 1.0);
+    float LoH = clamp(dot(L, h), 0, 1.0);
 
     //diffuse BRDF
     vec3 Fd = baseColour.rgb * diffuseLambert();
+
+    vec3 reflecence = (specularValue * specularValue) * 0.16;
 
     //specular BRDF
     vec3 f0 = mix(vec3(0.04), baseColour.rgb, metalness);
     float D = distributionGGX(NoH, roughness); 
     float G = visibilitySmithGGXCorrelated(NoL, NoV, roughness);
-    vec3 F = fresnelSchlick(clamp(dot(h, V), 0.00001, 1.0), f0);
+    vec3 F = fresnelSchlick(clamp(dot(h, V), 0, 1.0), f0);
 
     vec3 specular = ((D * G) * F);
+    
+    //Lights
+	float spotLightIntensity = spotLight();
+    float directionalLightIntensity = directionalLight(vec3(-1.0, -2.0, 3.0), N, 100.f);
 
-    float lightIntensity = 10.0f;
-    // lightIntensity is the illuminance
-    // at perpendicular incidence in lux
-    float illuminance = (lightIntensity * NoL);
-    vec3 luminance = (specular * Fd) * illuminance;
+    vec3 luminance = ((specular * Fd) * spotLightIntensity * NoL);
+    vec3 luminance1 = ((specular * Fd) * directionalLightIntensity * NoL) * vec3(1.0, 0.867, 0.684);
 
-    fragColour = vec4(encodeSRGB(luminance + (baseColour.rgb * 0.01)), baseColour.a);
+    vec3 materialColour = emissive + mix(luminance, luminance, occlusion);
+    vec3 materialColour1 = emissive + mix(luminance1, luminance1, occlusion);
+
+	fragColour = vec4(encodeSRGB((materialColour + materialColour1) + (baseColour.rgb * 0.01)), baseColour.a);
 }

@@ -338,6 +338,21 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
 
                 meshDraw.alphaCutoff = material->alpha_cutoff != FLT_MAX ? material->alpha_cutoff : 1.f;
 
+                //If you don't set this value, in blender is assume 0.5.
+                meshDraw.iorFactor = 0.5f;
+                if (material->has_ior)
+                {
+                    meshDraw.iorFactor = material->ior.ior;
+                }
+
+                meshDraw.specularValue = {1.f, 1.f, 1.f};
+                if (material->has_specular) 
+                {
+                    meshDraw.specularValue.x = material->specular.specular_color_factor[0];
+                    meshDraw.specularValue.y = material->specular.specular_color_factor[1];
+                    meshDraw.specularValue.z = material->specular.specular_color_factor[2];
+                }
+
                 if (material->has_pbr_metallic_roughness)
                 {
                     meshDraw.baseColourFactor.x = material->pbr_metallic_roughness.base_color_factor[0];
