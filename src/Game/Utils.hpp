@@ -46,6 +46,7 @@ struct Entity
     JPH::BodyID bodyID;
 
     bool isDynamic;
+    bool isDeleted = false;
 };
 
 static mat4s convertToMat4(const JPH::RMat44& jphMat)

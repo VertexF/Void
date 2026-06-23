@@ -153,8 +153,6 @@ void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, Buffer* globalSceneB
     gpuCommands.bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 0);
     gpuCommands.bindlessDescriptorSet(1);
 
-    vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
-
     gpuCommands.draw(36, 1, 0, 0);
 }
 

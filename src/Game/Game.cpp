@@ -223,20 +223,6 @@ void Game::loop()
                 continue;
             }
 
-            if (recreatePositionBuffer)
-            {
-                gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
-
-                BufferCreation bufferCreation{};
-                bufferCreation.reset()
-                    .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
-                    .setName("othername")
-                    .setData(scene.entityData.data);
-                positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
-
-                recreatePositionBuffer = false;
-            }
-
             mat4s globalModel = glms_scale_make(vec3s{ modelScale, modelScale, modelScale });
 
             if (Window::instance()->resizeRequested)
@@ -261,11 +247,6 @@ void Game::loop()
             {
                 static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
                 gameCamera.resetPlayerCamera();
-            }
-
-            if (toDeleteQueue.size > 0) 
-            {
-                deleteEntity();
             }
 
             ////NOTE: This must be after the OS messages.
@@ -300,6 +281,8 @@ void Game::loop()
             //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
+            
+            deleteEntity();
 
             CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
@@ -339,6 +322,11 @@ void Game::loop()
             {
                 const Entity& entity = scene.entities[entityIndex];
                 uint32_t entityIdx = scene.entities[entityIndex].entityIndex;
+
+                if (entity.isDeleted) 
+                {
+                    continue;
+                }
 
                 if (entity.entityType != PLAYER)
                 {
@@ -393,36 +381,7 @@ void Game::loop()
                 gpuCommands->bindPipeline(debugPipeline);
 
                 pushConstants.modelPositionAddress = positionBuff->bufferAddress;
-
-                globalSceneData.globalModel = globalModel;
-
                 pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
-
-                vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
-
-                for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
-                {
-                    const Entity& entity = scene.entities[entityIndex];
-                    uint32_t entityIdx = entity.entityIndex;
-                    if (entity.entityType != PLAYER)
-                    {
-                        if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
-                        {
-                            JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(scene.entities[entityIndex].bodyID);
-                            scene.entityData[entityIdx].position = convertToMat4(newPos);
-                        }
-                    }
-                    else
-                    {
-                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
-                        mat4s playerMatix = convertToMat4(newPos);
-                        playerMatix.m31 += 0.6f;
-                        playerMatix.m30 += 0.2f;
-                        scene.entityData[entityIdx].position = playerMatix;
-                    }
-                }
-
-                vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
                 instanceCountOffset = 0;
                 for (int32_t modelIndexType = scene.debugModels.size - 1; modelIndexType >= 0; --modelIndexType)
@@ -499,51 +458,20 @@ void Game::shutdown()
 
 void Game::deleteEntity() 
 {
-    //In the update loop.
-    if (toDeleteQueue.size < 0)
+    if (Physics::instance().contactListener.toDeleteQueue.size > 0)
     {
-        for (uint32_t i = 0; i < toDeleteQueue.size; ++i)
+        for (uint32_t i = 0; i < Physics::instance().contactListener.toDeleteQueue.size;)
         {
-            Entity entity = scene.entities[toDeleteQueue[i]];
+            uint32_t index = Physics::instance().contactListener.toDeleteQueue[i];
+            scene.entities[index].isDeleted = true;
+            scene.entityData[index].position = glms_mat4_identity();
+            scene.entityData[index].position.m30 = FLT_MAX;
+            scene.entityData[index].position.m31 = FLT_MAX;
+            scene.entityData[index].position.m32 = FLT_MAX;
 
-            if (scene.entities.size != 0 && scene.entities.size > element)
-            {
-                //Get the body id from entity index.
-                //Get the modelType and debug
-                Physics::instance().bodyInterface->RemoveBody(entity.bodyID);
+            Physics::instance().bodyInterface->DeactivateBody(scene.entities[index].bodyID);
 
-                scene.models[entity.modelType].instanceCount -= 1;
-                scene.debugModels[DebugModels::SPHERE].instanceCount -= 1;
-
-                if (scene.entities.size != 0)
-                {
-                    uint32_t indexToDelete = entity.entityIndex;
-
-                    scene.entityData.erase(indexToDelete);
-                    scene.entities.erase(indexToDelete);
-
-                    for (uint32_t j = 0; j < scene.entities.size; ++j)
-                    {
-                        if (scene.entities[j].entityIndex > indexToDelete)
-                        {
-                            scene.entities[j].entityIndex--;
-                        }
-                    }
-                }
-
-                gpu.destroyBufferInstant(positionalBuffer[gpu.currentFrame].index);
-
-                BufferCreation bufferCreation{};
-                bufferCreation.reset()
-                    .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
-                    .setName("othername")
-                    .setData(scene.entityData.data);
-                positionalBuffer[gpu.currentFrame] = gpu.createBindlessBuffer(bufferCreation);
-
-                recreatePositionBuffer = true;
-            }
-
-            toDeleteQueue.pop();
+            Physics::instance().contactListener.toDeleteQueue.pop();
         }
     }
 }

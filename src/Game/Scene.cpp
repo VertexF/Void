@@ -63,14 +63,6 @@ void Scene::buildScene()
     sphereSettings2.mObjectLayer = Layers::MOVING;
     buildRigidBodyEntity(EntityModels::DUCK_MODEL, DebugModels::SPHERE, EntityType::DUCK, position3, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
 
-    vec3s position4{ 5.f, 5.f, 5.f };
-    sphereSettings2.SetShape(duckShapeRef);
-    sphereSettings2.mPosition = JPH::Vec3Arg{ position4.x, position4.y, position4.z };
-    sphereSettings2.mRotation = JPH::Quat::sIdentity();
-    sphereSettings2.mMotionType = JPH::EMotionType::Static;
-    sphereSettings2.mObjectLayer = Layers::MOVING;
-    buildRigidBodyEntity(EntityModels::SPEC_SPHERE_MODEL, DebugModels::SPHERE, EntityType::SPEC_SPHERE, position4, { 0.f, 0.f, 0.f }, 0.f, sphereSettings2, { 1.f, 1.f, 0.f, 1.f });
-
     // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
     // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
     Physics::instance().bodyInterface->SetLinearVelocity(entities[1].bodyID, JPH::Vec3(0.f, -16.f, 0.f));
@@ -79,7 +71,7 @@ void Scene::buildScene()
     srand(time(0));
 
     float sceneRadius = 2000.f;
-    for (uint32_t i = 4; i < totalEntities; ++i)
+    for (uint32_t i = 3; i < totalEntities; ++i)
     {
         vec3s position;
         position.x = (float(rand()) / RAND_MAX) * sceneRadius * 2 - sceneRadius;
@@ -116,7 +108,6 @@ void Scene::buildDebugScene()
 {
     srand(time(0));
 
-    float sceneRadius = 200.f;
     float blue = 0.f;
     float radius = 13.5;
 
@@ -128,22 +119,22 @@ void Scene::buildDebugScene()
         float roty = ((float(rand()) / RAND_MAX) * 2 - 1);
         float rotz = ((float(rand()) / RAND_MAX) * 2 - 1);
 
-        JPH::SphereShapeSettings rockSphereSetting2{ radius + (blue * 2.5f) };
-        rockSphereSetting2.SetEmbedded();
-        JPH::ShapeSettings::ShapeResult rockShapeResult2 = rockSphereSetting2.Create();
-        JPH::ShapeRefC rockShapeRef2 = rockShapeResult2.Get();
+        JPH::SphereShapeSettings duckSphereSetting2{ radius + (blue * 5.f) };
+        duckSphereSetting2.SetEmbedded();
+        JPH::ShapeSettings::ShapeResult duckShapeResult2 = duckSphereSetting2.Create();
+        JPH::ShapeRefC duckShapeRef2 = duckShapeResult2.Get();
 
-        JPH::BodyCreationSettings rockShapeSettings;
-        rockShapeSettings.SetShape(rockShapeRef2);
-        rockShapeSettings.mRotation = JPH::Quat(rotx, roty, rotz, rotx).Normalized();
+        JPH::BodyCreationSettings duckShapeSettings;
+        duckShapeSettings.SetShape(duckShapeRef2);
+        duckShapeSettings.mRotation = JPH::Quat(rotx, roty, rotz, rotx).Normalized();
 
         position.x = duckIndex * 60.f;
 
-        rockShapeSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
-        rockShapeSettings.mObjectLayer = Layers::MOVING;
-        rockShapeSettings.mMotionType = JPH::EMotionType::Dynamic;
+        duckShapeSettings.mPosition = JPH::Vec3Arg{ position.x, position.y, position.z };
+        duckShapeSettings.mObjectLayer = Layers::MOVING;
+        duckShapeSettings.mMotionType = JPH::EMotionType::Dynamic;
 
-        buildRigidBodyEntity(EntityModels::DUCK_MODEL, DebugModels::SPHERE, EntityType::DUCK, position, { 0.f, 0.f, 0.f }, 0.f, rockShapeSettings, { 1.f - blue, 0.f, blue, 1.f });
+        buildRigidBodyEntity(EntityModels::DUCK_MODEL, DebugModels::SPHERE, EntityType::DUCK, position, { 0.f, 0.f, 0.f }, 0.f, duckShapeSettings, { 1.f - blue, 0.f, blue, 1.f });
         blue += 0.025f;
     }
 
@@ -154,7 +145,7 @@ void Scene::buildDebugScene()
         float roty = ((float(rand()) / RAND_MAX) * 2 - 1);
         float rotz = ((float(rand()) / RAND_MAX) * 2 - 1);
 
-        JPH::SphereShapeSettings rockSphereSetting2{ radius + (blue * 2.5f) };
+        JPH::SphereShapeSettings rockSphereSetting2{ radius + (blue * 5.f) };
         rockSphereSetting2.SetEmbedded();
         JPH::ShapeSettings::ShapeResult rockShapeResult2 = rockSphereSetting2.Create();
         JPH::ShapeRefC rockShapeRef2 = rockShapeResult2.Get();
@@ -194,7 +185,7 @@ void Scene::buildRigidBodyEntity(EntityModels modelType, DebugModels debugModelT
     case EntityType::PLAYER:
     {
         shapeModel = getCollsionShape(JPH::EShapeSubType::Sphere, shapeSetting);
-        entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Dynamic;
+        entities[currentLastEntity].isDynamic = true;
 
         entities[currentLastEntity].entityType = EntityType::PLAYER;
         entities[currentLastEntity].entityData = void_allocat(Player, &MemoryService::instance()->systemAllocator);
@@ -210,17 +201,28 @@ void Scene::buildRigidBodyEntity(EntityModels modelType, DebugModels debugModelT
         {
             shapeModel = getCollsionShape(JPH::EShapeSubType::Sphere, shapeSetting);
 
-            entities[currentLastEntity].isDynamic = shapeSetting.mMotionType == JPH::EMotionType::Static;
+            entities[currentLastEntity].isDynamic = false;
             entities[currentLastEntity].entityType = EntityType::ROCK;
 
             Physics::instance().bodyInterface->SetUserData(bodyID, (uint64_t)&entities[currentLastEntity]);
         }
         break;
+    case EntityType::DUCK:
+    {
+        shapeModel = getCollsionShape(JPH::EShapeSubType::Sphere, shapeSetting);
+
+        entities[currentLastEntity].isDynamic = true;
+        entities[currentLastEntity].entityType = EntityType::DUCK;
+
+        Physics::instance().bodyInterface->SetUserData(bodyID, (uint64_t)&entities[currentLastEntity]);
+    }
+    break;
     default:
         Physics::instance().bodyInterface->SetUserData(bodyID, NULL);
         break;
     }
 
+    entities[currentLastEntity].isDeleted = false;
     entityData[currentLastEntity].position = convertToMat4(shapePosition);
     entityData[currentLastEntity].colour = colour;
     entityData[currentLastEntity].debugModel = convertToMat4(shapeModel);

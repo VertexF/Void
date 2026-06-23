@@ -5,8 +5,7 @@
 #include "Foundation/Log.hpp"
 #include "Foundation/Memory.hpp"
 
-#include "Game/Player.hpp"
-#include "Game/Scene.hpp"
+#include "ContactListener.hpp"
 
 #include <Jolt/Jolt.h>
 
@@ -22,10 +21,6 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 
-namespace
-{
-    Array<uint32_t> toDeleteQueue;
-}
 
 // Disable common warnings triggered by Jolt, you can use JPH_SUPPRESS_WARNING_PUSH / JPH_SUPPRESS_WARNING_POP to store and restore the warning state
 JPH_SUPPRESS_WARNINGS
@@ -160,67 +155,6 @@ public:
     }
 };
 
-// An example contact listener
-class MyContactListener : public JPH::ContactListener
-{
-public:
-    virtual ~MyContactListener() = default;
-
-    // See: ContactListener
-    virtual JPH::ValidateResult	OnContactValidate(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::RVec3Arg inBaseOffset, const JPH::CollideShapeResult& inCollisionResult) override
-    {
-        //vprint("Contact validate validate.\n");
-
-        uintptr_t pointer1 = inBody1.GetUserData();
-        if (pointer1 != 0)
-        {
-            Entity* currentEntity = ((Entity*)pointer1);
-            switch (currentEntity->entityType)
-            {
-            case EntityType::PLAYER:
-                static_cast<Player*>(currentEntity->entityData)->crashNoise();
-                break;
-            case EntityType::ROCK:
-                toDeleteQueue.push(currentEntity->entityIndex);
-                break;
-            }
-        }
-
-        uintptr_t pointer2 = inBody2.GetUserData();
-        if (pointer2 != 0)
-        {
-            Entity* currentEntity = ((Entity*)pointer2);
-            switch (currentEntity->entityType)
-            {
-            case EntityType::PLAYER:
-                static_cast<Player*>(currentEntity->entityData)->crashNoise();
-                break;
-            case EntityType::ROCK:
-                toDeleteQueue.push(currentEntity->entityIndex);
-                break;
-            }
-        }
-
-        // Allows you to ignore a contact before it is created (using layers to not make objects collide is cheaper!)
-        return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
-    }
-
-    virtual void OnContactAdded(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings) override
-    {
-        //vprint("Contact validate added.\n");
-    }
-
-    virtual void OnContactPersisted(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings) override
-    {
-        //vprint("Contact validate persisted.\n");
-    }
-
-    virtual void OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) override
-    {
-        //vprint("Contact validate removed.\n");
-    }
-};
-
 //This is here because we need to have the temporary allocator for the physics.
 //When we are working with jolt we need to use inhertance we can't get around this. We have used a stack allocator instead of a heap based on.
 class JPH_EXPORT PhysicAllocator final : public JPH::TempAllocator
@@ -344,13 +278,14 @@ struct Physics
     // A contact listener gets notified when bodies (are about to) collide, and when they separate again.
     // Note that this is called from a job so whatever you do here needs to be thread safe.
     // Registering one is entirely optional.
-    MyContactListener contactListener;
+    VoidContactListener contactListener;
 
 
     // We simulate the physics world in discrete time steps. 60 Hz is a good rate to update the physics system.
     static constexpr float cDeltaTime = 1.0f / 60.0f;
 
 	void updatePhysics(float delta);
+
 	void shutdownPhysics();
 
 private:

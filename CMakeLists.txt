@@ -59,6 +59,8 @@ set(VOID_SOURCE src/main.cpp
 
                 src/Physics/Physics.hpp
                 src/Physics/Physics.cpp
+				src/Physics/ContactListener.hpp
+				src/Physics/ContactListener.cpp
 				src/Physics/CollisionGeometry.h
 
                 src/Graphics/VoidImgui.hpp

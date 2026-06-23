@@ -232,7 +232,7 @@ float spotLight()
 
 void main()
 {
-//Only here to turn of lighting if I need it.
+//Only here to turn off lighting if I need it.
 //    if(textures.x != INVALID_TEXTURE_INDEX)
 //    {
 //        fragColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;

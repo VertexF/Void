@@ -1,14 +1,8 @@
 #include "Physics.hpp"
 
 #include "Foundation/Memory.hpp"
+#include "ContactListener.hpp"
 
-// Jolt Physics Library (https://github.com/jrouwe/JoltPhysics)
-// SPDX-FileCopyrightText: 2025 Jorrit Rouwe
-// SPDX-License-Identifier: CC0-1.0
-// This file is in the public domain. It serves as an example to start building your own application using Jolt Physics. Feel free to copy paste without attribution!
-
-// The Jolt headers don't include Jolt.h. Always include Jolt.h before including any other Jolt header.
-// You can use Jolt.h in your precompiled header to speed up compilation.
 #include <Jolt/Jolt.h>
 
 // Jolt includes
@@ -25,8 +19,6 @@
 
 // STL includes
 #include <thread>
-#include <cstdarg>
-#include <iostream>
 
 namespace
 {
@@ -88,8 +80,6 @@ void Physics::initPhysics()
     JPH::Trace = TraceImpl;
     JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
 
-    toDeleteQueue.init(&MemoryService::instance()->systemAllocator, 4);
-
     // Create a factory, this class is responsible for creating instances of classes based on their name or hash and is mainly used for deserialization of saved data.
     // It is not directly used in this example but still required.
     JPH::Factory::sInstance = new JPH::Factory();
@@ -131,12 +121,11 @@ void Physics::updatePhysics(float delta)
 
 void Physics::shutdownPhysics()
 {
+    contactListener.toDeleteQueue.shutdown();
     //// Unregisters all types with the factory and cleans up the default material
     //JPH::UnregisterTypes();
 
     //// Destroy the factory
     //delete JPH::Factory::sInstance;
     //JPH::Factory::sInstance = nullptr;
-
-    toDeleteQueue.shutdown();
 }
