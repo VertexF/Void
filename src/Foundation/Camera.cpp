@@ -72,6 +72,11 @@ void Camera::setFov(float fov)
     updateProjection = true;
 }
 
+void Camera::updateUICamera() 
+{
+    projection = glms_ortho(0.f, viewportWidth, viewportHeight, 0.f, nearPlane, farPlane);
+}
+
 void Camera::update() 
 {
     //Quaternion based rotation

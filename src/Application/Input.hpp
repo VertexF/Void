@@ -11,6 +11,7 @@ static constexpr uint32_t MAX_GAMEPADS = 4;
 
 struct SDL_Gamepad;
 struct GPUDevice;
+struct GUI;
 struct Allocator;
 
 enum GamepadAxis : uint8_t 
@@ -184,7 +185,7 @@ struct InputHandler
 #endif //VOID_IMGUI
 
     void newFrame();
-    void onEvent(GPUDevice* gpu);
+    void onEvent(GPUDevice* gpu, GUI* userInterface);
 
     bool isTriggered(uint32_t action) const;
     float isReadValue1D(uint32_t action) const;

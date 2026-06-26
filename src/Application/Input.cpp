@@ -2,6 +2,8 @@
 
 #include "Window.hpp"
 
+#include "Application/UserInterface.hpp"
+
 #include "Foundation/Assert.hpp"
 #include "Foundation/Numerics.hpp"
 
@@ -95,7 +97,7 @@ struct InputBackend
 
     void getMouseState(InputVector2& position, uint8_t* buttons, uint32_t numButtons);
     void onEvent(uint8_t* keys, uint32_t numKeys, 
-                 Gamepad* gamepads, uint32_t numGamepads, bool& hasFocus, GPUDevice *gpu);
+                 Gamepad* gamepads, uint32_t numGamepads, bool& hasFocus, GPUDevice *gpu, GUI* userInterface);
 };
 
 void InputBackend::init(Gamepad* gamepads, uint32_t &numGamepads)
@@ -139,7 +141,7 @@ void InputBackend::getMouseState(InputVector2& position, uint8_t* buttons, uint3
 }
 
 void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
-                            Gamepad* gamepads, uint32_t /*numGamepads*/, bool& hasFocus, GPUDevice *gpu) 
+                            Gamepad* gamepads, uint32_t /*numGamepads*/, bool& hasFocus, GPUDevice *gpu, GUI* userInterface)
 {
     SDL_Event events;
     while (SDL_PollEvent(&events))
@@ -150,11 +152,13 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
         case SDL_EVENT_QUIT:
         {
             Window::instance()->exitRequested = true;
+            Window::instance()->mainMenuRequested = true;
             break;
         }
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED: 
         {
             Window::instance()->exitRequested = true;
+            Window::instance()->mainMenuRequested = true;
             break;
         }
         case SDL_EVENT_KEY_DOWN:
@@ -183,6 +187,8 @@ void InputBackend::onEvent(uint8_t* keys, uint32_t numKeys,
             if (uint32_t(newWidth) != Window::instance()->width || uint32_t(newHeight) != Window::instance()->height)
             {
                 Window::instance()->resizeRequested = true;
+
+                userInterface->resizeUI(newWidth / (float)Window::instance()->width, newHeight / (float)Window::instance()->height);
                 Window::instance()->width = uint16_t(newWidth);
                 Window::instance()->height = uint16_t(newHeight);
 
@@ -783,9 +789,9 @@ void InputHandler::newFrame()
     }
 }
 
-void InputHandler::onEvent(GPUDevice* gpu)
+void InputHandler::onEvent(GPUDevice* gpu, GUI* userInterface)
 {
-    INPUT_BACKEND.onEvent(keys, KEY_COUNT, gamepads, MAX_GAMEPADS, hasFocus, gpu);
+    INPUT_BACKEND.onEvent(keys, KEY_COUNT, gamepads, MAX_GAMEPADS, hasFocus, gpu, userInterface);
 }
 
 bool InputHandler::isTriggered(uint32_t action) const 

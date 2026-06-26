@@ -19,6 +19,7 @@ struct Camera
     void setFov(float fov);
 
     void update();
+    void updateUICamera();
     void rotate(float deltaPitch, float deltaYaw);
 
     void calculateProjectionMatrix();

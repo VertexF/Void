@@ -59,8 +59,9 @@ void Window::shutdown()
     SDL_Quit();
 }
 
-void Window::setFullscreen(bool fullscreen)
+void Window::setFullscreen()
 {
+    fullscreen = !fullscreen;
     SDL_SetWindowFullscreen(sdlWindow, fullscreen);
 }
 

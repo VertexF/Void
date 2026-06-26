@@ -56,6 +56,8 @@ set(VOID_SOURCE src/main.cpp
                 src/Application/Keys.cpp
 				src/Application/Audio.hpp
 				src/Application/Audio.cpp
+				src/Application/UserInterface.hpp
+				src/Application/UserInterface.cpp
 
                 src/Physics/Physics.hpp
                 src/Physics/Physics.cpp
@@ -88,6 +90,8 @@ set(VOID_SOURCE src/main.cpp
 				src/Game/Utils.hpp
 				src/Game/Game.hpp
 				src/Game/Game.cpp
+				src/Game/MainMenu.hpp
+				src/Game/MainMenu.cpp
 )
 
 add_executable(Void ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES})

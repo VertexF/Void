@@ -67,18 +67,14 @@ void Renderer2D::init(GPUDevice& inGPU)
         .addStage(frag2D.data, uint32_t(frag2D.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
+    pipelineCreation2D.rasterisation.cullMode = VK_CULL_MODE_NONE;
+
     //This descriptor set layout will be ran every frame
     pipelineCreation2D.addDescriptorSetLayout(gpu->bindlessDescriptorSetLayoutHandle);
 
     pipeline2D = gpu->createPipeline(pipelineCreation2D);
 
-    camera2D.initOrthographic(-1.f, 1.f, (float)Window::instance()->width, (float)Window::instance()->height, 1.f);
-
-    loadTexture(ATLAS_TEST);
-    
-    addQuad({ 0.f,  200.f, 0.5f }, { 100.f, 100.f }, { 64, 64 }, { 0, 0 }, { 1, 1 }, ATLAS_TEST);
-    addQuad({ 0.f, -200.f, 0.5f }, { 100.f, 100.f }, { 64, 64 }, { 1, 0 }, { 1, 1 }, ATLAS_TEST);
-    addQuad({ 0.f,  200.f, 0.f },  { 50.f,  50.f  }, { 64, 64 }, { 2, 0 }, { 1, 1 }, ATLAS_TEST);
+    camera2D.initOrthographic(-1.f, 1.f, (float)Window::instance()->width, (float)Window::instance()->height, 0.5f);
 }
 
 void Renderer2D::loadTexture(TextureAtlas atlas)
@@ -88,17 +84,13 @@ void Renderer2D::loadTexture(TextureAtlas atlas)
     int comp;
     uint8_t mipLevels = 1;
 
-    stbi_set_flip_vertically_on_load(0);
+    stbi_set_flip_vertically_on_load(1);
     uint8_t* imageData = stbi_load(sAtlasPaths[atlas], &width, &height, &comp, 4);
     if (imageData == nullptr)
     {
         textureResource = INVALID_TEXTURE;
         VOID_ERROR("Error loading texture %s", sAtlasPaths[atlas]);
     }
-
-    // TODO: Add mipmap support later.
-    uint32_t w = width;
-    uint32_t h = height;
 
     TextureCreation creation;
     creation.setData(imageData)
@@ -114,24 +106,23 @@ void Renderer2D::loadTexture(TextureAtlas atlas)
     free(imageData);
 }
 
-void Renderer2D::addQuad(vec3s position, vec3s scale, TextureAtlas atlas)
+void Renderer2D::addQuad(vec3s position, vec2s scale)
 {
     const mat4s translationMatrix = glms_translate_make(position);
-    const mat4s scaleMatrix = glms_scale_make(scale);
+    const mat4s scaleMatrix = glms_scale_make({ scale.x, scale.y, 1.f });
     const mat4s transform = glms_mat4_mul(translationMatrix, scaleMatrix);
 
     QuadPositionData data{};
-    data.textureID = sTextureAlasHandles[atlas];
     data.transform = transform;
 
     quadData.push(data);
     instanceCount++;
 }
 
-void Renderer2D::addQuad(vec3s position, vec3s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, TextureAtlas atlas)
+void Renderer2D::addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, TextureAtlas atlas)
 {
     const mat4s translationMatrix = glms_translate_make(position);
-    const mat4s scaleMatrix = glms_scale_make(scale);
+    const mat4s scaleMatrix = glms_scale_make({ scale.x, scale.y, 1.f });
     const mat4s transform = glms_mat4_mul(translationMatrix, scaleMatrix);
 
     vec2s min{};
@@ -163,7 +154,7 @@ void Renderer2D::loadBuffer()
         .setData(quadData.data);
     positionalBDAHandle = gpu->createBindlessBuffer(bufferCreation);
 
-    scene2d.ortho = glms_ortho(-(float)Window::instance()->width / 2, (float)Window::instance()->width / 2, -(float)Window::instance()->height / 2, (float)Window::instance()->height / 2, 0.f, 100.f);
+    scene2d.ortho = glms_ortho(0, (float)Window::instance()->width, 0, (float)Window::instance()->height, 0.f, 100.f);
 
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(SceneData2D))
@@ -176,9 +167,11 @@ void Renderer2D::drawQuad(CommandBuffer& commandBuffer)
 {
     commandBuffer.bindPipeline(pipeline2D);
 
-    camera2D.update();
+    camera2D.updateUICamera();
 
     scene2d.ortho = camera2D.projection;
+
+    commandBuffer.bindlessDescriptorSet(0);
 
     Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle);
     Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);

@@ -3,6 +3,7 @@
 #include "Application/Window.hpp"
 #include "Application/Keys.hpp"
 #include "Application/Audio.hpp"
+#include "Application/UserInterface.hpp"
 
 #include "Graphics/CommandBuffer.hpp"
 #include "Graphics/LoadGLTF.hpp"
@@ -72,33 +73,11 @@ namespace
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
 }
 
-void Game::init() 
+void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui)
 {
-    //Init services
-    MemoryService::instance()->init(/*heapSize=*/ void_giga(1ull), /*stackSize=*/ void_mega(8), /*physicsStackSiz=*/ void_mega(40));
-    timeServiceInit();
-
-    HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
-    StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
-
-    Window::instance()->init(1280, 800, "Void Engine");
-
-    inputHandler.init(allocator);
-
-    DeviceCreation deviceCreation;
-    deviceCreation.setWindow(Window::instance()->width, Window::instance()->height, Window::instance()->platformHandle)
-        .setAllocator(allocator)
-        .setLinearAllocator(&scratchAllocator);
-
-    gpu.init(deviceCreation);
-
-    gpuProfiler.init(allocator, 100);
-
-    imgui = ImguiService::instance();
-    ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
-    imgui->init(&imguiConfig);
-
-    //Window::instance()->setFullscreen(true);
+    gpu = &inGPU;
+    audioSystem = &inAudioSystem;
+    imgui = &inImgui;
 
     //Create pipeline state
     PipelineCreation pipelineCreation{};
@@ -123,12 +102,12 @@ void Game::init()
 
     //Setting it into pipeline.
     //This descriptor set layout will be ran every draw calls
-    mainDescriptorSetLayout = gpu.createDescriptorSetLayout(mainCreation);
+    mainDescriptorSetLayout = gpu->createDescriptorSetLayout(mainCreation);
     //This descriptor set layout will be ran every frame
-    pipelineCreation.addDescriptorSetLayout(gpu.bindlessDescriptorSetLayoutHandle)
+    pipelineCreation.addDescriptorSetLayout(gpu->bindlessDescriptorSetLayoutHandle)
                     .addDescriptorSetLayout(mainDescriptorSetLayout);
 
-    mainPipeline = gpu.createPipeline(pipelineCreation);
+    mainPipeline = gpu->createPipeline(pipelineCreation);
 
     //Debug renderer
     PipelineCreation debugPipelineCreation{};
@@ -144,7 +123,7 @@ void Game::init()
         .addStage(fragDebug.data, uint32_t(fragDebug.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    debugPipeline = gpu.createPipeline(debugPipelineCreation, /*debugRendering=*/ true);
+    debugPipeline = gpu->createPipeline(debugPipelineCreation, /*debugRendering=*/ true);
 
     // Register allocation hook. In this example we'll just let Jolt use malloc / free but you can override these if you want (see Memory.h).
     // This needs to be done before any other Jolt function is called.
@@ -152,7 +131,7 @@ void Game::init()
 
     Physics::instance();
 
-    scene.initScene(allocator, gpu, mainDescriptorSetLayout);
+    scene.initScene(&MemoryService::instance()->systemAllocator, *gpu, mainDescriptorSetLayout);
     scene.buildScene();
     //scene.buildDebugScene();
 
@@ -168,48 +147,45 @@ void Game::init()
             .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(EntityData) * scene.entityData.size)
             .setName("othername")
             .setData(scene.entityData.data);
-        positionalBuffer[i] = gpu.createBindlessBuffer(bufferCreation);
+        positionalBuffer[i] = gpu->createBindlessBuffer(bufferCreation);
     }
 
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(UniformData))
         .setName("debugGlobalBuffer");
-    debugGlobalBuffer = gpu.createBindlessBuffer(bufferCreation);
+    debugGlobalBuffer = gpu->createBindlessBuffer(bufferCreation);
 
     beginFrameTick = timeNow();
 
     gameCamera.internal3DCamera.initPerspective(0.01f, 5000.f, 60.f, (float)Window::instance()->width / (float)Window::instance()->height);
     gameCamera.init(7.f, 3.0f, 0.1f);
 
-    initSkybox(gpu);
-    renderer2D.init(gpu);
+    initSkybox(*gpu);
+    renderer2D.init(*gpu);
+    userInterface.init(renderer2D);
+    userInterface.buildGameUI();
     renderer2D.loadBuffer();
 
     modelScale = 1.0f;
-    fullscreen = false;
-
-    audioSystem.init();
-    audioSystem.loadAudio();
 
     debugRenderer = true;
     element = 0;
     recreatePositionBuffer = false;
 }
 
-void Game::loop() 
+void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)
 {
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
-        inputHandler.onEvent(&gpu);
+        inputHandler.onEvent(gpu, &userInterface);
         if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
         {
             Window::instance()->exitRequested = true;
         }
         else if (inputHandler.isKeyJustReleased(Keys::KEY_F))
         {
-            fullscreen = !fullscreen;
-            Window::instance()->setFullscreen(fullscreen);
+            Window::instance()->setFullscreen();
         }
 
         //New Frame
@@ -219,7 +195,7 @@ void Game::loop()
 
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
-            if (gpu.newFrame() == false)
+            if (gpu->newFrame() == false)
             {
                 continue;
             }
@@ -230,7 +206,7 @@ void Game::loop()
             {
                 Window::instance()->resizeRequested = false;
 
-                gpu.resize(Window::instance()->width, Window::instance()->height);
+                gpu->resize(Window::instance()->width, Window::instance()->height);
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }
 
@@ -242,12 +218,17 @@ void Game::loop()
             }
             else if (inputHandler.isKeyJustReleased(Keys::KEY_SPACE))
             {
-                audioSystem.playSoundEffect(sfx::Lazer);
+                audioSystem->playSoundEffect(sfx::Lazer);
             }
             else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
             {
                 static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
                 gameCamera.resetPlayerCamera();
+            }
+
+            if (isUIPressed(EXIT_BUTTON, inputHandler)) 
+            {
+                break;
             }
 
             ////NOTE: This must be after the OS messages.
@@ -277,7 +258,7 @@ void Game::loop()
 
             Physics::instance().updatePhysics(deltaTime);
 
-            static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, audioSystem);
+            static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
 
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
             //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
@@ -285,17 +266,17 @@ void Game::loop()
             
             deleteEntity();
 
-            CommandBuffer* gpuCommands = gpu.getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
+            CommandBuffer* gpuCommands = gpu->getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
 
-            gpu.beginRenderingTransition(gpuCommands);
+            gpu->beginRenderingTransition(gpuCommands);
             gpuCommands->beginRendering();
 
             gpuCommands->setScissor(nullptr);
             gpuCommands->setViewport(nullptr);
 
             PushConstants pushConstants{};
-            Buffer* globalSceneBuffer = gpu.accessBuffer(debugGlobalBuffer);
+            Buffer* globalSceneBuffer = gpu->accessBuffer(debugGlobalBuffer);
             pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
             pushConstants.vertexDataAddress = 0;
             pushConstants.modelPositionAddress = 0;
@@ -314,10 +295,10 @@ void Game::loop()
 
             gpuCommands->bindlessDescriptorSet(0);
 
-            Buffer* positionBuff = gpu.accessBuffer(positionalBuffer[gpu.currentFrame]);
+            Buffer* positionBuff = gpu->accessBuffer(positionalBuffer[gpu->currentFrame]);
             pushConstants.modelPositionAddress = positionBuff->bufferAddress;
 
-            vmaCopyMemoryToAllocation(gpu.VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
+            vmaCopyMemoryToAllocation(gpu->VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
 
             for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
             {
@@ -347,7 +328,7 @@ void Game::loop()
                 }
             }
 
-            vmaCopyMemoryToAllocation(gpu.VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
+            vmaCopyMemoryToAllocation(gpu->VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
             uint32_t instanceCountOffset = 0;
             for (int32_t modelIndexType = scene.models.size - 1; modelIndexType >= 0; --modelIndexType)
@@ -357,12 +338,12 @@ void Game::loop()
                     MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[meshIndex];
 
                     MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
-                    MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu.mapBuffer(materialMap));
+                    MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu->mapBuffer(materialMap));
 
                     uploadMaterial(*materialBufferData, meshDraw);
-                    gpu.unmapBuffer(materialMap);
+                    gpu->unmapBuffer(materialMap);
 
-                    Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                    Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
                     vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
@@ -391,7 +372,7 @@ void Game::loop()
 
                     MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
 
-                    Buffer* vertexDataBuf = gpu.accessBuffer(meshDraw.vertexBuffer);
+                    Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
                     vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
@@ -404,7 +385,7 @@ void Game::loop()
                 }
             }
 
-            drawSkybox(gpu, *gpuCommands, pushConstants);
+            drawSkybox(*gpu, *gpuCommands, pushConstants);
             renderer2D.drawQuad(*gpuCommands);
 
             //imgui->render(*gpuCommands);
@@ -413,8 +394,8 @@ void Game::loop()
 
             //gpuProfiler.update(gpu);
 
-            gpu.queueCommandBuffer(gpuCommands);
-            gpu.present();
+            gpu->queueCommandBuffer(gpuCommands);
+            gpu->present();
         }
         else
         {
@@ -427,36 +408,24 @@ void Game::loop()
 
 void Game::shutdown() 
 {
-    vkDeviceWaitIdle(gpu.vulkanDevice);
+    vkDeviceWaitIdle(gpu->vulkanDevice);
 
-    audioSystem.shutdown();
-    shutdownSkybox(gpu);
+    shutdownSkybox(*gpu);
     renderer2D.shutdown();
 
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
-        gpu.destroyBuffer(positionalBuffer[i]);
+        gpu->destroyBuffer(positionalBuffer[i]);
     }
 
-    gpu.destroyBuffer(debugGlobalBuffer);
+    gpu->destroyBuffer(debugGlobalBuffer);
 
-    scene.shutdownScene(gpu);
+    scene.shutdownScene(*gpu);
     Physics::instance().shutdownPhysics();
 
-    gpu.destroyDescriptorSetLayout(mainDescriptorSetLayout);
-    gpu.destroyPipeline(mainPipeline);
-    gpu.destroyPipeline(debugPipeline);
-
-    imgui->shutdown();
-
-    gpuProfiler.shutdown();
-
-    gpu.shutdown();
-
-    inputHandler.shutdown();
-    Window::instance()->shutdown();
-
-    MemoryService::instance()->shutdown();
+    gpu->destroyDescriptorSetLayout(mainDescriptorSetLayout);
+    gpu->destroyPipeline(mainPipeline);
+    gpu->destroyPipeline(debugPipeline);
 }
 
 void Game::deleteEntity() 

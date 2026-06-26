@@ -50,36 +50,106 @@ struct DeviceStateVulkan;
 
 struct BufferHandle 
 {
+    bool operator==(const BufferHandle& rhs) 
+    {
+        return index == rhs.index;
+    }
+
+    bool operator!=(const BufferHandle& rhs)
+    {
+        return index != rhs.index;
+    }
+
     uint32_t index;
 };
 
 struct TextureHandle 
 {
+    bool operator==(const TextureHandle& rhs)
+    {
+        return index == rhs.index;
+    }
+
+    bool operator!=(const TextureHandle& rhs)
+    {
+        return index != rhs.index;
+    }
+
     uint32_t index;
 };
 
 struct ShaderStateHandle 
 {
+    bool operator==(const ShaderStateHandle& rhs)
+    {
+        return index == rhs.index;
+    }
+
+    bool operator!=(const ShaderStateHandle& rhs)
+    {
+        return index != rhs.index;
+    }
+
     uint32_t index;
 };
 
 struct SamplerHandle 
 {
+    bool operator==(const SamplerHandle& rhs)
+    {
+        return index == rhs.index;
+    }
+
+    bool operator!=(const SamplerHandle& rhs)
+    {
+        return index != rhs.index;
+    }
+
     uint32_t index;
 };
 
 struct DescriptorSetLayoutHandle 
 {
+    bool operator==(const DescriptorSetLayoutHandle& rhs)
+    {
+        return index == rhs.index;
+    }
+
+    bool operator!=(const DescriptorSetLayoutHandle& rhs)
+    {
+        return index != rhs.index;
+    }
+
     uint32_t index;
 };
 
 struct DescriptorSetHandle 
 {
+    bool operator==(const DescriptorSetHandle& rhs)
+    {
+        return index == rhs.index;
+    }
+
+    bool operator!=(const DescriptorSetHandle& rhs)
+    {
+        return index != rhs.index;
+    }
+
     uint32_t index;
 };
 
 struct PipelineHandle 
 {
+    bool operator==(const PipelineHandle& rhs)
+    {
+        return index == rhs.index;
+    }
+
+    bool operator!=(const PipelineHandle& rhs)
+    {
+        return index != rhs.index;
+    }
+
     uint32_t index;
 };
 

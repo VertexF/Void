@@ -15,7 +15,12 @@
 #include "Foundation/Array.hpp"
 #include "Foundation/Camera.hpp"
 
+#include "Application/Input.hpp"
+#include "Application/Window.hpp"
+
 #include "ShaderData.hpp"
+
+#include <SDL3/SDL_mouse.h>
 
 struct SceneData2D
 {
@@ -31,7 +36,7 @@ enum TextureAtlas
 
 static const char* sAtlasPaths[COUNT] =
 {
-	"Assets/Textures/uiTextures.png"
+	"Assets/Textures/mainMenuUI.png"
 };
 
 struct GPUDevice;
@@ -40,8 +45,8 @@ struct Renderer2D
 {
 	void init(GPUDevice& inGPU);
 	void loadTexture(TextureAtlas atlas);
-	void addQuad(vec3s position, vec3s scale, TextureAtlas atlas);
-	void addQuad(vec3s position, vec3s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, TextureAtlas atlas);
+	void addQuad(vec3s position, vec2s scale);
+	void addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, TextureAtlas atlas);
 	void loadBuffer();
 	void drawQuad(CommandBuffer& commandBuffer);
 	void shutdown();
@@ -57,8 +62,8 @@ struct Renderer2D
 
 	PipelineHandle pipeline2D;
 	DescriptorSetLayoutHandle descriptorSetLayout2D;
-	BufferHandle positionalBDAHandle;
-	BufferHandle sceneBDAHandle;
+	BufferHandle positionalBDAHandle = INVALID_BUFFER;
+	BufferHandle sceneBDAHandle = INVALID_BUFFER;
 
 	uint32_t instanceCount = 0;
 };

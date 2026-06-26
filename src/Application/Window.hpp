@@ -12,7 +12,7 @@ struct Window
     void init(uint32_t inWidth, uint32_t inHeight, const char* title);
     void shutdown();
 
-    void setFullscreen(bool fullscreen);
+    void setFullscreen();
     void centerMouse(bool dragging) const;
 
     void setRefreshRate();
@@ -22,7 +22,9 @@ struct Window
     uint16_t height = 0;
     float displayRefresh = 1.f / 60.f;
     bool exitRequested = false;
+    bool mainMenuRequested = false;
     bool resizeRequested = false;
+    bool fullscreen = false;
     bool minimised = false;
 
 private:
