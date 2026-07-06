@@ -83,9 +83,7 @@ struct cgltf_data;
 
 struct Model
 {
-    cgltf_data* setupModel(const char* modelPath);
     void loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout);
-    void loadCollider(const char* modelPath, GPUDevice& gpu);
     void shutdownModel(GPUDevice& gpu);
 
     Array<MeshDraw> meshDraws;
@@ -94,21 +92,33 @@ struct Model
 
     Array<SamplerHandle> samplers;
     Array<TextureHandle> images;
+    Array<cgltf_node> nodeStack;
 
     StringBuffer resourceNameBuffer;
-
-    Array<int32_t> nodeParents;
-    Array<cgltf_node> nodeStack;
-    Array<mat4s> nodeMatrix;
 
     HeapAllocator* allocator;
     StackAllocator* scratchAllocator;
 
-    BufferHandle currentIndexBuffer = INVALID_BUFFER;
-
     SamplerHandle dummySampler;
     //This value tracks how many of the same model we have. This is to support instance rendering. 
     uint32_t instanceCount;
-    bool isModel;
 };
+
+struct DebugModel 
+{
+    void loadCollider(const char* modelPath, GPUDevice& gpu);
+    void shutdownModel(GPUDevice& gpu);
+
+    Array<MeshDraw> meshDraws;
+    Array<cgltf_node> nodeStack;
+
+    mat4s finalMatrix;
+
+    HeapAllocator* allocator;
+    StackAllocator* scratchAllocator;
+
+    //This value tracks how many of the same model we have. This is to support instance rendering. 
+    uint32_t instanceCount;
+};
+
 #endif // !LOAD_GLTF_HDR

@@ -37,17 +37,14 @@ struct Transform
     }
 };
 
-cgltf_data* Model::setupModel(const char* modelPath)
+static cgltf_data* setupModel(const char* modelPath, Array<cgltf_node>& nodeStack, mat4s& finalMatrix)
 {
-    allocator = &MemoryService::instance()->systemAllocator;
-    scratchAllocator = &MemoryService::instance()->scratchAllocator;
-
     cgltf_data* cgltfData = nullptr;
 
     cgltf_options options{};
     options.memory.alloc_func = tlsf_malloc;
     options.memory.free_func = tlsf_free;
-    options.memory.user_data = allocator->TLSFHandle;
+    options.memory.user_data = MemoryService::instance()->systemAllocator.TLSFHandle;
     cgltf_result result = cgltf_parse_file(&options, modelPath, &cgltfData);
     if (result != cgltf_result_success)
     {
@@ -66,14 +63,12 @@ cgltf_data* Model::setupModel(const char* modelPath)
         VOID_ERROR("The gltf model is invalid");
     }
 
-    currentIndexBuffer = INVALID_BUFFER;
-
-    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
-
+    Array<int32_t> nodeParents;
+    Array<mat4s> nodeMatrix;
     //These two are tightly coupled. nodeparent describes the relationship between the children and parents.
-    nodeParents.init(allocator, cgltfData->nodes_count);
-    nodeStack.init(allocator, cgltfData->nodes_count);
-    nodeMatrix.init(allocator, cgltfData->nodes_count);
+    nodeParents.init(&MemoryService::instance()->systemAllocator, cgltfData->nodes_count);
+    nodeStack.init(&MemoryService::instance()->systemAllocator, cgltfData->nodes_count);
+    nodeMatrix.init(&MemoryService::instance()->systemAllocator, cgltfData->nodes_count);
 
     //Adding all the root nodes to the array.
     for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
@@ -155,13 +150,19 @@ cgltf_data* Model::setupModel(const char* modelPath)
         }
     }
 
+    nodeParents.shutdown();
+    nodeMatrix.shutdown();
+
     return cgltfData;
 }
 
 void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout)
 {
-    isModel = true;
-    cgltf_data* cgltfData = setupModel(modelPath);
+    cgltf_data* cgltfData = setupModel(modelPath, nodeStack, finalMatrix);
+    allocator = &MemoryService::instance()->systemAllocator;
+    scratchAllocator = &MemoryService::instance()->scratchAllocator;
+
+    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
 
     images.init(allocator, cgltfData->images_count);
     //GLB version.
@@ -262,7 +263,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
     samplerCreation.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     dummySampler = gpu.createSampler(samplerCreation);
 
-    resourceNameBuffer.init(void_kilo(64), allocator);
+    resourceNameBuffer.init(128, allocator);
 
     samplers.init(allocator, uint32_t(cgltfData->samplers_count));
 
@@ -320,9 +321,8 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                 bufferCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, uint32_t(indices.size * meshPrimitive.indices->stride))
                     .setName("indices")
                     .setData(indices.data);
-                currentIndexBuffer = gpu.createBuffer(bufferCreation);
 
-                meshDraw.indexBuffer = currentIndexBuffer;
+                meshDraw.indexBuffer = gpu.createBuffer(bufferCreation);
 
                 //Here we are adding the scene buffer (that effect every model) into the descriptor set layout.
                 DescriptorSetCreation dsCreation{};
@@ -594,18 +594,49 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
         }
     }
 
-    nodeParents.shutdown();
-    nodeStack.shutdown();
-    nodeMatrix.shutdown();
-
     cgltf_free(cgltfData);
+
+    nodeStack.shutdown();
 }
 
-void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
+void Model::shutdownModel(GPUDevice& gpu)
 {
-    isModel = false;
+    for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
+    {
+        MeshDraw& meshDraw = meshDraws[meshIndex];
+            gpu.destroyDescriptorSet(meshDraw.descriptorSet);
+            gpu.destroyBuffer(meshDraw.materialBuffer);
+        gpu.destroyBuffer(meshDraw.vertexBuffer);
+        gpu.destroyBuffer(meshDraw.indexBuffer);
+    }
 
-    cgltf_data* cgltfData = setupModel(modelPath);
+    meshDraws.shutdown();
+
+        gpu.destroySampler(dummySampler);
+
+        //This is here to solve a bug that happens when allocating image from a .glb file. 
+        for (uint32_t i = 0; i < images.size; ++i)
+        {
+            gpu.destroyTexture(images[i]);
+        }
+
+        for (uint32_t i = 0; i < samplers.size; ++i)
+        {
+            gpu.destroySampler(samplers[i]);
+        }
+
+        images.shutdown();
+        samplers.shutdown();
+        resourceNameBuffer.shutdown();
+}
+
+void DebugModel::loadCollider(const char* modelPath, GPUDevice& gpu)
+{
+    cgltf_data* cgltfData = setupModel(modelPath, nodeStack, finalMatrix);
+    allocator = &MemoryService::instance()->systemAllocator;
+    scratchAllocator = &MemoryService::instance()->scratchAllocator;
+
+    meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
 
     for (uint32_t sceneIndex = 0; sceneIndex < (uint32_t)cgltfData->scenes_count; ++sceneIndex)
     {
@@ -642,9 +673,8 @@ void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
                 bufferCreation.set(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, uint32_t(indices.size * meshPrimitive.indices->stride))
                     .setName("indices")
                     .setData(indices.data);
-                currentIndexBuffer = gpu.createBuffer(bufferCreation);
 
-                meshDraw.indexBuffer = currentIndexBuffer;
+                meshDraw.indexBuffer = gpu.createBuffer(bufferCreation);
 
                 const cgltf_accessor* positionAccessor = cgltf_find_accessor(&meshPrimitive, cgltf_attribute_type_position, 0);
 
@@ -684,46 +714,19 @@ void Model::loadCollider(const char* modelPath, GPUDevice& gpu)
         }
     }
 
-    nodeParents.shutdown();
-    nodeStack.shutdown();
-    nodeMatrix.shutdown();
-
     cgltf_free(cgltfData);
+
+    nodeStack.shutdown();
 }
 
-void Model::shutdownModel(GPUDevice& gpu)
+void DebugModel::shutdownModel(GPUDevice& gpu)
 {
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
         MeshDraw& meshDraw = meshDraws[meshIndex];
-        if (isModel)
-        {
-            gpu.destroyDescriptorSet(meshDraw.descriptorSet);
-            gpu.destroyBuffer(meshDraw.materialBuffer);
-        }
         gpu.destroyBuffer(meshDraw.vertexBuffer);
         gpu.destroyBuffer(meshDraw.indexBuffer);
     }
 
     meshDraws.shutdown();
-
-    if (isModel)
-    {
-        gpu.destroySampler(dummySampler);
-
-        //This is here to solve a bug that happens when allocating image from a .glb file. 
-        for (uint32_t i = 0; i < images.size; ++i)
-        {
-            gpu.destroyTexture(images[i]);
-        }
-
-        for (uint32_t i = 0; i < samplers.size; ++i)
-        {
-            gpu.destroySampler(samplers[i]);
-        }
-
-        images.shutdown();
-        samplers.shutdown();
-        resourceNameBuffer.shutdown();
-    }
 }
