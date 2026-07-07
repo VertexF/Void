@@ -15,7 +15,7 @@
 
 #include <string.h>
 
-static uint32_t getFileSize(FileHandle file) 
+static uint32_t getFileSize(FileHandle file)
 {
     uint32_t fileSizeSigned;
 
@@ -26,7 +26,7 @@ static uint32_t getFileSize(FileHandle file)
     return fileSizeSigned;
 }
 
-static bool stringEndsWithChar(const char* string, char character) 
+static bool stringEndsWithChar(const char* string, char character)
 {
     const char* lastEntry = strchr(string, character);
     const size_t index = lastEntry - string;
@@ -34,12 +34,12 @@ static bool stringEndsWithChar(const char* string, char character)
 }
 
 //Read file and allocate memory from. User is responsible for freeing the memory.
-char* fileReadBinary(const char* filename, Allocator* alloc, size_t* size) 
+char* fileReadBinary(const char* filename, Allocator* alloc, size_t* size)
 {
     char* outData = 0;
 
     FILE* file = fopen(filename, "rb");
-    if (file) 
+    if (file)
     {
         //TODO: Maybe use filesize or read result.
         size_t filesize = getFileSize(file);
@@ -48,7 +48,7 @@ char* fileReadBinary(const char* filename, Allocator* alloc, size_t* size)
         fread(outData, filesize, 1, file);
         outData[filesize] = 0;
 
-        if (size) 
+        if (size)
         {
             *size = filesize;
         }
@@ -64,7 +64,7 @@ char* fileReadText(const char* filename, Allocator* alloc, size_t* size)
     char* text = 0;
     FILE* file = fopen(filename, "r");
 
-    if (file) 
+    if (file)
     {
         size_t filesize = getFileSize(file);
         text = (char*)void_alloca(filesize + 1, alloc);
@@ -74,7 +74,7 @@ char* fileReadText(const char* filename, Allocator* alloc, size_t* size)
 
         text[bytesRead] = 0;
 
-        if (size) 
+        if (size)
         {
             *size = filesize;
         }
@@ -90,7 +90,7 @@ FileReadResult fileReadBinary(const char* filename, Allocator* alloc)
     FileReadResult result{ nullptr, 0 };
 
     FILE* file = fopen(filename, "rb");
-    if (file) 
+    if (file)
     {
         //TODO: Use filesize or read results.
         uint32_t filesize = getFileSize(file);
@@ -111,7 +111,7 @@ FileReadResult fileReadText(const char* filename, Allocator* alloc)
     FileReadResult result{nullptr, 0};
 
     FILE* file = fopen(filename, "r");
-    if (file) 
+    if (file)
     {
         size_t filesize = getFileSize(file);
         result.data = (char*)void_alloca(filesize + 1, alloc);
@@ -130,8 +130,11 @@ FileReadResult fileReadText(const char* filename, Allocator* alloc)
 void fileWriteBinary(const char* filename, void* memory, size_t size)
 {
     FILE* file = fopen(filename, "wb");
-    fwrite(memory, size, 1, file);
-    fclose(file);
+    if (file)
+    {
+        fwrite(memory, size, 1, file);
+        fclose(file);
+    }
 }
 
 bool fileExists(const char* path)
@@ -180,7 +183,7 @@ FileTime fileLastWriteTime(const char* filename)
     FileTime lastWriteTime{};
 
     WIN32_FILE_ATTRIBUTE_DATA data{};
-    if (GetFileAttributesExA(filename, GetFileExInfoStandard, &data)) 
+    if (GetFileAttributesExA(filename, GetFileExInfoStandard, &data))
     {
         lastWriteTime.dwHighDataTime = data.ftLastWriteTime.dwHighDateTime;
         lastWriteTime.dwLowDataTime = data.ftLastWriteTime.dwLowDateTime;
@@ -207,11 +210,11 @@ void fileDirectoryFromPath(char* path)
 {
     char* lastPoint = strrchr(path, '.');
     char* lastSeparator = strrchr(path, '/');
-    if (lastSeparator != nullptr && lastPoint > lastSeparator) 
+    if (lastSeparator != nullptr && lastPoint > lastSeparator)
     {
         *(lastSeparator + 1) = 0;
     }
-    else 
+    else
     {
         lastSeparator = strrchr(path, '\\');
         if (lastSeparator != nullptr && lastPoint > lastSeparator)
@@ -233,7 +236,7 @@ void fileNameFromPath(char* path)
         lastSeparator = strrchr(path, '\\');
     }
 
-    if (lastSeparator != nullptr) 
+    if (lastSeparator != nullptr)
     {
         size_t nameLength = strlen(lastSeparator + 1);
         memoryCopy(path, lastSeparator + 1, nameLength);
@@ -298,7 +301,7 @@ void directoryChange(const char* path)
         vprint("Cannot change current directory to %s\n", path);
     }
 #else
-    if (chdir(path) != 0) 
+    if (chdir(path) != 0)
     {
         vprint("Cannot change current directory to %s\n", path);
     }
@@ -308,7 +311,7 @@ void directoryChange(const char* path)
 void fileOpenDirectory(const char* path, Directory* outDirectory)
 {
     //Open file trying to cover to full path instead of relative. If an error occurs, just copy the name.
-    if (fileResolveToFullPath(path, outDirectory->path, MAX_PATH) == 0) 
+    if (fileResolveToFullPath(path, outDirectory->path, MAX_PATH) == 0)
     {
         strcpy(outDirectory->path, path);
     }
@@ -329,11 +332,11 @@ void fileOpenDirectory(const char* path, Directory* outDirectory)
 
     WIN32_FIND_DATAA findData;
     HANDLE foundHandle = FindFirstFileA(outDirectory->path, &findData);
-    if (foundHandle != INVALID_HANDLE_VALUE) 
+    if (foundHandle != INVALID_HANDLE_VALUE)
     {
         outDirectory->osHandle = foundHandle;
     }
-    else 
+    else
     {
         vprint("Could not open directory %s\n", outDirectory->path);
     }
@@ -345,7 +348,7 @@ void fileOpenDirectory(const char* path, Directory* outDirectory)
 void fileCloseDirectory(Directory* directory)
 {
 #if defined(_WIN64)
-    if (directory->osHandle) 
+    if (directory->osHandle)
     {
         FindClose(directory->osHandle);
     }
@@ -361,7 +364,7 @@ void fileParentDirectory(Directory* directory)
     const char* lastDirectorySeparator = strrchr(directory->path, '\\');
     size_t index = lastDirectorySeparator - directory->path;
 
-    if (index > 0) 
+    if (index > 0)
     {
         strncpy(newDirectory.path, directory->path, index);
         newDirectory.path[index] = 0;
@@ -373,7 +376,7 @@ void fileParentDirectory(Directory* directory)
         {
             newDirectory.path[secondIndex] = 0;
         }
-        else 
+        else
         {
             newDirectory.path[index] = 0;
         }
@@ -381,8 +384,8 @@ void fileParentDirectory(Directory* directory)
         fileOpenDirectory(newDirectory.path, &newDirectory);
 
 #if defined(_WIN64)
-        //Update directory 
-        if (newDirectory.osHandle) 
+        //Update directory
+        if (newDirectory.osHandle)
         {
             *directory = newDirectory;
         }
@@ -413,14 +416,14 @@ void fileFindFilesInPath(const char* filePattern, StringArray& files)
 #if defined(_WIN64)
     WIN32_FIND_DATAA findData;
     HANDLE hFind = FindFirstFileA(filePattern, &findData);
-    if (hFind != INVALID_HANDLE_VALUE) 
+    if (hFind != INVALID_HANDLE_VALUE)
     {
-        do 
+        do
         {
             files.intern(findData.cFileName);
         } while (FindNextFileA(hFind, &findData) != 0);
     }
-    else 
+    else
     {
         vprint("Cannot find file %s\n", filePattern);
     }
@@ -429,7 +432,7 @@ void fileFindFilesInPath(const char* filePattern, StringArray& files)
 #endif
 }
 
-//Searches files and directories using searchPatterns 
+//Searches files and directories using searchPatterns
 void fileFindFileInPath(const char* extension, const char* searchPattern, StringArray& files, StringArray& directories)
 {
     files.clear();
@@ -438,18 +441,18 @@ void fileFindFileInPath(const char* extension, const char* searchPattern, String
 #if defined(_WIN64)
     WIN32_FIND_DATAA findData;
     HANDLE hFind = FindFirstFileA(searchPattern, &findData);
-    if (hFind != INVALID_HANDLE_VALUE) 
+    if (hFind != INVALID_HANDLE_VALUE)
     {
-        do 
+        do
         {
-            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
             {
                 directories.intern(findData.cFileName);
             }
-            else 
+            else
             {
                 //If the filename contains the extension add it.
-                if (strstr(findData.cFileName, extension)) 
+                if (strstr(findData.cFileName, extension))
                 {
                     files.intern(findData.cFileName);
                 }
@@ -457,7 +460,7 @@ void fileFindFileInPath(const char* extension, const char* searchPattern, String
         } while (FindNextFileA(hFind, &findData) != 0);
         FindClose(hFind);
     }
-    else 
+    else
     {
         vprint("Cannot find directory %s\n", searchPattern);
     }
