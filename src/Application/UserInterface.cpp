@@ -3,7 +3,6 @@
 void GUI::init(Renderer2D& inRenderer2D)
 {
 	renderer2D = &inRenderer2D;
-	renderer2D->loadTexture("Assets/Textures/uiTextures.png");
 
 	width = (float)renderer2D->width;
 	height = (float)renderer2D->height;

@@ -81,7 +81,7 @@ void Renderer2D::loadTexture(const char* filepath)
     int comp;
     uint8_t mipLevels = 1;
 
-    stbi_set_flip_vertically_on_load(1);
+    //stbi_set_flip_vertically_on_load(1);
     uint8_t* imageData = stbi_load(filepath, &width, &height, &comp, 4);
     if (imageData == nullptr)
     {

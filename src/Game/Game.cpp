@@ -172,7 +172,7 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
 
     vec2s spriteOffset = { .x = 1, .y = 1 };
     vec2s buttonSize = { 256.f, 256.f };
-    vec2s subSpriteSize = { 128.f, 128.f };
+    vec2s subSpriteSize = { 64.f, 64.f };
 
     renderer2D.addQuad({ 0.f, 0.f, 0.f }, buttonSize, subSpriteSize, { 0, 3 }, spriteOffset);
     renderer2D.loadBuffer(BILLBOARD_FLAG_2D);
