@@ -298,97 +298,97 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             vmaCopyMemoryToAllocation(gpu->VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
 
-            ////Scene
-            //gpuCommands->bindPipeline(mainPipeline);
+            //Scene
+            gpuCommands->bindPipeline(mainPipeline);
 
-            //gpuCommands->bindlessDescriptorSet(0);
+            gpuCommands->bindlessDescriptorSet(0);
 
-            //Buffer* positionBuff = gpu->accessBuffer(positionalBuffer[gpu->currentFrame]);
-            //pushConstants.modelPositionAddress = positionBuff->bufferAddress;
+            Buffer* positionBuff = gpu->accessBuffer(positionalBuffer[gpu->currentFrame]);
+            pushConstants.modelPositionAddress = positionBuff->bufferAddress;
 
-            //for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
-            //{
-            //    const Entity& entity = scene.entities[entityIndex];
-            //    uint32_t entityIdx = scene.entities[entityIndex].entityIndex;
+            for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
+            {
+                const Entity& entity = scene.entities[entityIndex];
+                uint32_t entityIdx = scene.entities[entityIndex].entityIndex;
 
-            //    if (entity.isDeleted) 
-            //    {
-            //        continue;
-            //    }
+                if (entity.isDeleted) 
+                {
+                    continue;
+                }
 
-            //    if (entity.entityType != PLAYER)
-            //    {
-            //        if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
-            //        {
-            //            JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
-            //            mat4s modelPosition = convertToMat4(newPos);
-            //            scene.entityData[entityIdx].position = modelPosition;
-            //        }
-            //    }
-            //    else
-            //    {
-            //        //JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
-            //        //mat4s modelPosition = convertToMat4(newPos);
-            //        //scene.entityData[entityIdx].position = modelPosition;
-            //    }
-            //}
+                if (entity.entityType != PLAYER)
+                {
+                    if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
+                    {
+                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
+                        mat4s modelPosition = convertToMat4(newPos);
+                        scene.entityData[entityIdx].position = modelPosition;
+                    }
+                }
+                else
+                {
+                    //JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
+                    //mat4s modelPosition = convertToMat4(newPos);
+                    //scene.entityData[entityIdx].position = modelPosition;
+                }
+            }
 
-            //vmaCopyMemoryToAllocation(gpu->VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
+            vmaCopyMemoryToAllocation(gpu->VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
-            //uint32_t instanceCountOffset = 0;
-            //for (int32_t modelIndexType = scene.models.size - 1; modelIndexType >= 0; --modelIndexType)
-            //{
-            //    for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
-            //    {
-            //        MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[meshIndex];
+            uint32_t instanceCountOffset = 0;
+            for (int32_t modelIndexType = scene.models.size - 1; modelIndexType >= 0; --modelIndexType)
+            {
+                for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
+                {
+                    MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[meshIndex];
 
-            //        MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
-            //        MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu->mapBuffer(materialMap));
+                    MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
+                    MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu->mapBuffer(materialMap));
 
-            //        uploadMaterial(*materialBufferData, meshDraw);
-            //        gpu->unmapBuffer(materialMap);
+                    uploadMaterial(*materialBufferData, meshDraw);
+                    gpu->unmapBuffer(materialMap);
 
-            //        Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
-            //        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+                    Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
+                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-            //        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-            //        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
-            //        gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 1);
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+                    gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 1);
 
-            //        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
-            //    }
+                    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
+                }
 
-            //    instanceCountOffset += scene.models[modelIndexType].instanceCount;
-            //}
+                instanceCountOffset += scene.models[modelIndexType].instanceCount;
+            }
 
-            //if (debugRenderer)
-            //{
-            //    //Debug
-            //    gpuCommands->bindPipeline(debugPipeline);
+            if (debugRenderer)
+            {
+                //Debug
+                gpuCommands->bindPipeline(debugPipeline);
 
-            //    pushConstants.modelPositionAddress = positionBuff->bufferAddress;
-            //    pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
+                pushConstants.modelPositionAddress = positionBuff->bufferAddress;
+                pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
 
-            //    instanceCountOffset = 0;
-            //    for (int32_t modelIndexType = scene.debugModels.size - 1; modelIndexType >= 0; --modelIndexType)
-            //    {
-            //        VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
+                instanceCountOffset = 0;
+                for (int32_t modelIndexType = scene.debugModels.size - 1; modelIndexType >= 0; --modelIndexType)
+                {
+                    VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
 
-            //        MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
+                    MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
 
-            //        Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
-            //        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+                    Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
+                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-            //        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-            //        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
-            //        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
+                    gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
 
-            //        instanceCountOffset += scene.debugModels[modelIndexType].instanceCount;
-            //    }
-            //}
+                    instanceCountOffset += scene.debugModels[modelIndexType].instanceCount;
+                }
+            }
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
             renderer2D.drawQuad3D(*gpuCommands, gameCamera.internal3DCamera);

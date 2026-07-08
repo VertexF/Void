@@ -343,10 +343,10 @@ void Scene::shutdownScene(GPUDevice& gpu)
     //}
 
     //Tempory
-    //if (entities[0].entityData) 
-    //{
-    //    void_free(static_cast<Player*>(entities[0].entityData), &MemoryService::instance()->systemAllocator);
-    //}
+    if (entities[0].entityData) 
+    {
+        void_free(static_cast<Player*>(entities[0].entityData), &MemoryService::instance()->systemAllocator);
+    }
 
     //for (uint32_t i = 0; i < entities.size; ++i) 
     //{

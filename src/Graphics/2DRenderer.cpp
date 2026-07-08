@@ -100,7 +100,7 @@ void Renderer2D::loadTexture(const char* filepath)
 
     VOID_ASSERT(textureAlasHandles.index != INVALID_TEXTURE.index);
 
-    //free(imageData);
+    free(imageData);
 }
 
 void Renderer2D::addQuad(vec3s position, vec2s scale)
