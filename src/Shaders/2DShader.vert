@@ -73,8 +73,8 @@ void main()
     {
         vec3 cameraRightWorld = { scene2D.sceneData2D.view[0][0], scene2D.sceneData2D.view[1][0], scene2D.sceneData2D.view[2][0] };
         vec3 cameraUpWorld = { scene2D.sceneData2D.view[0][1], scene2D.sceneData2D.view[1][1], scene2D.sceneData2D.view[2][1] };
-        vec3 positionWorld =  position.x * cameraRightWorld + 
-                              position.y * cameraUpWorld;
+        vec3 positionWorld =  quadPositionsReference.quadPositions[gl_InstanceIndex].billboardPosition + position.x * cameraRightWorld + 
+                                                                                                         position.y * cameraUpWorld;
 
         gl_Position = scene2D.sceneData2D.project * scene2D.sceneData2D.view * vec4(positionWorld, 1.0);
     }

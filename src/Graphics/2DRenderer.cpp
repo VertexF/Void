@@ -81,7 +81,7 @@ void Renderer2D::loadTexture(const char* filepath)
     int comp;
     uint8_t mipLevels = 1;
 
-    //stbi_set_flip_vertically_on_load(1);
+    stbi_set_flip_vertically_on_load(1);
     uint8_t* imageData = stbi_load(filepath, &width, &height, &comp, 4);
     if (imageData == nullptr)
     {
@@ -132,7 +132,7 @@ void Renderer2D::addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s ro
 
     QuadPositionData data{};
     data.textureID = textureAlasHandles.index;
-    data.billboardPosition = vec3s{ 0.f, 0.f, 0.f };
+    data.billboardPosition = vec3s{ 0.f, 1.f, 1.f };
     data.transform = transform;
     data.texCoords[0] = vec2s{ min.x, max.y };
     data.texCoords[1] = vec2s{ max.x, max.y };
