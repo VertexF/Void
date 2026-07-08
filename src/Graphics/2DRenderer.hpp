@@ -22,21 +22,18 @@
 
 #include <SDL3/SDL_mouse.h>
 
+enum Render2DType
+{
+	UI_FLAG_2D        = 1 << 0,
+	BILLBOARD_FLAG_2D = 1 << 1
+};
+
 struct SceneData2D
 {
-	mat4s ortho;
-};
+	mat4s view;
+	mat4s project;
 
-enum TextureAtlas
-{
-	ATLAS_TEST,
-
-	ATLAS_COUNT
-};
-
-static constexpr const char* sAtlasPaths[COUNT] =
-{
-	"Assets/Textures/mainMenuUI.png"
+	uint32_t flags = UINT32_MAX;
 };
 
 struct GPUDevice;
@@ -44,12 +41,15 @@ struct GPUDevice;
 struct Renderer2D
 {
 	void init(GPUDevice& inGPU);
-	void loadTexture(TextureAtlas atlas);
+	void loadTexture(const char* filepath);
 	void addQuad(vec3s position, vec2s scale);
-	void addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, TextureAtlas atlas);
-	void loadBuffer();
+	void addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
+	void loadBuffer(Render2DType type);
 	void drawQuad(CommandBuffer& commandBuffer);
+	void drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D);
 	void shutdown();
+
+	TextureHandle textureAlasHandles;
 
 	SceneData2D scene2d{};
 
@@ -62,7 +62,7 @@ struct Renderer2D
 
 	PipelineHandle pipeline2D;
 	DescriptorSetLayoutHandle descriptorSetLayout2D;
-	BufferHandle positionalBDAHandle = INVALID_BUFFER;
+	BufferHandle positionalBDAHandle[FRAMES_IN_FLIGHT];
 	BufferHandle sceneBDAHandle = INVALID_BUFFER;
 
 	uint32_t instanceCount = 0;

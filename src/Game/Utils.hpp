@@ -28,7 +28,7 @@ enum EntityModels : uint8_t
     MODEL_COUNT
 };
 
-enum DebugModels : uint8_t
+enum DebugModelType : uint8_t
 {
     SPHERE,
 

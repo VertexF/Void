@@ -5,9 +5,6 @@
 #extension GL_EXT_shader_16bit_storage: require
 #extension GL_ARB_gpu_shader_int64 : enable
 
-uint sUIFlag        = 1 << 0;
-uint sBillboardFlag = 1 << 1;
-
 const vec3 pos[4] = vec3[4]
 (
 	vec3(0.0, 0.0, 0.0),
@@ -27,14 +24,13 @@ struct QuadPosition
     vec4 colour;
     vec2 texCoords[4];
     uint textureID;
-    vec3 billboardPosition;
+    float padd[3];
 };
 
-struct SceneData2D
+struct SceneData
 {
     mat4 view;
-    mat4 project;
-    uint flags;
+    mat4 projection;
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer QuadPositionData
@@ -42,15 +38,15 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Qua
     QuadPosition quadPositions[];
 };
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBuffer2DData
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
 {
-    SceneData2D sceneData2D;
+    SceneData sceneData;
 };
 
 layout(scalar, push_constant) uniform entityIndex
 {
     QuadPositionData quadPositionsReference;
-    SceneBuffer2DData scene2D;
+    SceneBufferData scene;
 };
 
 layout(location = 0) out vec2 vTexcoord;
@@ -64,20 +60,7 @@ void main()
 
     vec2 texcoord = vec2(quadPositionsReference.quadPositions[gl_InstanceIndex].texCoords[idx].x, quadPositionsReference.quadPositions[gl_InstanceIndex].texCoords[idx].y);
 
-    if(scene2D.sceneData2D.flags == sUIFlag)
-    {
-        //project is an othorgraphical projection not a perspective.
-        gl_Position = scene2D.sceneData2D.project * quadPositionsReference.quadPositions[gl_InstanceIndex].transform * vec4(position, 1.0);
-    }
-    else if(scene2D.sceneData2D.flags == sBillboardFlag)
-    {
-        vec3 cameraRightWorld = { scene2D.sceneData2D.view[0][0], scene2D.sceneData2D.view[1][0], scene2D.sceneData2D.view[2][0] };
-        vec3 cameraUpWorld = { scene2D.sceneData2D.view[0][1], scene2D.sceneData2D.view[1][1], scene2D.sceneData2D.view[2][1] };
-        vec3 positionWorld =  position.x * cameraRightWorld + 
-                              position.y * cameraUpWorld;
-
-        gl_Position = scene2D.sceneData2D.project * scene2D.sceneData2D.view * vec4(positionWorld, 1.0);
-    }
+    gl_Position = scene.sceneData.projection * scene.sceneData.view * quadPositionsReference.quadPositions[gl_InstanceIndex].transform * vec4(position, 1.0);
 
     textureID = quadPositionsReference.quadPositions[gl_InstanceIndex].textureID;
 

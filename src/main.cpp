@@ -49,18 +49,18 @@ int main(int argc, char** argv)
 
     //Window::instance()->setFullscreen(true);
 
-    MainMenu mainMenu;
-    mainMenu.init(gpu, audioSystem, *imgui);
-    mainMenu.loop(inputHandler, gpuProfiler);
-    mainMenu.shutdown();
+    //MainMenu mainMenu;
+    //mainMenu.init(gpu, audioSystem, *imgui);
+    //mainMenu.loop(inputHandler, gpuProfiler);
+    //mainMenu.shutdown();
 
-    if (Window::instance()->exitRequested == false)
-    {
+    //if (Window::instance()->exitRequested == false)
+    //{
         Game game;
         game.init(gpu, audioSystem, *imgui);
         game.loop(inputHandler, gpuProfiler);
         game.shutdown();
-    }
+    //}
 
     audioSystem.shutdown();
 

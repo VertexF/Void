@@ -10,9 +10,10 @@ void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& 
     beginFrameTick = timeNow();
 
     renderer2D.init(*gpu);
+    renderer2D.loadTexture("Assets/Textures/mainMenuUI.png");
     userInterface.init(renderer2D);
     userInterface.buildMainMenu();
-    renderer2D.loadBuffer();
+    renderer2D.loadBuffer(UI_FLAG_2D);
 }
 
 void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)
@@ -115,7 +116,7 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
 
 void MainMenu::shutdown()
 {
-    vkDeviceWaitIdle(gpu->vulkanDevice);
+    //vkDeviceWaitIdle(gpu->vulkanDevice);
 
     renderer2D.shutdown();
 }

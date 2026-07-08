@@ -133,6 +133,7 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
 
     scene.initScene(&MemoryService::instance()->systemAllocator, *gpu, mainDescriptorSetLayout);
     scene.buildScene();
+    //scene.buildPerformance();
     //scene.buildDebugScene();
 
     // Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
@@ -162,9 +163,19 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
 
     initSkybox(*gpu);
     renderer2D.init(*gpu);
+    renderer2D.loadTexture("Assets/Textures/particles.png");
     userInterface.init(renderer2D);
     userInterface.buildGameUI();
-    renderer2D.loadBuffer();
+
+    float xCentre = (((float)Window::instance()->width) - 256) / 2;
+    float yCentre = (((float)Window::instance()->height) - 256) / 2;
+
+    vec2s spriteOffset = { .x = 1, .y = 1 };
+    vec2s buttonSize = { 256.f, 256.f };
+    vec2s subSpriteSize = { 128.f, 128.f };
+
+    renderer2D.addQuad({ 0.f, 0.f, 0.f }, buttonSize, subSpriteSize, { 0, 3 }, spriteOffset);
+    renderer2D.loadBuffer(BILLBOARD_FLAG_2D);
 
     modelScale = 1.0f;
 
@@ -191,7 +202,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
         //New Frame
         if (Window::instance()->minimised == false)
         {
-            playerPosition = convertToVec3(static_cast<Player*>(scene.entities[0].entityData)->character->GetPosition());
+            //playerPosition = convertToVec3(static_cast<Player*>(scene.entities[0].entityData)->character->GetPosition());
 
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
@@ -210,7 +221,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }
 
-            static_cast<Player*>(scene.entities[0].entityData)->handleEvents(inputHandler, convertToVec3JPH(gameCamera.internal3DCamera.direction));
+            //static_cast<Player*>(scene.entities[0].entityData)->handleEvents(inputHandler, convertToVec3JPH(gameCamera.internal3DCamera.direction));
 
             if (inputHandler.isKeyJustReleased(Keys::KEY_1))
             {
@@ -222,7 +233,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             }
             else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
             {
-                static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
+                //static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
                 gameCamera.resetPlayerCamera();
             }
 
@@ -253,10 +264,10 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             Physics::instance().updatePhysics(deltaTime);
 
-            static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
+            //static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
 
-            //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
+            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
             
             deleteEntity();
@@ -285,102 +296,102 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
             //globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
-            //Scene
-            gpuCommands->bindPipeline(mainPipeline);
-
-            gpuCommands->bindlessDescriptorSet(0);
-
-            Buffer* positionBuff = gpu->accessBuffer(positionalBuffer[gpu->currentFrame]);
-            pushConstants.modelPositionAddress = positionBuff->bufferAddress;
-
             vmaCopyMemoryToAllocation(gpu->VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
 
-            for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
-            {
-                const Entity& entity = scene.entities[entityIndex];
-                uint32_t entityIdx = scene.entities[entityIndex].entityIndex;
+            ////Scene
+            //gpuCommands->bindPipeline(mainPipeline);
 
-                if (entity.isDeleted) 
-                {
-                    continue;
-                }
+            //gpuCommands->bindlessDescriptorSet(0);
 
-                if (entity.entityType != PLAYER)
-                {
-                    if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
-                    {
-                        JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
-                        mat4s modelPosition = convertToMat4(newPos);
-                        scene.entityData[entityIdx].position = modelPosition;
-                    }
-                }
-                else
-                {
-                    JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
-                    mat4s modelPosition = convertToMat4(newPos);
-                    scene.entityData[entityIdx].position = modelPosition;
-                }
-            }
+            //Buffer* positionBuff = gpu->accessBuffer(positionalBuffer[gpu->currentFrame]);
+            //pushConstants.modelPositionAddress = positionBuff->bufferAddress;
 
-            vmaCopyMemoryToAllocation(gpu->VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
+            //for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
+            //{
+            //    const Entity& entity = scene.entities[entityIndex];
+            //    uint32_t entityIdx = scene.entities[entityIndex].entityIndex;
 
-            uint32_t instanceCountOffset = 0;
-            for (int32_t modelIndexType = scene.models.size - 1; modelIndexType >= 0; --modelIndexType)
-            {
-                for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
-                {
-                    MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[meshIndex];
+            //    if (entity.isDeleted) 
+            //    {
+            //        continue;
+            //    }
 
-                    MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
-                    MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu->mapBuffer(materialMap));
+            //    if (entity.entityType != PLAYER)
+            //    {
+            //        if (entity.bodyID.IsInvalid() == false && entity.isDynamic)
+            //        {
+            //            JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(entity.bodyID);
+            //            mat4s modelPosition = convertToMat4(newPos);
+            //            scene.entityData[entityIdx].position = modelPosition;
+            //        }
+            //    }
+            //    else
+            //    {
+            //        //JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
+            //        //mat4s modelPosition = convertToMat4(newPos);
+            //        //scene.entityData[entityIdx].position = modelPosition;
+            //    }
+            //}
 
-                    uploadMaterial(*materialBufferData, meshDraw);
-                    gpu->unmapBuffer(materialMap);
+            //vmaCopyMemoryToAllocation(gpu->VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
-                    Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
-                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+            //uint32_t instanceCountOffset = 0;
+            //for (int32_t modelIndexType = scene.models.size - 1; modelIndexType >= 0; --modelIndexType)
+            //{
+            //    for (uint32_t meshIndex = 0; meshIndex < scene.models[modelIndexType].meshDraws.size; ++meshIndex)
+            //    {
+            //        MeshDraw meshDraw = scene.models[modelIndexType].meshDraws[meshIndex];
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+            //        MapBufferParameters materialMap = { meshDraw.materialBuffer, 0, 0 };
+            //        MaterialData* materialBufferData = reinterpret_cast<MaterialData*>(gpu->mapBuffer(materialMap));
 
-                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
-                    gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 1);
+            //        uploadMaterial(*materialBufferData, meshDraw);
+            //        gpu->unmapBuffer(materialMap);
 
-                    gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
-                }
+            //        Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
+            //        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                instanceCountOffset += scene.models[modelIndexType].instanceCount;
-            }
+            //        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-            if (debugRenderer)
-            {
-                //Debug
-                gpuCommands->bindPipeline(debugPipeline);
+            //        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+            //        gpuCommands->bindDescriptorSet(&meshDraw.descriptorSet, 1, nullptr, 0, 1);
 
-                pushConstants.modelPositionAddress = positionBuff->bufferAddress;
-                pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
+            //        gpuCommands->drawIndexed(meshDraw.count, scene.models[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
+            //    }
 
-                instanceCountOffset = 0;
-                for (int32_t modelIndexType = scene.debugModels.size - 1; modelIndexType >= 0; --modelIndexType)
-                {
-                    VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
+            //    instanceCountOffset += scene.models[modelIndexType].instanceCount;
+            //}
 
-                    MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
+            //if (debugRenderer)
+            //{
+            //    //Debug
+            //    gpuCommands->bindPipeline(debugPipeline);
 
-                    Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
-                    pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
+            //    pushConstants.modelPositionAddress = positionBuff->bufferAddress;
+            //    pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+            //    instanceCountOffset = 0;
+            //    for (int32_t modelIndexType = scene.debugModels.size - 1; modelIndexType >= 0; --modelIndexType)
+            //    {
+            //        VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
 
-                    gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+            //        MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
 
-                    gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
+            //        Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
+            //        pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                    instanceCountOffset += scene.debugModels[modelIndexType].instanceCount;
-                }
-            }
+            //        vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+            //        gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
+
+            //        gpuCommands->drawIndexed(meshDraw.count, scene.debugModels[modelIndexType].instanceCount, 0, 0, instanceCountOffset);
+
+            //        instanceCountOffset += scene.debugModels[modelIndexType].instanceCount;
+            //    }
+            //}
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
-            renderer2D.drawQuad(*gpuCommands);
+            renderer2D.drawQuad3D(*gpuCommands, gameCamera.internal3DCamera);
 
             //imgui->render(*gpuCommands);
 

@@ -51,14 +51,14 @@ struct GUI
 
 	void buildUI();
 
-	void addButton(vec3s position, vec2s size, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, TextureAtlas atlas, UI uiElement);
+	void addButton(vec3s position, vec2s size, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, UI uiElement);
 
 	void resizeUI(float ratioIncreaseWidth, float ratioIncreaseHeight);
 
 	Renderer2D* renderer2D;
 
-	float width[ATLAS_COUNT];
-	float height[ATLAS_COUNT];
+	float width;
+	float height;
 
 	float windowHieght = 0;
 	float windowWidth = 0;

@@ -23,7 +23,8 @@ struct Scene
     void initScene(HeapAllocator* inAllocator, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout);
     void buildScene();
     void buildDebugScene();
-    void buildRigidBodyEntity(EntityModels modelType, DebugModels debugModelType, EntityType entityType, const vec3s& position, vec3s axis,
+    void buildPerformance();
+    void buildRigidBodyEntity(EntityModels modelType, DebugModelType debugModelType, EntityType entityType, const vec3s& position, vec3s axis,
                               float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour);
     void buildNoneSoildEntity(EntityModels modelType, EntityType entityType, vec3s& position, vec3s axis, float angle);
     void shutdownScene(GPUDevice& gpu);
@@ -39,7 +40,7 @@ struct Scene
     Array<Entity> entities;
     Array<EntityData> entityData;
     Array<Model> models;
-    Array<Model> debugModels;
+    Array<DebugModel> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;
 
     HeapAllocator* allocator;

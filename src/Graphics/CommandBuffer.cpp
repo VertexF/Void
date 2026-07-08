@@ -72,7 +72,7 @@ void CommandBuffer::beginRendering()
     colourAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colourAttachment.clearValue = { 1.f, 1.f, 1.f, 1.f }; //0.7f, 0.9f, 1.f, 1.f = blue
+    colourAttachment.clearValue = { 0.7f, 0.7f, 0.7f, 1.f }; //0.7f, 0.9f, 1.f, 1.f = blue
 
     Texture* depthTexture = device->accessTexture(device->depthTexture);
 

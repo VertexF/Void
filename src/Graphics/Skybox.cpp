@@ -150,7 +150,7 @@ void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, PushConstants pushCo
     vkCmdPushConstants(gpuCommands.vkCommandBuffer, gpuCommands.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
 
     gpuCommands.bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 1);
-    //gpuCommands.bindlessDescriptorSet(1);
+    gpuCommands.bindlessDescriptorSet(0);
 
     gpuCommands.draw(36, 1, 0, 0);
 }

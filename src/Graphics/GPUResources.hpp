@@ -42,7 +42,7 @@ enum ResourceUpdateType : uint8_t
     DESCRIPTOR_SET_LAYOUT,
     DESCRIPTOR_SET,
     SHADER_STATE,
-    COUNT
+    RESOURCE_UPDATE_COUNT
 };
 
 struct Allocator;

@@ -27,7 +27,7 @@ namespace
         };
 
         uint32_t textureID = UINT16_MAX;
-        float padd[3];
+        vec3s billboardPosition;
     };
 
     struct QuadData
@@ -43,8 +43,6 @@ namespace
         vec2s offset = { 1, 1 }; //offset-per-sprite
     };
 
-    static uint32_t sTextureAlasHandles[128] = { UINT32_MAX };
-
     Array<QuadPositionData> quadData;
 }
 
@@ -57,6 +55,7 @@ void Renderer2D::init(GPUDevice& inGPU)
     //Debug renderer
     PipelineCreation pipelineCreation2D{};
     pipelineCreation2D.depthStencil.setDepth(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+    pipelineCreation2D.blendState.addBlendState().setColour(VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD);
 
     //Shader state
     FileReadResult vert2D = fileReadBinary("Assets/Shaders/2DShader.vert.spv", &MemoryService::instance()->scratchAllocator);
@@ -73,11 +72,9 @@ void Renderer2D::init(GPUDevice& inGPU)
     pipelineCreation2D.addDescriptorSetLayout(gpu->bindlessDescriptorSetLayoutHandle);
 
     pipeline2D = gpu->createPipeline(pipelineCreation2D);
-
-    camera2D.initOrthographic(-1.f, 1.f, (float)Window::instance()->width, (float)Window::instance()->height, 0.5f);
 }
 
-void Renderer2D::loadTexture(TextureAtlas atlas)
+void Renderer2D::loadTexture(const char* filepath)
 {
     TextureHandle textureResource;
 
@@ -85,11 +82,11 @@ void Renderer2D::loadTexture(TextureAtlas atlas)
     uint8_t mipLevels = 1;
 
     stbi_set_flip_vertically_on_load(1);
-    uint8_t* imageData = stbi_load(sAtlasPaths[atlas], &width, &height, &comp, 4);
+    uint8_t* imageData = stbi_load(filepath, &width, &height, &comp, 4);
     if (imageData == nullptr)
     {
         textureResource = INVALID_TEXTURE;
-        VOID_ERROR("Error loading texture %s", sAtlasPaths[atlas]);
+        VOID_ERROR("Error loading texture %s", filepath);
     }
 
     TextureCreation creation;
@@ -97,13 +94,13 @@ void Renderer2D::loadTexture(TextureAtlas atlas)
         .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
         .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
-        .setName(sAtlasPaths[atlas]);
+        .setName(filepath);
 
-    sTextureAlasHandles[atlas] = gpu->createTexture(creation).index;
+    textureAlasHandles = gpu->createTexture(creation);
 
-    VOID_ASSERT(sTextureAlasHandles[atlas] != INVALID_TEXTURE.index);
+    VOID_ASSERT(textureAlasHandles.index != INVALID_TEXTURE.index);
 
-    free(imageData);
+    //free(imageData);
 }
 
 void Renderer2D::addQuad(vec3s position, vec2s scale)
@@ -119,7 +116,7 @@ void Renderer2D::addQuad(vec3s position, vec2s scale)
     instanceCount++;
 }
 
-void Renderer2D::addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset, TextureAtlas atlas)
+void Renderer2D::addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset)
 {
     const mat4s translationMatrix = glms_translate_make(position);
     const mat4s scaleMatrix = glms_scale_make({ scale.x, scale.y, 1.f });
@@ -134,7 +131,8 @@ void Renderer2D::addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s ro
     max.y = ((rowAndColumn.y + offset.y) * spriteSize.y) / height;
 
     QuadPositionData data{};
-    data.textureID = sTextureAlasHandles[atlas];
+    data.textureID = textureAlasHandles.index;
+    data.billboardPosition = vec3s{ 0.f, 0.f, 0.f };
     data.transform = transform;
     data.texCoords[0] = vec2s{ min.x, max.y };
     data.texCoords[1] = vec2s{ max.x, max.y };
@@ -145,16 +143,21 @@ void Renderer2D::addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s ro
     instanceCount++;
 }
 
-void Renderer2D::loadBuffer() 
+void Renderer2D::loadBuffer(Render2DType type)
 {
-    BufferCreation bufferCreation{};
-    bufferCreation.reset()
-        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(QuadPositionData) * quadData.size)
-        .setName("quadPosition")
-        .setData(quadData.data);
-    positionalBDAHandle = gpu->createBindlessBuffer(bufferCreation);
+    camera2D.initOrthographic(-1.f, 1.f, (float)Window::instance()->width, (float)Window::instance()->height, 0.5f);
+    scene2d.project = glms_ortho(0, (float)Window::instance()->width, 0, (float)Window::instance()->height, 0.f, 100.f);
+    scene2d.flags = type;
 
-    scene2d.ortho = glms_ortho(0, (float)Window::instance()->width, 0, (float)Window::instance()->height, 0.f, 100.f);
+    BufferCreation bufferCreation{};
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+    {
+        bufferCreation.reset()
+            .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(QuadPositionData) * quadData.size)
+            .setName("quadPosition")
+            .setData(quadData.data);
+        positionalBDAHandle[i] = gpu->createBindlessBuffer(bufferCreation);
+    }
 
     bufferCreation.reset()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(SceneData2D))
@@ -169,13 +172,37 @@ void Renderer2D::drawQuad(CommandBuffer& commandBuffer)
 
     camera2D.updateUICamera();
 
-    scene2d.ortho = camera2D.projection;
+    scene2d.project = camera2D.projection;
 
     commandBuffer.bindlessDescriptorSet(0);
 
-    Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle);
+    Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle[gpu->currentFrame]);
     Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);
 
+    vmaCopyMemoryToAllocation(gpu->VMAAllocator, &scene2d, sceneBuffer->vmaAllocation, 0, sizeof(SceneData2D));
+
+    PushConstant pushConstants{};
+    pushConstants.quadPostionAddress = quadPositionBuffer->bufferAddress;
+    pushConstants.sceneAddress = sceneBuffer->bufferAddress;
+
+    vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+    commandBuffer.draw(6, instanceCount, 0, 0);
+}
+
+void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D)
+{
+    commandBuffer.bindPipeline(pipeline2D);
+
+    scene2d.project = camera3D.projection;
+    scene2d.view = camera3D.view;
+
+    commandBuffer.bindlessDescriptorSet(0);
+
+    Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle[gpu->currentFrame]);
+    Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);
+
+    vmaCopyMemoryToAllocation(gpu->VMAAllocator, quadData.data, quadPositionBuffer->vmaAllocation, 0, sizeof(QuadPositionData));
     vmaCopyMemoryToAllocation(gpu->VMAAllocator, &scene2d, sceneBuffer->vmaAllocation, 0, sizeof(SceneData2D));
 
     PushConstant pushConstants{};
@@ -191,11 +218,12 @@ void Renderer2D::shutdown()
 {
     quadData.shutdown();
 
-    for (uint32_t i = 0; i < ATLAS_COUNT; ++i)
+    gpu->destroyTexture(textureAlasHandles);
+
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
-        gpu->destroyTexture({ sTextureAlasHandles[i] });
+        gpu->destroyBuffer(positionalBDAHandle[i]);
     }
-    gpu->destroyBuffer(positionalBDAHandle);
     gpu->destroyBuffer(sceneBDAHandle);
 
     gpu->destroyPipeline(pipeline2D);

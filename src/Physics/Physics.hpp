@@ -126,9 +126,9 @@ public:
         switch (inLayer1)
         {
         case Layers::NON_MOVING:
-            return false;//return inLayer2 == BroadPhaseLayers::MOVING;
+            return inLayer2 == BroadPhaseLayers::MOVING;
         case Layers::MOVING:
-            return false;
+            return true;
         case Layers::CHARACTER:
             return true;
         default:
