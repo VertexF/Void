@@ -114,13 +114,6 @@ void CommandBuffer::bindVertexBuffer(BufferHandle bufferHandle, uint32_t binding
     VkDeviceSize offsets[] = { offset };
 
     VkBuffer vkBuffer = buffer->vkBuffer;
-    //TODO: Do I need to make global vertex buffer stuff?
-    if (buffer->parentBuffer.index != INVALID_INDEX)
-    {
-        Buffer* parentBuffer = device->accessBuffer(buffer->parentBuffer);
-        vkBuffer = parentBuffer->vkBuffer;
-        offsets[0] = buffer->globalOffset;
-    }
 
     vkCmdBindVertexBuffers(vkCommandBuffer, binding, 1, &vkBuffer, offsets);
 }
@@ -130,14 +123,6 @@ void CommandBuffer::bindIndexBuffer(BufferHandle bufferHandle, uint32_t offset, 
     Buffer* buffer = device->accessBuffer(bufferHandle);
 
     VkBuffer vkBuffer = buffer->vkBuffer;
-    //TODO: Do I need to make global vertex buffer stuff?
-    if (buffer->parentBuffer.index != INVALID_INDEX)
-    {
-        Buffer* parentBuffer = device->accessBuffer(buffer->parentBuffer);
-        vkBuffer = parentBuffer->vkBuffer;
-        offset = buffer->globalOffset;
-    }
-
     vkCmdBindIndexBuffer(vkCommandBuffer, vkBuffer, offset, indexType);
 }
 

@@ -519,7 +519,6 @@ struct BufferDescription
 
     VkBufferUsageFlags typeFlags = 0;
     uint32_t size = 0;
-    BufferHandle parentHandle;
 };
 
 struct TextureDescription 
@@ -623,7 +622,6 @@ struct Buffer
     uint32_t globalOffset = 0;
 
     BufferHandle handle = INVALID_BUFFER;
-    BufferHandle parentBuffer = INVALID_BUFFER;
 
     const char* name = nullptr;
 };

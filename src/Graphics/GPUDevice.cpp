@@ -274,17 +274,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
                 descriptorWrite[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 
-                //Bind parent buffer if present, used for dynamic resource.
-                if (buffer->parentBuffer.index != INVALID_INDEX)
-                {
-                    Buffer* parentBuffer = gpu.accessBuffer(buffer->parentBuffer);
-                    bufferInfo[i].buffer = parentBuffer->vkBuffer;
-                }
-                else
-                {
-                    bufferInfo[i].buffer = buffer->vkBuffer;
-                }
-
+                bufferInfo[i].buffer = buffer->vkBuffer;
                 bufferInfo[i].offset = 0;
                 bufferInfo[i].range = buffer->size;
 
@@ -299,17 +289,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
                 descriptorWrite[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
-                //Bind parent buffer if present, used for dynamic resource.
-                if (buffer->parentBuffer.index != INVALID_INDEX)
-                {
-                    Buffer* parentBuffer = gpu.accessBuffer(buffer->parentBuffer);
-                    bufferInfo[i].buffer = parentBuffer->vkBuffer;
-                }
-                else
-                {
-                    bufferInfo[i].buffer = buffer->vkBuffer;
-                }
-
+                bufferInfo[i].buffer = buffer->vkBuffer;
                 bufferInfo[i].offset = 0;
                 bufferInfo[i].range = buffer->size;
 
@@ -323,18 +303,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                 Buffer* buffer = gpu.accessBuffer(bufferHandle);
 
                 descriptorWrite[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                //Bind parent buffer if present, used for dynamic resouces.
-                if (buffer->parentBuffer.index != INVALID_INDEX)
-                {
-                    Buffer* parentBuffer = gpu.accessBuffer(buffer->parentBuffer);
 
-                    bufferInfo[i].buffer = parentBuffer->vkBuffer;
-                }
-                else
-                {
-                    bufferInfo[i].buffer = buffer->vkBuffer;
-                }
-
+                bufferInfo[i].buffer = buffer->vkBuffer;
                 bufferInfo[i].offset = 0;
                 bufferInfo[i].range = buffer->size;
 
@@ -1167,7 +1137,6 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
     buffer->typeFlags = creation.typeFlags;
     buffer->handle = handle;
     buffer->globalOffset = 0;
-    buffer->parentBuffer = INVALID_BUFFER;
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1208,7 +1177,6 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
     buffer->typeFlags = creation.typeFlags;
     buffer->handle = handle;
     buffer->globalOffset = 0;
-    buffer->parentBuffer = INVALID_BUFFER;
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -2071,7 +2039,6 @@ void GPUDevice::queryBuffer(BufferHandle buffer, BufferDescription& outDescripto
         outDescriptor.name = bufferData->name;
         outDescriptor.size = bufferData->size;
         outDescriptor.typeFlags = bufferData->typeFlags;
-        outDescriptor.parentHandle = bufferData->parentBuffer;
         outDescriptor.nativeHandle = reinterpret_cast<void*>(&bufferData->vkBuffer);
     }
 }
@@ -2908,10 +2875,7 @@ void GPUDevice::destroyBufferInstant(uint32_t buffer)
 {
     Buffer* buff = reinterpret_cast<Buffer*>(buffers.accessResource(buffer));
 
-    if (buff && buff->parentBuffer.index == INVALID_BUFFER.index)
-    {
-        vmaDestroyBuffer(VMAAllocator, buff->vkBuffer, buff->vmaAllocation);
-    }
+    vmaDestroyBuffer(VMAAllocator, buff->vkBuffer, buff->vmaAllocation);
 
     buffers.releaseResource(buffer);
 }
