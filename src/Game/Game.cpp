@@ -448,6 +448,8 @@ void Game::shutdown()
     }
 
     gpu->destroyBuffer(debugGlobalBuffer);
+    gpu->destroyBuffer(indirectBufferHandle);
+    gpu->destroyBuffer(indirectCountBufferHandle);
 
     scene.shutdownScene(*gpu);
     Physics::instance().shutdownPhysics();
