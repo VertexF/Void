@@ -12,6 +12,7 @@ namespace
     {
         VkDeviceAddress quadPostionAddress;
         VkDeviceAddress sceneAddress;
+        VkDeviceAddress particleData;
     };
 
     struct QuadPositionData
@@ -66,7 +67,7 @@ void Renderer2D::init(GPUDevice& inGPU)
         .addStage(frag2D.data, uint32_t(frag2D.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    pipelineCreation2D.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 16);
+    pipelineCreation2D.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
 
     pipelineCreation2D.rasterisation.cullMode = VK_CULL_MODE_NONE;
 
@@ -216,7 +217,7 @@ void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D
     commandBuffer.draw(6, instanceCount, 0, 0);
 }
 
-void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D, BufferHandle indirect, BufferHandle indirectCount)
+void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D, BufferHandle indirect, BufferHandle indirectCount, BufferHandle particleDataHandle)
 {
     Buffer* indirectBuffer = gpu->accessBuffer(indirect);
     Buffer* indirectCountBuffer = gpu->accessBuffer(indirectCount);
@@ -230,6 +231,7 @@ void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D
 
     Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle[gpu->currentFrame]);
     Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);
+    Buffer* particleDataBuffer = gpu->accessBuffer(particleDataHandle);
 
     vmaCopyMemoryToAllocation(gpu->VMAAllocator, quadData.data, quadPositionBuffer->vmaAllocation, 0, sizeof(QuadPositionData));
     vmaCopyMemoryToAllocation(gpu->VMAAllocator, &scene2d, sceneBuffer->vmaAllocation, 0, sizeof(SceneData2D));
@@ -237,6 +239,7 @@ void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D
     PushConstant pushConstants{};
     pushConstants.quadPostionAddress = quadPositionBuffer->bufferAddress;
     pushConstants.sceneAddress = sceneBuffer->bufferAddress;
+    pushConstants.particleData = particleDataBuffer->bufferAddress;
 
     vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 

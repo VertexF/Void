@@ -14,6 +14,12 @@ struct DrawCommand
     uint firstInstance;
 };
 
+struct ParticleData
+{
+    vec3 position;
+    uint particleSet;
+};
+
 layout(scalar, buffer_reference, buffer_reference_align = 8) writeonly buffer DrawCommandData
 {
     DrawCommand drawCommands[];
@@ -24,18 +30,30 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) buffer DrawCommandC
     uint drawCommandCount;
 };
 
+layout(scalar, buffer_reference, buffer_reference_align = 8) writeonly buffer Particles
+{
+    ParticleData particleData[];
+};
+
 layout(scalar, push_constant) uniform entityIndex
 {
     DrawCommandData drawCmdPtr;
     DrawCommandCountData drawCmdCountPtr;
+    Particles particleDataPtr;
 };
 
 layout(local_size_x_id = 64, local_size_y_id = 1, local_size_z_id = 1) in;
 
 void main()
 {
+    uint dataIndex = gl_GlobalInvocationID.x;
+
     //Add particle logic + cull
 
+    particleDataPtr.particleData[dataIndex].position = vec3(0.f, 8.f, 0.f);
+    particleDataPtr.particleData[dataIndex].particleSet = 0;
+
+    //Per draw call.
     uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);
 
     drawCmdPtr.drawCommands[dci].vertexCount = 6;

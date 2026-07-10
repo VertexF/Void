@@ -43,6 +43,7 @@ namespace
     BufferHandle debugGlobalBuffer;
     BufferHandle indirectCountBufferHandle = INVALID_BUFFER;
     BufferHandle indirectBufferHandle = INVALID_BUFFER;
+    BufferHandle particleDataHandle = INVALID_BUFFER;
 
     void uploadMaterial(MaterialData& meshData, const MeshDraw& meshDraw)
     {
@@ -142,7 +143,7 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
         .addStage(particleComp.data, uint32_t(particleComp.size), VK_SHADER_STAGE_COMPUTE_BIT)
         .setSPVInput(true);
 
-    computeParticlePipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, 16);
+    computeParticlePipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, 24);
 
     particleComputePipeline = gpu->createPipeline(computeParticlePipelineCreation);
 
@@ -415,7 +416,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             }
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
-            renderer2D.drawQuad3D(*gpuCommands, gameCamera.internal3DCamera, indirectBufferHandle, indirectCountBufferHandle);
+            renderer2D.drawQuad3D(*gpuCommands, gameCamera.internal3DCamera, indirectBufferHandle, indirectCountBufferHandle, particleDataHandle);
 
             //imgui->render(*gpuCommands);
 
@@ -450,6 +451,7 @@ void Game::shutdown()
     gpu->destroyBuffer(debugGlobalBuffer);
     gpu->destroyBuffer(indirectBufferHandle);
     gpu->destroyBuffer(indirectCountBufferHandle);
+    gpu->destroyBuffer(particleDataHandle);
 
     scene.shutdownScene(*gpu);
     Physics::instance().shutdownPhysics();
@@ -531,7 +533,6 @@ void Game::setupDrawCalls()
 
     gpu->setResourceName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(bufferIndirect->vkBuffer), "Indirect Draw Buffer");
     bufferIndirect->vkDeviceMemory = allocationInfoIndirect.deviceMemory;
-    //buffer->vkDeviceMemory = allocationInfo.deviceMemory;
 
     VkBufferDeviceAddressInfo bufferBDAInfoIndirect{};
     bufferBDAInfoIndirect.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -540,12 +541,51 @@ void Game::setupDrawCalls()
     bufferIndirect->bufferAddress = vkGetBufferDeviceAddress(gpu->vulkanDevice, &bufferBDAInfoIndirect);
 
     indirectBufferHandle = drawHandle;
+
+    BufferHandle particleHandle = { gpu->buffers.obtainResource() };
+    if (particleHandle.index == INVALID_INDEX)
+    {
+        indirectCountBufferHandle = INVALID_BUFFER;
+        return;
+    }
+
+    Buffer* partcleBufferData = gpu->accessBuffer(particleHandle);
+    partcleBufferData->name = "Particle buffer";
+    partcleBufferData->size = 64;
+    partcleBufferData->typeFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    partcleBufferData->handle = particleHandle;
+    partcleBufferData->globalOffset = 0;
+
+    VkBufferCreateInfo bufferInfoParticle{};
+    bufferInfoParticle.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfoParticle.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bufferInfoParticle.size = 64;
+
+    VmaAllocationCreateInfo memoryInfoParticle{};
+    memoryInfoParticle.usage = VMA_MEMORY_USAGE_AUTO;
+    memoryInfoParticle.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    VmaAllocationInfo allocationInfoParticle{};
+    result = vmaCreateBuffer(gpu->VMAAllocator, &bufferInfoParticle, &memoryInfoParticle, &partcleBufferData->vkBuffer, &partcleBufferData->vmaAllocation, &allocationInfoParticle);
+    VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Asset Code %u", result)
+
+    gpu->setResourceName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(partcleBufferData->vkBuffer), "Particle Buffer");
+    partcleBufferData->vkDeviceMemory = allocationInfoParticle.deviceMemory;
+
+    VkBufferDeviceAddressInfo bufferBDAInfoParticle{};
+    bufferBDAInfoParticle.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferBDAInfoParticle.buffer = partcleBufferData->vkBuffer;
+
+    partcleBufferData->bufferAddress = vkGetBufferDeviceAddress(gpu->vulkanDevice, &bufferBDAInfoParticle);
+
+    particleDataHandle = particleHandle;
 }
 
 void Game::runParticleCompute(CommandBuffer* commandBuffer)
 {
     Buffer* indirectBufferCount = gpu->accessBuffer(indirectCountBufferHandle);
     Buffer* indirectBuffer = gpu->accessBuffer(indirectBufferHandle);
+    Buffer* particleBuffer = gpu->accessBuffer(particleDataHandle);
 
     VkBufferMemoryBarrier2 bufferBarrier{};
     bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
@@ -592,28 +632,42 @@ void Game::runParticleCompute(CommandBuffer* commandBuffer)
     bufferComputeCountBarrier.offset = 0;
     bufferComputeCountBarrier.size = VK_WHOLE_SIZE;
 
+    VkBufferMemoryBarrier2 particleComputeBarrier{};
+    particleComputeBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    particleComputeBarrier.srcStageMask = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    particleComputeBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    particleComputeBarrier.dstStageMask =  VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    particleComputeBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    particleComputeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleComputeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleComputeBarrier.buffer = particleBuffer->vkBuffer;
+    particleComputeBarrier.offset = 0;
+    particleComputeBarrier.size = VK_WHOLE_SIZE;
+
     VkBufferMemoryBarrier2 computeBarriers[] =
     {
         bufferComputeBarrier,
-        bufferComputeCountBarrier
+        bufferComputeCountBarrier,
+        particleComputeBarrier
     };
 
     VkDependencyInfo dependencyComputeInfo{};
     dependencyComputeInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyComputeInfo.bufferMemoryBarrierCount = 2;
+    dependencyComputeInfo.bufferMemoryBarrierCount = 3;
     dependencyComputeInfo.pBufferMemoryBarriers = computeBarriers;
 
     vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyComputeInfo);
 
     ComputePushConstant pushConstants{};
     uint32_t drawCount = 1;
-    uint32_t computeLocalXID = 32;
+    uint32_t computeLocalXID = 64;
     commandBuffer->bindPipeline(particleComputePipeline);
 
     pushConstants.indirectAddress = indirectBuffer->bufferAddress;
     pushConstants.indirectCountAddress = indirectBufferCount->bufferAddress;
+    pushConstants.particleData = particleBuffer->bufferAddress;
 
-    vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), &pushConstants);
+    vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushConstants), &pushConstants);
 
     uint32_t numberOfXThreads = (drawCount + computeLocalXID - 1) / computeLocalXID;
 
@@ -643,15 +697,28 @@ void Game::runParticleCompute(CommandBuffer* commandBuffer)
     bufferIndirectCountBarrier.offset = 0;
     bufferIndirectCountBarrier.size = VK_WHOLE_SIZE;
 
+    VkBufferMemoryBarrier2 particleBarrier{};
+    particleBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    particleBarrier.srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    particleBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    particleBarrier.dstStageMask = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    particleBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    particleBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleBarrier.buffer = particleBuffer->vkBuffer;
+    particleBarrier.offset = 0;
+    particleBarrier.size = VK_WHOLE_SIZE;
+
     VkBufferMemoryBarrier2 barriers[] =
     {
         bufferIndirectBarrier,
-        bufferIndirectCountBarrier
+        bufferIndirectCountBarrier,
+        particleBarrier
     };
 
     VkDependencyInfo dependencyInfo{};
     dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.bufferMemoryBarrierCount = 2;
+    dependencyInfo.bufferMemoryBarrierCount = 3;
     dependencyInfo.pBufferMemoryBarriers = barriers;
 
     vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyInfo);

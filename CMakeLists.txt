@@ -874,7 +874,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
     add_custom_command(
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SPIRV_OUTPUT_DIR}"
-        COMMAND ${GLSL_VALIDATOR} --target-env vulkan1.4 ${GLSL} -o ${SPIRV}
+        COMMAND ${GLSL_VALIDATOR} --target-env vulkan1.4 -l ${GLSL} -o ${SPIRV}
         DEPENDS ${GLSL} ${GLSL_HEADER_FILES}
     )
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})

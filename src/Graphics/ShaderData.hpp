@@ -39,6 +39,7 @@ struct ComputePushConstant
 {
     VkDeviceAddress indirectAddress;
     VkDeviceAddress indirectCountAddress;
+    VkDeviceAddress particleData;
 };
 
 #endif // !SHADER_DATA_HDR
