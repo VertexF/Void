@@ -35,11 +35,14 @@ namespace
     //TODO: Figure out if you need this stuff.
     PipelineHandle mainPipeline;
     PipelineHandle debugPipeline;
+    PipelineHandle particleComputePipeline;
 
     DescriptorSetLayoutHandle mainDescriptorSetLayout;
 
     BufferHandle positionalBuffer[FRAMES_IN_FLIGHT];
     BufferHandle debugGlobalBuffer;
+    BufferHandle indirectCountBufferHandle = INVALID_BUFFER;
+    BufferHandle indirectBufferHandle = INVALID_BUFFER;
 
     void uploadMaterial(MaterialData& meshData, const MeshDraw& meshDraw)
     {
@@ -94,9 +97,11 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
         .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
+    pipelineCreation.pushConstants.createPushConstants((VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, 24);
+
     //Descriptor set layout.
     DescriptorSetLayoutCreation mainCreation{};
-    mainCreation.addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL_GRAPHICS, .name = "MaterialConstant" })
+    mainCreation.addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_ALL_GRAPHICS, .name = "MaterialConstant" })
         .setSetIndex(1);
     mainCreation.bindless = false;
 
@@ -123,7 +128,23 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
         .addStage(fragDebug.data, uint32_t(fragDebug.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
+    debugPipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
+
     debugPipeline = gpu->createPipeline(debugPipelineCreation, /*debugRendering=*/ true);
+
+    //Particle compute
+    PipelineCreation computeParticlePipelineCreation{};
+
+    //Shader state
+    FileReadResult particleComp = fileReadBinary("Assets/Shaders/particles.comp.spv", &MemoryService::instance()->scratchAllocator);
+
+    computeParticlePipelineCreation.shaders.setName("debugRenderer")
+        .addStage(particleComp.data, uint32_t(particleComp.size), VK_SHADER_STAGE_COMPUTE_BIT)
+        .setSPVInput(true);
+
+    computeParticlePipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, 16);
+
+    particleComputePipeline = gpu->createPipeline(computeParticlePipelineCreation);
 
     // Register allocation hook. In this example we'll just let Jolt use malloc / free but you can override these if you want (see Memory.h).
     // This needs to be done before any other Jolt function is called.
@@ -182,6 +203,8 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
     debugRenderer = true;
     element = 0;
     recreatePositionBuffer = false;
+
+    setupDrawCalls();
 }
 
 void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)
@@ -276,6 +299,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
+            runParticleCompute(gpuCommands);
             gpuCommands->beginRendering();
 
             gpuCommands->setScissor(nullptr);
@@ -380,7 +404,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                     Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
 
-                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+                    vkCmdPushConstants(gpuCommands->vkCommandBuffer, gpuCommands->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
                     gpuCommands->bindIndexBuffer(meshDraw.indexBuffer, meshDraw.indexOffset, meshDraw.componentType);
 
@@ -391,7 +415,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             }
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
-            renderer2D.drawQuad3D(*gpuCommands, gameCamera.internal3DCamera);
+            renderer2D.drawQuad3D(*gpuCommands, gameCamera.internal3DCamera, indirectBufferHandle, indirectCountBufferHandle);
 
             //imgui->render(*gpuCommands);
 
@@ -431,6 +455,204 @@ void Game::shutdown()
     gpu->destroyDescriptorSetLayout(mainDescriptorSetLayout);
     gpu->destroyPipeline(mainPipeline);
     gpu->destroyPipeline(debugPipeline);
+    gpu->destroyPipeline(particleComputePipeline);
+}
+
+void Game::setupDrawCalls() 
+{
+    BufferHandle drawCountHandle = { gpu->buffers.obtainResource() };
+    if (drawCountHandle.index == INVALID_INDEX)
+    {
+        indirectCountBufferHandle = INVALID_BUFFER;
+        return;
+    }
+
+    Buffer* bufferCount = gpu->accessBuffer(drawCountHandle);
+    bufferCount->name = "Indirect Draw Count Buffer";
+    bufferCount->size = 4;
+    bufferCount->typeFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    bufferCount->handle = drawCountHandle;
+    bufferCount->globalOffset = 0;
+
+    VkBufferCreateInfo bufferInfoCount{};
+    bufferInfoCount.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfoCount.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    bufferInfoCount.size = 4;
+
+    VmaAllocationCreateInfo memoryInfoCount{};
+    memoryInfoCount.usage = VMA_MEMORY_USAGE_AUTO;
+    memoryInfoCount.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    VmaAllocationInfo allocationInfoCount{};
+    VkResult result = vmaCreateBuffer(gpu->VMAAllocator, &bufferInfoCount, &memoryInfoCount, &bufferCount->vkBuffer, &bufferCount->vmaAllocation, &allocationInfoCount);
+    VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Asset Code %u", result)
+
+    gpu->setResourceName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(bufferCount->vkBuffer), "Indirect Draw Count Buffer");
+    bufferCount->vkDeviceMemory = allocationInfoCount.deviceMemory;
+
+    VkBufferDeviceAddressInfo bufferBDAInfoCount{};
+    bufferBDAInfoCount.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferBDAInfoCount.buffer = bufferCount->vkBuffer;
+
+    bufferCount->bufferAddress = vkGetBufferDeviceAddress(gpu->vulkanDevice, &bufferBDAInfoCount);
+
+    indirectCountBufferHandle = drawCountHandle;
+
+    BufferHandle drawHandle = { gpu->buffers.obtainResource() };
+    if (drawHandle.index == INVALID_INDEX)
+    {
+        indirectBufferHandle = INVALID_BUFFER;
+        return;
+    }
+
+    Buffer* bufferIndirect = gpu->accessBuffer(drawHandle);
+    bufferIndirect->name = "Indirect Draw Buffer";
+    //I don't know why yet you would want to make a draw command this large.
+    bufferIndirect->size = 128 * 1024 * 1024;
+    bufferIndirect->typeFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    bufferIndirect->handle = drawHandle;
+    bufferIndirect->globalOffset = 0;
+
+    VkBufferCreateInfo bufferInfoIndirect{};
+    bufferInfoIndirect.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfoIndirect.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    //I don't know why yet you would want to make a draw command this large.
+    bufferInfoIndirect.size = 128 * 1024 * 1024;
+
+    VmaAllocationCreateInfo memoryInfoIndirect{};
+    memoryInfoIndirect.usage = VMA_MEMORY_USAGE_AUTO;
+    memoryInfoIndirect.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    VmaAllocationInfo allocationInfoIndirect{};
+    result = vmaCreateBuffer(gpu->VMAAllocator, &bufferInfoIndirect, &memoryInfoIndirect, &bufferIndirect->vkBuffer, &bufferIndirect->vmaAllocation, &allocationInfoIndirect);
+    VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Asset Code %u", result)
+
+    gpu->setResourceName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(bufferIndirect->vkBuffer), "Indirect Draw Buffer");
+    bufferIndirect->vkDeviceMemory = allocationInfoIndirect.deviceMemory;
+    //buffer->vkDeviceMemory = allocationInfo.deviceMemory;
+
+    VkBufferDeviceAddressInfo bufferBDAInfoIndirect{};
+    bufferBDAInfoIndirect.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferBDAInfoIndirect.buffer = bufferIndirect->vkBuffer;
+
+    bufferIndirect->bufferAddress = vkGetBufferDeviceAddress(gpu->vulkanDevice, &bufferBDAInfoIndirect);
+
+    indirectBufferHandle = drawHandle;
+}
+
+void Game::runParticleCompute(CommandBuffer* commandBuffer)
+{
+    Buffer* indirectBufferCount = gpu->accessBuffer(indirectCountBufferHandle);
+    Buffer* indirectBuffer = gpu->accessBuffer(indirectBufferHandle);
+
+    VkBufferMemoryBarrier2 bufferBarrier{};
+    bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    bufferBarrier.srcStageMask = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    bufferBarrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+    bufferBarrier.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    bufferBarrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferBarrier.buffer = indirectBufferCount->vkBuffer;
+    bufferBarrier.offset = 0;
+    bufferBarrier.size = VK_WHOLE_SIZE;
+
+    VkDependencyInfo dependencyInfoCount{};
+    dependencyInfoCount.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfoCount.bufferMemoryBarrierCount = 1;
+    dependencyInfoCount.pBufferMemoryBarriers = &bufferBarrier;
+
+    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyInfoCount);
+
+    vkCmdFillBuffer(commandBuffer->vkCommandBuffer, indirectBufferCount->vkBuffer, 0, 4, 0);
+
+    VkBufferMemoryBarrier2 bufferComputeBarrier{};
+    bufferComputeBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    bufferComputeBarrier.srcStageMask = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    bufferComputeBarrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
+    bufferComputeBarrier.dstStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    bufferComputeBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    bufferComputeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferComputeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferComputeBarrier.buffer = indirectBuffer->vkBuffer;
+    bufferComputeBarrier.offset = 0;
+    bufferComputeBarrier.size = VK_WHOLE_SIZE;
+
+    VkBufferMemoryBarrier2 bufferComputeCountBarrier{};
+    bufferComputeCountBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    bufferComputeCountBarrier.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    bufferComputeCountBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    bufferComputeCountBarrier.dstStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    bufferComputeCountBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    bufferComputeCountBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferComputeCountBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferComputeCountBarrier.buffer = indirectBufferCount->vkBuffer;
+    bufferComputeCountBarrier.offset = 0;
+    bufferComputeCountBarrier.size = VK_WHOLE_SIZE;
+
+    VkBufferMemoryBarrier2 computeBarriers[] =
+    {
+        bufferComputeBarrier,
+        bufferComputeCountBarrier
+    };
+
+    VkDependencyInfo dependencyComputeInfo{};
+    dependencyComputeInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyComputeInfo.bufferMemoryBarrierCount = 2;
+    dependencyComputeInfo.pBufferMemoryBarriers = computeBarriers;
+
+    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyComputeInfo);
+
+    ComputePushConstant pushConstants{};
+    uint32_t drawCount = 1;
+    uint32_t computeLocalXID = 32;
+    commandBuffer->bindPipeline(particleComputePipeline);
+
+    pushConstants.indirectAddress = indirectBuffer->bufferAddress;
+    pushConstants.indirectCountAddress = indirectBufferCount->bufferAddress;
+
+    vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstant), &pushConstants);
+
+    uint32_t numberOfXThreads = (drawCount + computeLocalXID - 1) / computeLocalXID;
+
+    vkCmdDispatch(commandBuffer->vkCommandBuffer, numberOfXThreads, 1, 1);
+
+    VkBufferMemoryBarrier2 bufferIndirectBarrier{};
+    bufferIndirectBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    bufferIndirectBarrier.srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    bufferIndirectBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    bufferIndirectBarrier.dstStageMask = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    bufferIndirectBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT; //current we don't read thin the sahder.*/ 
+    bufferIndirectBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferIndirectBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferIndirectBarrier.buffer = indirectBuffer->vkBuffer;
+    bufferIndirectBarrier.offset = 0;
+    bufferIndirectBarrier.size = VK_WHOLE_SIZE;
+
+    VkBufferMemoryBarrier2 bufferIndirectCountBarrier{};
+    bufferIndirectCountBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    bufferIndirectCountBarrier.srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    bufferIndirectCountBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    bufferIndirectCountBarrier.dstStageMask = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    bufferIndirectCountBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+    bufferIndirectCountBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferIndirectCountBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufferIndirectCountBarrier.buffer = indirectBufferCount->vkBuffer;
+    bufferIndirectCountBarrier.offset = 0;
+    bufferIndirectCountBarrier.size = VK_WHOLE_SIZE;
+
+    VkBufferMemoryBarrier2 barriers[] =
+    {
+        bufferIndirectBarrier,
+        bufferIndirectCountBarrier
+    };
+
+    VkDependencyInfo dependencyInfo{};
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.bufferMemoryBarrierCount = 2;
+    dependencyInfo.pBufferMemoryBarriers = barriers;
+
+    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyInfo);
 }
 
 void Game::deleteEntity() 

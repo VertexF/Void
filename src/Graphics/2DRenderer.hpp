@@ -47,6 +47,7 @@ struct Renderer2D
 	void loadBuffer(Render2DType type);
 	void drawQuad(CommandBuffer& commandBuffer);
 	void drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D);
+	void drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D, BufferHandle indirect, BufferHandle indirectCount);
 	void shutdown();
 
 	TextureHandle textureAlasHandles;

@@ -200,6 +200,22 @@ ShaderStateCreation& ShaderStateCreation::setSPVInput(bool value)
     return *this;
 }
 
+PushConstantsCreation& PushConstantsCreation::reset() 
+{
+    offset = 0;
+    size = 0;
+    stageFlags = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    return *this;
+}
+
+PushConstantsCreation& PushConstantsCreation::createPushConstants(VkShaderStageFlagBits flag, uint32_t inOffset, uint32_t inSize)
+{
+    offset = inOffset;
+    size = inSize;
+    stageFlags = flag;
+    return *this;
+}
+
 DescriptorSetLayoutCreation& DescriptorSetLayoutCreation::reset() 
 {
     numBindings = 0;

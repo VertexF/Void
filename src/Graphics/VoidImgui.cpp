@@ -304,7 +304,7 @@ namespace
 
         DescriptorSetLayoutCreation descriptorSetLayoutCreation{};
 
-        descriptorSetLayoutCreation.addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_VERTEX_BIT, .name = "LocalConstants" })
+        descriptorSetLayoutCreation.addBinding({ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .binding = 0, .count = 1, .stage = VK_SHADER_STAGE_VERTEX_BIT, .name = "LocalConstants" })
             .setSetIndex(1)
             .setName("RLL_Imgui");
         descriptorSetLayoutCreation.bindless = false;

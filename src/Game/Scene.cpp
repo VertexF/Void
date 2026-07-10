@@ -179,7 +179,6 @@ void Scene::buildPerformance()
     float radius = 13.5;
 
     float sceneRadius = 500.f;
-    vec3s position{};
     //Ducks
     for (uint32_t duckIndex = 0; duckIndex < totalEntities / 2; ++duckIndex)
     {

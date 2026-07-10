@@ -345,6 +345,16 @@ struct ShaderStateCreation
     ShaderStateCreation& setSPVInput(bool value);
 };
 
+struct PushConstantsCreation 
+{
+    uint32_t offset = 0;
+    uint32_t size = 0;
+    VkShaderStageFlagBits stageFlags = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    
+    PushConstantsCreation& reset();
+    PushConstantsCreation& createPushConstants(VkShaderStageFlagBits flag, uint32_t offset, uint32_t size);
+};
+
 struct DescriptorSetLayoutCreation 
 {
     //A single binding. It can be relative to one or more resource of the same type.
@@ -445,6 +455,7 @@ struct PipelineCreation
     BlendStateCreation blendState;
     VertexInputCreation vertexInput;
     ShaderStateCreation shaders;
+    PushConstantsCreation pushConstants;
 
     DescriptorSetLayoutHandle descriptorSetLayout[MAX_DESCRIPTOR_SET_LAYOUTS];
     const ViewportState* viewport = nullptr;

@@ -1403,17 +1403,20 @@ PipelineHandle GPUDevice::createPipeline(const PipelineCreation& creation, bool 
         vkLayouts[layout] = pipeline->descriptorSetLayout[layout]->vkDescriptorSetLayout;
     }
 
-    VkPushConstantRange range{};
-    range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    range.offset = 0;
-    range.size = 128;
-
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.pSetLayouts = vkLayouts;
     pipelineLayoutInfo.setLayoutCount = creation.numActiveLayouts;
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &range;
+
+    VkPushConstantRange range{};
+    if (creation.pushConstants.stageFlags != VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM)
+    {
+        range.stageFlags = creation.pushConstants.stageFlags;
+        range.offset = creation.pushConstants.offset;
+        range.size = creation.pushConstants.size;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &range;
+    }
 
     VkPipelineLayout pipelineLayout;
     check(vkCreatePipelineLayout(vulkanDevice, &pipelineLayoutInfo, vulkanAllocationCallbacks, &pipelineLayout));

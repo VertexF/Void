@@ -66,6 +66,8 @@ void Renderer2D::init(GPUDevice& inGPU)
         .addStage(frag2D.data, uint32_t(frag2D.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
+    pipelineCreation2D.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 16);
+
     pipelineCreation2D.rasterisation.cullMode = VK_CULL_MODE_NONE;
 
     //This descriptor set layout will be ran every frame
@@ -185,7 +187,7 @@ void Renderer2D::drawQuad(CommandBuffer& commandBuffer)
     pushConstants.quadPostionAddress = quadPositionBuffer->bufferAddress;
     pushConstants.sceneAddress = sceneBuffer->bufferAddress;
 
-    vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+    vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
     commandBuffer.draw(6, instanceCount, 0, 0);
 }
@@ -209,9 +211,36 @@ void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D
     pushConstants.quadPostionAddress = quadPositionBuffer->bufferAddress;
     pushConstants.sceneAddress = sceneBuffer->bufferAddress;
 
-    vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConstants), &pushConstants);
+    vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
 
     commandBuffer.draw(6, instanceCount, 0, 0);
+}
+
+void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D, BufferHandle indirect, BufferHandle indirectCount)
+{
+    Buffer* indirectBuffer = gpu->accessBuffer(indirect);
+    Buffer* indirectCountBuffer = gpu->accessBuffer(indirectCount);
+
+    commandBuffer.bindPipeline(pipeline2D);
+
+    scene2d.project = camera3D.projection;
+    scene2d.view = camera3D.view;
+
+    commandBuffer.bindlessDescriptorSet(0);
+
+    Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle[gpu->currentFrame]);
+    Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);
+
+    vmaCopyMemoryToAllocation(gpu->VMAAllocator, quadData.data, quadPositionBuffer->vmaAllocation, 0, sizeof(QuadPositionData));
+    vmaCopyMemoryToAllocation(gpu->VMAAllocator, &scene2d, sceneBuffer->vmaAllocation, 0, sizeof(SceneData2D));
+
+    PushConstant pushConstants{};
+    pushConstants.quadPostionAddress = quadPositionBuffer->bufferAddress;
+    pushConstants.sceneAddress = sceneBuffer->bufferAddress;
+
+    vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+    vkCmdDrawIndirectCount(commandBuffer.vkCommandBuffer, indirectBuffer->vkBuffer, 0, indirectCountBuffer->vkBuffer, 0, 1, sizeof(VkDrawIndirectCommand));
 }
 
 void Renderer2D::shutdown()

@@ -1,0 +1,45 @@
+#version 460
+
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
+
+struct DrawCommand
+{
+	//If you not using a mesh/task approach to this you don't need to store the drawID.
+    //uint drawID;
+
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+layout(scalar, buffer_reference, buffer_reference_align = 8) writeonly buffer DrawCommandData
+{
+    DrawCommand drawCommands[];
+};
+
+layout(scalar, buffer_reference, buffer_reference_align = 8) buffer DrawCommandCountData
+{
+    uint drawCommandCount;
+};
+
+layout(scalar, push_constant) uniform entityIndex
+{
+    DrawCommandData drawCmdPtr;
+    DrawCommandCountData drawCmdCountPtr;
+};
+
+layout(local_size_x_id = 64, local_size_y_id = 1, local_size_z_id = 1) in;
+
+void main()
+{
+    //Add particle logic + cull
+
+    uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);
+
+    drawCmdPtr.drawCommands[dci].vertexCount = 6;
+    drawCmdPtr.drawCommands[dci].instanceCount = 1;
+    drawCmdPtr.drawCommands[dci].firstVertex = 0;
+    drawCmdPtr.drawCommands[dci].firstInstance = 0;
+}

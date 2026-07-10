@@ -35,4 +35,10 @@ struct PushConstants
     VkDeviceAddress sceneAddress;
 };
 
+struct ComputePushConstant 
+{
+    VkDeviceAddress indirectAddress;
+    VkDeviceAddress indirectCountAddress;
+};
+
 #endif // !SHADER_DATA_HDR
