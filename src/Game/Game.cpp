@@ -75,6 +75,12 @@ namespace
     }
 
     static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
+
+    struct ParticleData 
+    {
+        vec3s position;
+        uint32_t particleSet;
+    };
 }
 
 void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui)
@@ -184,20 +190,7 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
     gameCamera.init(7.f, 3.0f, 0.1f);
 
     initSkybox(*gpu);
-    renderer2D.init(*gpu);
-    renderer2D.loadTexture("Assets/Textures/particles.png");
-    userInterface.init(renderer2D);
-    userInterface.buildGameUI();
-
-    float xCentre = (((float)Window::instance()->width) - 256) / 2;
-    float yCentre = (((float)Window::instance()->height) - 256) / 2;
-
-    vec2s spriteOffset = { .x = 1, .y = 1 };
-    vec2s buttonSize = { 256.f, 256.f };
-    vec2s subSpriteSize = { 64.f, 64.f };
-
-    renderer2D.addQuad({ 0.f, 0.f, 0.f }, buttonSize, subSpriteSize, { 0, 3 }, spriteOffset);
-    renderer2D.loadBuffer(BILLBOARD_FLAG_2D);
+    particleRenderer.init(*gpu);
 
     modelScale = 1.0f;
 
@@ -213,7 +206,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
     while (Window::instance()->exitRequested == false)
     {
         //ZoneScoped;
-        inputHandler.onEvent(gpu, &userInterface);
+        inputHandler.onEvent(gpu, nullptr);
         if (inputHandler.isKeyDown(Keys::KEY_ESCAPE))
         {
             Window::instance()->exitRequested = true;
@@ -416,7 +409,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             }
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
-            renderer2D.drawQuad3D(*gpuCommands, gameCamera.internal3DCamera, indirectBufferHandle, indirectCountBufferHandle, particleDataHandle);
+            particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera, indirectBufferHandle, indirectCountBufferHandle, particleDataHandle);
 
             //imgui->render(*gpuCommands);
 
@@ -441,7 +434,7 @@ void Game::shutdown()
     vkDeviceWaitIdle(gpu->vulkanDevice);
 
     shutdownSkybox(*gpu);
-    renderer2D.shutdown();
+    particleRenderer.shutdown();
 
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
@@ -551,7 +544,7 @@ void Game::setupDrawCalls()
 
     Buffer* partcleBufferData = gpu->accessBuffer(particleHandle);
     partcleBufferData->name = "Particle buffer";
-    partcleBufferData->size = 64;
+    partcleBufferData->size = sizeof(ParticleData) * 10000;
     partcleBufferData->typeFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     partcleBufferData->handle = particleHandle;
     partcleBufferData->globalOffset = 0;
@@ -559,7 +552,7 @@ void Game::setupDrawCalls()
     VkBufferCreateInfo bufferInfoParticle{};
     bufferInfoParticle.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfoParticle.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferInfoParticle.size = 64;
+    bufferInfoParticle.size = sizeof(ParticleData) * 10000;
 
     VmaAllocationCreateInfo memoryInfoParticle{};
     memoryInfoParticle.usage = VMA_MEMORY_USAGE_AUTO;
@@ -671,7 +664,7 @@ void Game::runParticleCompute(CommandBuffer* commandBuffer)
 
     uint32_t numberOfXThreads = (drawCount + computeLocalXID - 1) / computeLocalXID;
 
-    vkCmdDispatch(commandBuffer->vkCommandBuffer, numberOfXThreads, 1, 1);
+    vkCmdDispatch(commandBuffer->vkCommandBuffer, 10000, 1, 1);
 
     VkBufferMemoryBarrier2 bufferIndirectBarrier{};
     bufferIndirectBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;

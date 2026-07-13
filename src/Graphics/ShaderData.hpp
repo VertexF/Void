@@ -28,6 +28,12 @@ struct EntityData
     float padd[4];
 };
 
+struct SceneData2D
+{
+    mat4s view;
+    mat4s project;
+};
+
 struct PushConstants
 {
     VkDeviceAddress vertexDataAddress;

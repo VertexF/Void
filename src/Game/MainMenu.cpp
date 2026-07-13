@@ -13,7 +13,7 @@ void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& 
     renderer2D.loadTexture("Assets/Textures/mainMenuUI.png");
     userInterface.init(renderer2D);
     userInterface.buildMainMenu();
-    renderer2D.loadBuffer(UI_FLAG_2D);
+    renderer2D.loadBuffer();
 }
 
 void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)

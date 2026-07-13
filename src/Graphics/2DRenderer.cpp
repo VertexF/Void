@@ -146,11 +146,10 @@ void Renderer2D::addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s ro
     instanceCount++;
 }
 
-void Renderer2D::loadBuffer(Render2DType type)
+void Renderer2D::loadBuffer()
 {
     camera2D.initOrthographic(-1.f, 1.f, (float)Window::instance()->width, (float)Window::instance()->height, 0.5f);
     scene2d.project = glms_ortho(0, (float)Window::instance()->width, 0, (float)Window::instance()->height, 0.f, 100.f);
-    scene2d.flags = type;
 
     BufferCreation bufferCreation{};
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
@@ -159,7 +158,7 @@ void Renderer2D::loadBuffer(Render2DType type)
             .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(QuadPositionData) * quadData.size)
             .setName("quadPosition")
             .setData(quadData.data);
-        positionalBDAHandle[i] = gpu->createBindlessBuffer(bufferCreation);
+        particleSetHandle[i] = gpu->createBindlessBuffer(bufferCreation);
     }
 
     bufferCreation.reset()
@@ -179,7 +178,7 @@ void Renderer2D::drawQuad(CommandBuffer& commandBuffer)
 
     commandBuffer.bindlessDescriptorSet(0);
 
-    Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle[gpu->currentFrame]);
+    Buffer* quadPositionBuffer = gpu->accessBuffer(particleSetHandle[gpu->currentFrame]);
     Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);
 
     vmaCopyMemoryToAllocation(gpu->VMAAllocator, &scene2d, sceneBuffer->vmaAllocation, 0, sizeof(SceneData2D));
@@ -202,7 +201,7 @@ void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D
 
     commandBuffer.bindlessDescriptorSet(0);
 
-    Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle[gpu->currentFrame]);
+    Buffer* quadPositionBuffer = gpu->accessBuffer(particleSetHandle[gpu->currentFrame]);
     Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);
 
     vmaCopyMemoryToAllocation(gpu->VMAAllocator, quadData.data, quadPositionBuffer->vmaAllocation, 0, sizeof(QuadPositionData));
@@ -217,35 +216,6 @@ void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D
     commandBuffer.draw(6, instanceCount, 0, 0);
 }
 
-void Renderer2D::drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D, BufferHandle indirect, BufferHandle indirectCount, BufferHandle particleDataHandle)
-{
-    Buffer* indirectBuffer = gpu->accessBuffer(indirect);
-    Buffer* indirectCountBuffer = gpu->accessBuffer(indirectCount);
-
-    commandBuffer.bindPipeline(pipeline2D);
-
-    scene2d.project = camera3D.projection;
-    scene2d.view = camera3D.view;
-
-    commandBuffer.bindlessDescriptorSet(0);
-
-    Buffer* quadPositionBuffer = gpu->accessBuffer(positionalBDAHandle[gpu->currentFrame]);
-    Buffer* sceneBuffer = gpu->accessBuffer(sceneBDAHandle);
-    Buffer* particleDataBuffer = gpu->accessBuffer(particleDataHandle);
-
-    vmaCopyMemoryToAllocation(gpu->VMAAllocator, quadData.data, quadPositionBuffer->vmaAllocation, 0, sizeof(QuadPositionData));
-    vmaCopyMemoryToAllocation(gpu->VMAAllocator, &scene2d, sceneBuffer->vmaAllocation, 0, sizeof(SceneData2D));
-
-    PushConstant pushConstants{};
-    pushConstants.quadPostionAddress = quadPositionBuffer->bufferAddress;
-    pushConstants.sceneAddress = sceneBuffer->bufferAddress;
-    pushConstants.particleData = particleDataBuffer->bufferAddress;
-
-    vkCmdPushConstants(commandBuffer.vkCommandBuffer, commandBuffer.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
-
-    vkCmdDrawIndirectCount(commandBuffer.vkCommandBuffer, indirectBuffer->vkBuffer, 0, indirectCountBuffer->vkBuffer, 0, 1, sizeof(VkDrawIndirectCommand));
-}
-
 void Renderer2D::shutdown()
 {
     quadData.shutdown();
@@ -254,7 +224,7 @@ void Renderer2D::shutdown()
 
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
-        gpu->destroyBuffer(positionalBDAHandle[i]);
+        gpu->destroyBuffer(particleSetHandle[i]);
     }
     gpu->destroyBuffer(sceneBDAHandle);
 

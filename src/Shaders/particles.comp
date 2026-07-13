@@ -44,20 +44,28 @@ layout(scalar, push_constant) uniform entityIndex
 
 layout(local_size_x_id = 64, local_size_y_id = 1, local_size_z_id = 1) in;
 
+float random(vec2 co)
+{
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
 void main()
 {
     uint dataIndex = gl_GlobalInvocationID.x;
+    uint instanceCount = dataIndex + 1;
 
     //Add particle logic + cull
+    particleDataPtr.particleData[dataIndex].position = vec3(dataIndex, dataIndex, dataIndex);
+    particleDataPtr.particleData[dataIndex].particleSet = uint(dataIndex % 2 == 0);
 
-    particleDataPtr.particleData[dataIndex].position = vec3(0.f, 8.f, 0.f);
-    particleDataPtr.particleData[dataIndex].particleSet = 0;
+    if(gl_NumWorkGroups.x * gl_WorkGroupSize.x == instanceCount)
+    {
+        //Per draw call.
+        uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);
 
-    //Per draw call.
-    uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);
-
-    drawCmdPtr.drawCommands[dci].vertexCount = 6;
-    drawCmdPtr.drawCommands[dci].instanceCount = 1;
-    drawCmdPtr.drawCommands[dci].firstVertex = 0;
-    drawCmdPtr.drawCommands[dci].firstInstance = 0;
+        drawCmdPtr.drawCommands[dci].vertexCount = 6;
+        drawCmdPtr.drawCommands[dci].instanceCount = instanceCount;
+        drawCmdPtr.drawCommands[dci].firstVertex = 0;
+        drawCmdPtr.drawCommands[dci].firstInstance = 0;
+    }
 }

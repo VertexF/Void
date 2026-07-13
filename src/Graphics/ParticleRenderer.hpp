@@ -1,5 +1,5 @@
-#ifndef RENDER_2D_HDR
-#define RENDER_2D_HDR
+#ifndef PARTICLE_RENDERER_HDR
+#define PARTICLE_RENDERER_HDR
 
 #include "GPUDevice.hpp"
 #include "GPUResources.hpp"
@@ -23,34 +23,28 @@
 
 struct GPUDevice;
 
-struct Renderer2D
+struct ParticleRenderer
 {
 	void init(GPUDevice& inGPU);
 	void loadTexture(const char* filepath);
-	void addQuad(vec3s position, vec2s scale);
-	void addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
+	void addParticleSet(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
 	void loadBuffer();
-	void drawQuad(CommandBuffer& commandBuffer);
-	void drawQuad3D(CommandBuffer& commandBuffer, const Camera& camera3D);
+	void drawParticles(CommandBuffer& commandBuffer, const Camera& camera3D, BufferHandle indirect, BufferHandle indirectCount, BufferHandle particleDataHandle);
 	void shutdown();
 
 	TextureHandle textureAlasHandles;
 
 	SceneData2D scene2d{};
 
-	Camera camera2D;
-
 	GPUDevice* gpu;
 
 	int width;
 	int height;
 
-	PipelineHandle pipeline2D;
+	PipelineHandle particlePipeline;
 	DescriptorSetLayoutHandle descriptorSetLayout2D;
-	BufferHandle particleSetHandle[FRAMES_IN_FLIGHT];
+	BufferHandle particleSetsHandle;
 	BufferHandle sceneBDAHandle = INVALID_BUFFER;
-
-	uint32_t instanceCount = 0;
 };
 
-#endif // !RENDER_2D_HDR
+#endif // !PARTICLE_RENDERER_HDR

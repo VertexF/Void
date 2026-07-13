@@ -7,7 +7,7 @@
 #include "Graphics/GPUDevice.hpp"
 #include "Graphics/GPUProfiler.hpp"
 #include "Graphics/VoidImgui.hpp"
-#include "Graphics/2DRenderer.hpp"
+#include "Graphics/ParticleRenderer.hpp"
 
 #include "Game/Player.hpp"
 #include "Game/Scene.hpp"
@@ -26,10 +26,9 @@ struct Game
     AudioSystem* audioSystem;
     ImguiService* imgui;
 
-    Renderer2D renderer2D;
+    ParticleRenderer particleRenderer;
     GameCamera gameCamera;
     Scene scene;
-    GUI userInterface;
 
     vec3s eye = vec3s{ 0.f, 1.f, 0.f };
     vec3s playerPosition{};
