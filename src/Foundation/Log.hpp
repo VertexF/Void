@@ -67,11 +67,11 @@ struct LogService
 };
 
 //This enables/disables printing vprint();
-//#define DEBUG_PRINTING
+#define DEBUG_PRINTING
 //This enable/disabled check(); for general error checking.
-//#define DEBUG_CHECKING
+#define DEBUG_CHECKING
 //This enable/disables the vulkan validation layers.
-//#define VULKAN_DEBUG_REPORT
+#define VULKAN_DEBUG_REPORT
 
 #if defined(DEBUG_PRINTING)
 #if defined(_MSC_VER)

@@ -1161,7 +1161,6 @@ BufferHandle GPUDevice::createBuffer(const BufferCreation& creation)
     return handle;
 }
 
-
 BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation) 
 {
     BufferHandle handle = { buffers.obtainResource() };
@@ -1186,6 +1185,51 @@ BufferHandle GPUDevice::createBindlessBuffer(const BufferCreation& creation)
     VmaAllocationCreateInfo memoryInfo{};
     memoryInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+    VmaAllocationInfo allocationInfo{};
+    check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &buffer->vkBuffer, &buffer->vmaAllocation, &allocationInfo));
+
+    setResourceName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(buffer->vkBuffer), creation.name);
+    buffer->vkDeviceMemory = allocationInfo.deviceMemory;
+
+    if (creation.initialData)
+    {
+        vmaCopyMemoryToAllocation(VMAAllocator, creation.initialData, buffer->vmaAllocation, 0, creation.size);
+    }
+
+    VkBufferDeviceAddressInfo bufferBDAInfo{};
+    bufferBDAInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferBDAInfo.buffer = buffer->vkBuffer;
+
+    buffer->bufferAddress = vkGetBufferDeviceAddress(vulkanDevice, &bufferBDAInfo);
+
+    return handle;
+}
+
+BufferHandle GPUDevice::createBindlessGPUBuffer(const BufferCreation& creation)
+{
+    BufferHandle handle = { buffers.obtainResource() };
+    if (handle.index == INVALID_INDEX)
+    {
+        return handle;
+    }
+
+    Buffer* buffer = accessBuffer(handle);
+
+    buffer->name = creation.name;
+    buffer->size = creation.size;
+    buffer->typeFlags = creation.typeFlags;
+    buffer->handle = handle;
+    buffer->globalOffset = 0;
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | creation.typeFlags;
+    bufferInfo.size = creation.size > 0 ? creation.size : 1;
+
+    VmaAllocationCreateInfo memoryInfo{};
+    memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    memoryInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     VmaAllocationInfo allocationInfo{};
     check(vmaCreateBuffer(VMAAllocator, &bufferInfo, &memoryInfo, &buffer->vkBuffer, &buffer->vmaAllocation, &allocationInfo));

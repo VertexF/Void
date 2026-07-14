@@ -93,6 +93,7 @@ struct GPUDevice
     //Creation/Destruction of resources
     BufferHandle createBuffer(const BufferCreation& creation);
     BufferHandle createBindlessBuffer(const BufferCreation& creation);
+    BufferHandle createBindlessGPUBuffer(const BufferCreation& creation);
     TextureHandle createTexture(const TextureCreation& creation);
     PipelineHandle createPipeline(const PipelineCreation& creation, bool debugRendering = false);
     SamplerHandle createSampler(const SamplerCreation& creation);
