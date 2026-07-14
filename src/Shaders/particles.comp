@@ -2,6 +2,9 @@
 
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive: require
+
+#include "ParticleData.h"
 
 struct DrawCommand
 {
@@ -14,12 +17,6 @@ struct DrawCommand
     uint firstInstance;
 };
 
-struct ParticleData
-{
-    vec3 position;
-    uint particleSet;
-};
-
 layout(scalar, buffer_reference, buffer_reference_align = 8) writeonly buffer DrawCommandData
 {
     DrawCommand drawCommands[];
@@ -30,7 +27,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) buffer DrawCommandC
     uint drawCommandCount;
 };
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) writeonly buffer Particles
+layout(scalar, buffer_reference, buffer_reference_align = 8) buffer Particles
 {
     ParticleData particleData[];
 };
@@ -52,13 +49,36 @@ float random(vec2 co)
 void main()
 {
     uint dataIndex = gl_GlobalInvocationID.x;
-    uint instanceCount = dataIndex + 1;
+    uint instanceCount = ((dataIndex) % MAX_INSTANCE_COUNT) + 1;
+    uint drawCallCount = drawCmdCountPtr.drawCommandCount + 1; 
+
+    float dt = 1 / 600.f;
+
+    vec3 oldPosition = particleDataPtr.particleData[dataIndex].position;
+
+    float rand0 = random(vec2(0, dataIndex));
+    float rand1 = random(vec2(dataIndex, 0));
+    float rand2 = random(vec2(rand1, rand0));
+
+    vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * random(vec2(dataIndex, dataIndex)) * 120.f;//(((dataIndex / 10007) + 1) * 100.f);
+    //vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * 50.f;//(((dataIndex / 10007) + 1) * 100.f);
+    vec3 newPosition = oldPosition + velocity * dt;
 
     //Add particle logic + cull
-    particleDataPtr.particleData[dataIndex].position = vec3(dataIndex, dataIndex, dataIndex);
-    particleDataPtr.particleData[dataIndex].particleSet = uint(dataIndex % 2 == 0);
+    particleDataPtr.particleData[dataIndex].position = newPosition;
+    particleDataPtr.particleData[dataIndex].particleSet = 0;
 
-    if(gl_NumWorkGroups.x * gl_WorkGroupSize.x == instanceCount)
+    if((gl_NumWorkGroups.x * gl_WorkGroupSize.x == instanceCount))
+    {
+        //Per draw call.
+        uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);
+
+        drawCmdPtr.drawCommands[dci].vertexCount = 6;
+        drawCmdPtr.drawCommands[dci].instanceCount = instanceCount;
+        drawCmdPtr.drawCommands[dci].firstVertex = 0;
+        drawCmdPtr.drawCommands[dci].firstInstance = 0;
+    }
+    else if(instanceCount == MAX_INSTANCE_COUNT)
     {
         //Per draw call.
         uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);

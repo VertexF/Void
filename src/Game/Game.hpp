@@ -18,8 +18,6 @@ struct Game
     void loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler);
     void shutdown();
 
-    void setupDrawCalls();
-    void runParticleCompute(CommandBuffer* commandBuffer);
     void deleteEntity();
 
     GPUDevice* gpu;

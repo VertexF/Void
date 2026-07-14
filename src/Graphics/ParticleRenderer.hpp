@@ -29,7 +29,9 @@ struct ParticleRenderer
 	void loadTexture(const char* filepath);
 	void addParticleSet(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
 	void loadBuffer();
-	void drawParticles(CommandBuffer& commandBuffer, const Camera& camera3D, BufferHandle indirect, BufferHandle indirectCount, BufferHandle particleDataHandle);
+	void setupDrawCalls();
+	void runParticleCompute(CommandBuffer* commandBuffer);
+	void drawParticles(CommandBuffer& commandBuffer, const Camera& camera3D);
 	void shutdown();
 
 	TextureHandle textureAlasHandles;
@@ -42,6 +44,7 @@ struct ParticleRenderer
 	int height;
 
 	PipelineHandle particlePipeline;
+	PipelineHandle particleComputePipeline;
 	DescriptorSetLayoutHandle descriptorSetLayout2D;
 	BufferHandle particleSetsHandle;
 	BufferHandle sceneBDAHandle = INVALID_BUFFER;
