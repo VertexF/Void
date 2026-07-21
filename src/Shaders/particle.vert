@@ -20,6 +20,16 @@ const int indices[6] = int[6]
 	0, 1, 2, 2, 3, 0
 );
 
+struct ParticleSet
+{
+    mat4 transform;
+    vec4 colour;
+    vec2 texCoords[4];
+    uint textureID;
+    float maxAge;
+    float pad[2];
+};
+
 struct SceneData2D
 {
     mat4 view;
@@ -54,26 +64,29 @@ layout(location = 2) flat out uint textureID;
 
 void main()
 {
-    int idx = indices[gl_VertexIndex];
-    vec3 position = pos[idx];
-
     uint instance = gl_InstanceIndex + (MAX_INSTANCE_COUNT * gl_DrawID);
-
     uint particleSet = particleDataPtr.particleData[instance].particleSet;
 
-    vec2 texcoord = vec2(particleSetsPtr.particleSets[particleSet].texCoords[idx].x, 
-                         particleSetsPtr.particleSets[particleSet].texCoords[idx].y);
+    if(particleSetsPtr.particleSets[particleSet].maxAge > particleDataPtr.particleData[instance].positionAndAge.w)
+    {
+        int idx = indices[gl_VertexIndex];
+        vec3 position = pos[idx];
 
-    vec3 cameraRightWorld = { scene2D.sceneData2D.view[0][0], scene2D.sceneData2D.view[1][0], scene2D.sceneData2D.view[2][0] };
-    vec3 cameraUpWorld = { scene2D.sceneData2D.view[0][1], scene2D.sceneData2D.view[1][1], scene2D.sceneData2D.view[2][1] };
-    vec3 positionWorld = particleDataPtr.particleData[instance].position + position.x * cameraRightWorld + 
-                                                                                   position.y * cameraUpWorld;
+        vec2 texcoord = vec2(particleSetsPtr.particleSets[particleSet].texCoords[idx].x, 
+                             particleSetsPtr.particleSets[particleSet].texCoords[idx].y);
 
-    gl_Position = scene2D.sceneData2D.project * scene2D.sceneData2D.view * vec4(positionWorld, 1.0);
+        vec3 cameraRightWorld = { scene2D.sceneData2D.view[0][0], scene2D.sceneData2D.view[1][0], scene2D.sceneData2D.view[2][0] };
+        vec3 cameraUpWorld = { scene2D.sceneData2D.view[0][1], scene2D.sceneData2D.view[1][1], scene2D.sceneData2D.view[2][1] };
 
-    textureID = particleSetsPtr.particleSets[particleSet].textureID;
+        vec3 positionWorld = particleDataPtr.particleData[instance].positionAndAge.xyz + position.x * cameraRightWorld + 
+                                                                                         position.y * cameraUpWorld;
+    
+        gl_Position = scene2D.sceneData2D.project * scene2D.sceneData2D.view * particleSetsPtr.particleSets[particleSet].transform * vec4(positionWorld, 1.0);
 
-    vTexcoord = texcoord;
+        textureID = particleSetsPtr.particleSets[particleSet].textureID;
 
-    vColour = particleSetsPtr.particleSets[particleSet].colour;
+        vTexcoord = texcoord;
+
+        vColour = particleSetsPtr.particleSets[particleSet].colour;
+    }
 }

@@ -6,25 +6,19 @@
 
 #include "ParticleData.h"
 
-struct DrawCommand
+struct ParticleSet
 {
-	//If you not using a mesh/task approach to this you don't need to store the drawID.
-    //uint drawID;
-
-    uint vertexCount;
-    uint instanceCount;
-    uint firstVertex;
-    uint firstInstance;
+    mat4 transform;
+    vec4 colour;
+    vec2 texCoords[4];
+    uint textureID;
+    float maxAge;
+    float pad[2];
 };
 
-layout(scalar, buffer_reference, buffer_reference_align = 8) writeonly buffer DrawCommandData
+layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer ParticleSetData
 {
-    DrawCommand drawCommands[];
-};
-
-layout(scalar, buffer_reference, buffer_reference_align = 8) buffer DrawCommandCountData
-{
-    uint drawCommandCount;
+    ParticleSet particleSets[];
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) buffer Particles
@@ -32,60 +26,89 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) buffer Particles
     ParticleData particleData[];
 };
 
-layout(scalar, push_constant) uniform entityIndex
+layout(scalar, buffer_reference, buffer_reference_align = 8) buffer ActiveBufferData
 {
-    DrawCommandData drawCmdPtr;
-    DrawCommandCountData drawCmdCountPtr;
-    Particles particleDataPtr;
+    uint activeSet;
 };
 
-layout(local_size_x_id = 64, local_size_y_id = 1, local_size_z_id = 1) in;
-
-float random(vec2 co)
+layout(scalar, push_constant) uniform entityIndex
 {
-    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+    Particles particleDataPtr;
+    ParticleSetData particleSetsPtr;
+    ActiveBufferData activeBufferPtr;
+    float delta;
+    uint particleSet;
+	uint offset;
+};
+
+layout(local_size_x_id = 64, local_size_y_id = 2, local_size_z_id = 1) in;
+
+#define EPSILON 0.000002
+
+uint pcg(inout uint state)
+{
+	state = state * uint(747796405) + uint(2891336453);
+	uint word = ((state >> ((state >> uint(28)) + uint(4))) ^ state) * uint(277803737);
+	return (word >> uint(22)) ^ word;
+}
+
+float prng(inout uint state)
+{
+	return float(pcg(state)) / float(uint(0xFFFFFFFF));
 }
 
 void main()
-{
-    uint dataIndex = gl_GlobalInvocationID.x;
-    uint instanceCount = ((dataIndex) % MAX_INSTANCE_COUNT) + 1;
-    uint drawCallCount = drawCmdCountPtr.drawCommandCount + 1; 
+{	
+//activeBufferPtr.activeSet = 10k, 10k, 10k.
+//globalActive = 10k + 10k + 10k
+// -1k on particleEffect = 1;
+//globalActive = 10k + 9k + 10k
 
-    float dt = 1 / 600.f;
+	// uint globalOffset = 0;
+	// for(uint i = 0; i < particleEffect; ++i)
+	// {
+		// globalOffset += activeBufferPtr.partiset[i].activeSet;
+	// }
+	
+	uint dataIndex = gl_GlobalInvocationID.x + offset;
 
-    vec3 oldPosition = particleDataPtr.particleData[dataIndex].position;
+	if(particleSetsPtr.particleSets[particleSet].maxAge <= particleDataPtr.particleData[dataIndex].positionAndAge.w)
+	{
+		return;
+	}
 
-    float rand0 = random(vec2(0, dataIndex));
-    float rand1 = random(vec2(dataIndex, 0));
-    float rand2 = random(vec2(rand1, rand0));
+	//1) Particle sets need different effects in our compute. switch()
+	//2) If no more particle are in screen aka they all inactive we need to not re-run this compute shader the draw.
+	//For example if particle set 1 is an explosion, we shouldn't write data into a buffer if the explosion has finished 
+	//meaning that all the particles in a particle set have exceeded there life time.
 
-    vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * random(vec2(dataIndex, dataIndex)) * 120.f;//(((dataIndex / 10007) + 1) * 100.f);
-    //vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * 50.f;//(((dataIndex / 10007) + 1) * 100.f);
-    vec3 newPosition = oldPosition + velocity * dt;
+	vec4 oldPosition = particleDataPtr.particleData[dataIndex].positionAndAge;
+	uint state = dataIndex;
+	float rand0 = prng(state);
+	float rand1 = prng(state);
+	float rand2 = prng(state);
+	float speed = prng(state) * 50.f;
+	//float speed = 25.f;
 
-    //Add particle logic + cull
-    particleDataPtr.particleData[dataIndex].position = newPosition;
-    particleDataPtr.particleData[dataIndex].particleSet = 0;
+	vec3 velocity = normalize(vec3(rand0 + EPSILON, rand1 + EPSILON, rand2 + EPSILON) - vec3(0.5)) * speed;
+	//vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * 50.f;
+	vec4 newPositionAndAge;
+	newPositionAndAge.xyz = oldPosition.xyz + velocity * delta;
+	newPositionAndAge.w = oldPosition.w + (prng(state) + 0.05) * delta;
+	//newPositionAndAge.w = 0.f;
 
-    if((gl_NumWorkGroups.x * gl_WorkGroupSize.x == instanceCount))
-    {
-        //Per draw call.
-        uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);
+	//Add particle logic + cull
+	particleDataPtr.particleData[dataIndex].positionAndAge = newPositionAndAge;
+	particleDataPtr.particleData[dataIndex].particleSet = particleSet;
+	
+	if(particleSetsPtr.particleSets[particleSet].maxAge <= newPositionAndAge.w)
+	{
+		particleDataPtr.particleData[dataIndex].positionAndAge = vec4(0.f, 0.f, 0.f, 0.f);
+		particleDataPtr.particleData[dataIndex].particleSet = particleSet;
+	}
 
-        drawCmdPtr.drawCommands[dci].vertexCount = 6;
-        drawCmdPtr.drawCommands[dci].instanceCount = instanceCount;
-        drawCmdPtr.drawCommands[dci].firstVertex = 0;
-        drawCmdPtr.drawCommands[dci].firstInstance = 0;
-    }
-    else if(instanceCount == MAX_INSTANCE_COUNT)
-    {
-        //Per draw call.
-        uint dci = atomicAdd(drawCmdCountPtr.drawCommandCount, 1);
-
-        drawCmdPtr.drawCommands[dci].vertexCount = 6;
-        drawCmdPtr.drawCommands[dci].instanceCount = instanceCount;
-        drawCmdPtr.drawCommands[dci].firstVertex = 0;
-        drawCmdPtr.drawCommands[dci].firstInstance = 0;
-    }
+	if(particleSetsPtr.particleSets[particleSet].maxAge <= newPositionAndAge.w)
+	{
+		atomicAdd(activeBufferPtr.activeSet, -1);
+	}
 }

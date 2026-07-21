@@ -832,7 +832,7 @@ target_link_libraries(Void PRIVATE Foundation External Jolt)
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES} ${FOUNDATION_SOURCE} ${JOLT_PHYSICS_SRC_FILES})
 
 target_compile_options(Void PRIVATE
-                       $<$<CXX_COMPILER_ID:MSVC>:/W4>
+                       $<$<CXX_COMPILER_ID:MSVC>:/W4 /MP>
                        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -fsanitize=address -fno-omit-frame-pointer>
 )
 

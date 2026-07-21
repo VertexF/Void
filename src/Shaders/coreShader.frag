@@ -50,7 +50,7 @@ layout(scalar, set = 1, binding = 0) uniform MaterialConstant
     vec4 metallicRoughnessOcclusionFactor;
     float alphaCutoff;
     float iorFactor;
-
+    
     vec3 emissiveFactor;
     uint emissiveTextureIndex;
     vec3 specularValue;
@@ -77,6 +77,8 @@ layout(location = 3) in vec4 vPosition;
 layout(location = 4) in vec4 vColour;
 
 layout(location = 0) out vec4 fragColour;
+
+#define PI 3.1415926538
 
 vec3 decodeSRGB(vec3 colour)
 {
@@ -160,17 +162,94 @@ layout(scalar, push_constant) uniform entityIndex
     SceneBufferData sceneBufferReference;
 };
 
+float distributionGGX(float NoH, float roughness)
+{
+	float a = NoH * roughness;
+	float k = roughness / (1.0 - NoH * NoH + a * a);
+	return k * k * (1.0 / PI);
+}
+
+float visibilitySmithGGXCorrelated(float NoV, float NoL, float roughness)
+{
+	float alpha2 = roughness * roughness;
+	float GGXV = NoL * sqrt(NoV * NoV * (1 - alpha2) + alpha2);
+	float GGXL = NoV * sqrt(NoL * NoL * (1 - alpha2) + alpha2);
+	return 0.5 / (GGXV + GGXL);
+}
+
+vec3 fresnelSchlick(float v, vec3 f0)
+{
+	float f = pow(1.0 - v, 5.0);
+	return f + f0 * (1.0 - f);
+}
+
+float diffuseLambert()
+{
+    return 1.0 / PI;
+}
+
+float directionalLight(vec3 lightDirection, vec3 normal, float lightIntensity)
+{
+    vec3 l = normalize(-lightDirection);
+    float NoL = clamp(dot(normal, l), 0.0, 1.0);
+
+    return lightIntensity * NoL;
+}
+
+float getSquareFalloffAttenuation(vec3 posToLight, float lightInvRadius)
+{
+	float distanceSquare = dot(posToLight, posToLight);
+	float factor = distanceSquare * lightInvRadius * lightInvRadius;
+	float smoothFactor = max(1.0 - factor * factor, 0.0);
+	return (smoothFactor * smoothFactor) / max(distanceSquare, 1e-4);
+}
+
+float getSpotAngleAttenuation(vec3 l, vec3 lightDir, float innerAngle, float outerAngle)
+{
+	//The scale and offset computations can be done CPU-side.
+	float cosOuter = cos(outerAngle);
+	float spotScale = 1.0 / max(cos(innerAngle) - cosOuter, 1e-4);
+	float spotOffset = -cosOuter * spotScale;
+	
+	float cd = dot(normalize(-lightDir), l);
+	float attenuation = clamp(cd * spotScale + spotOffset, 0.0, 1.0);
+	return attenuation * attenuation;
+}
+
+float spotLight()
+{
+    float lightIntensity = 10000.f;
+    float lightInvRadius = 1 / 500.f;
+    vec3 lightDir = -sceneBufferReference.sceneData.eye.xyz;
+    float innerAngle = PI / 20;
+    float outerAngle = PI / 6;
+    vec3 posToLight = sceneBufferReference.sceneData.light.xyz - vPosition.xyz;
+    vec3 L = normalize(posToLight);
+	
+	float attenuation = getSquareFalloffAttenuation(posToLight, lightInvRadius) * getSpotAngleAttenuation(L, lightDir, innerAngle, outerAngle);
+    return lightIntensity * attenuation;
+}
+
 void main()
 {
+//Only here to turn off lighting if I need it.
+//    if(textures.x != INVALID_TEXTURE_INDEX)
+//    {
+//        fragColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
+//        fragColour *= vColour;
+//    }
+//    else
+//    {
+//        fragColour = vec4(0.5, 0.5, 0.5, 1.0);
+//    }
+
+    mat3 TBN = mat3(1.0);
     vec4 baseColour = vec4(0.5);
     baseColour.a = 1.f;
     if(textures.x != INVALID_TEXTURE_INDEX)
     {
         baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
     }
-    //fragColour *= vColour;
-
-    mat3 TBN = mat3(1.0);
 
     //bool useAlphaMask = (flags & DrawFlags_AlphaMask) != 0;
     //if (useAlphaMask && baseColour.a < alphaCutoff)
@@ -228,49 +307,38 @@ void main()
         emissive += decodeSRGB(e.rgb) * emissiveFactor;
     }
 
-    //NOTE: taken from https://www.khronos.org/registry/glTF/specs/2.0/glTF-2.0.html#specular-brdf
-    float NdotH = clamp(dot(N, H), 0, 1);
-    float alphaSquared = alpha * alpha;
-    float dDenom = (NdotH * alphaSquared - NdotH) * NdotH + 1.0;
-    float distribution = (alphaSquared) / (PI * dDenom * dDenom);
+    vec3 lightDirection = vec3(1.f, -1.f, 10.f);
+    vec3 l = normalize(-lightDirection);
 
-    float lightRange = 5000.f;
-    float lightIntensity = 1500.f;
+    vec3 h = normalize(V + l);
+    float NoV = abs(dot(N, V)) + 1e-5;
+    float NoL = clamp(dot(N, L), 0, 1.0);
+    float NoH = clamp(dot(N, h), 0, 1.0);
+    float LoH = clamp(dot(L, h), 0, 1.0);
 
-    float NdotV = abs(dot(N, V)) + 1e-5;
-    float NdotL = clamp(dot(N, L), 0, 1);
-    float HdotL = clamp(dot(H, L), 0, 1);
-    float HdotV = clamp(dot(H, V), 0, 1);
+    //diffuse BRDF
+    vec3 Fd = baseColour.rgb * diffuseLambert();
 
-    float distance = length(sceneBufferReference.sceneData.light.xyz - vPosition.xyz);
-    float intensity = lightIntensity * max(min(1.0 - pow(distance / lightRange, 4.0), 1.0), 0.0) / pow(distance, 2.0);
+    vec3 reflecence = (specularValue * specularValue) * 0.16;
 
-    //Slower but more accurate.
-    float GGXL = NdotV * sqrt((-NdotL * alphaSquared + NdotL) * NdotL + alphaSquared);
-    float GGXV = NdotL * sqrt((-NdotV * alphaSquared + NdotL) * NdotL + alphaSquared);
-    float visibility = 0.5 / (GGXV + GGXL);
+    //specular BRDF
+    vec3 f0 = mix(vec3(0.04), baseColour.rgb, metalness);
+    float D = distributionGGX(NoH, roughness); 
+    float G = visibilitySmithGGXCorrelated(NoL, NoV, roughness);
+    vec3 F = fresnelSchlick(clamp(dot(h, V), 0, 1.0), f0);
+
+    vec3 specular = ((D * G) * F);
     
-    //Faster but less accurate.
-    //float GGXL = NdotV * (NdotV * (1.0 - roughnessFactor)) + roughnessFactor;
-    //float GGXV = NdotL * (NdotL * (1.0 - roughnessFactor)) + roughnessFactor;
-    //float visibility = 0.5 / (GGXV + GGXL);
+    //Lights
+	float spotLightIntensity = spotLight();
+    float directionalLightIntensity = directionalLight(vec3(-1.0, -2.0, 3.0), N, 10.f);
 
-    float specularBrdf = (visibility * distribution);
+    vec3 luminance = ((specular + Fd) * spotLightIntensity * NoL);
+    vec3 luminance1 = ((specular + Fd) * directionalLightIntensity * NoL) * vec3(1.0, 0.867, 0.684);
 
-    vec3 diffuseBrdf = (1 / PI) * baseColour.rgb;
+    vec3 lightOutput = luminance + luminance1;
 
-    //NOTE: f0 in the formula notation refers to the base colour here.
-    vec3 conductorFresnel = specularBrdf * (baseColour.rgb + (1.0 - baseColour.rgb) * pow(1.0 - abs(HdotV), 5));
+    vec3 ambient = occlusion * (baseColour.rgb * 0.01);
 
-    //NOTE: f0 in the formula notation refers to the value derived from IOR = 1.5.
-    float f0 = 0.04;
-    float fr = f0 + (1 - f0) * pow(1 - abs(HdotV), 5);
-    vec3 fresnelMix = mix(diffuseBrdf, vec3(specularBrdf), fr);
-
-    vec3 materialColour = intensity * mix(fresnelMix, conductorFresnel, metalness) * NdotL;
-    
-    //materialColour = emissive + mix(materialColour, materialColour * ao, occlusionFactor);
-    materialColour = emissive + mix(materialColour, materialColour, occlusion);
-
-    fragColour = vec4(encodeSRGB(materialColour), baseColour.a);
+    fragColour = vec4(encodeSRGB(lightOutput + ambient + emissive), baseColour.a);
 }

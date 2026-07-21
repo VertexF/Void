@@ -87,7 +87,7 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
 
     //Shader state
     FileReadResult vertexShaderCode = fileReadBinary("Assets/Shaders/coreShader.vert.spv", &MemoryService::instance()->scratchAllocator);
-    FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShaderNew.frag.spv", &MemoryService::instance()->scratchAllocator);
+    FileReadResult fragShaderCode = fileReadBinary("Assets/Shaders/coreShader.frag.spv", &MemoryService::instance()->scratchAllocator);
 
     pipelineCreation.shaders.setName("main")
         .addStage(vertexShaderCode.data, uint32_t(vertexShaderCode.size), VK_SHADER_STAGE_VERTEX_BIT)
@@ -267,7 +267,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
-            particleRenderer.runParticleCompute(gpuCommands);
+            particleRenderer.updateParticles(gpuCommands, 0, deltaTime);
+            particleRenderer.createParticleDrawCalls(gpuCommands);
             gpuCommands->beginRendering();
 
             gpuCommands->setScissor(nullptr);
@@ -285,8 +286,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             globalSceneData.project = gameCamera.internal3DCamera.projection;
             globalSceneData.eye = vec4s{ gameCamera.internal3DCamera.direction.x, gameCamera.internal3DCamera.direction.y, gameCamera.internal3DCamera.direction.z, 1.f };
             vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 10.f));
-            globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
-            //globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
+            //globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
+            globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             vmaCopyMemoryToAllocation(gpu->VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
 

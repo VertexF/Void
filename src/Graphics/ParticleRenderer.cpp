@@ -28,22 +28,30 @@ namespace
         };
 
         uint32_t textureID = UINT16_MAX;
-        float padd[3];
+        float maxAge = 0;
+        float padd[2];
     };
 
     Array<ParticleSet> particleSets;
 
     BufferHandle indirectCountBufferHandle = INVALID_BUFFER;
     BufferHandle indirectBufferHandle = INVALID_BUFFER;
+
+    BufferHandle particleSetsHandle = INVALID_BUFFER;
     BufferHandle particleDataHandle = INVALID_BUFFER;
+
+    BufferHandle activityBufferHandle = INVALID_BUFFER;
+    BufferHandle sceneBDAHandle = INVALID_BUFFER;
 
     struct ParticleData
     {
-        vec3s position;
+        vec4s positionAndAge;
+        //This is the bitfield "buffer" this is what the GPU Zen 3 makes into it's own buffer for faster access for light clustering or whatever.
         uint32_t particleSet;
+        float padd[3];
     };
 
-    constexpr const uint32_t particleCount = 20000;
+    constexpr const uint32_t particleCount = 40000;
     constexpr const uint32_t maxDrawCount = 101;
 }
 
@@ -76,28 +84,42 @@ void ParticleRenderer::init(GPUDevice& inGPU)
 
     particlePipeline = gpu->createPipeline(particlePipelineCreation);
 
-    //Particle compute
-    PipelineCreation computeParticlePipelineCreation{};
+    //Particle draw call pipeline
+    PipelineCreation drawCallCreation{};
 
     //Shader state
-    FileReadResult particleComp = fileReadBinary("Assets/Shaders/particles.comp.spv", &MemoryService::instance()->scratchAllocator);
+    FileReadResult particleDrawShader = fileReadBinary("Assets/Shaders/particleDrawCall.comp.spv", &MemoryService::instance()->scratchAllocator);
 
-    computeParticlePipelineCreation.shaders.setName("debugRenderer")
-        .addStage(particleComp.data, uint32_t(particleComp.size), VK_SHADER_STAGE_COMPUTE_BIT)
+    drawCallCreation.shaders.setName("particleDrawShader")
+        .addStage(particleDrawShader.data, uint32_t(particleDrawShader.size), VK_SHADER_STAGE_COMPUTE_BIT)
         .setSPVInput(true);
 
-    computeParticlePipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, 24);
+    drawCallCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleDrawCallPushConstant));
 
-    particleComputePipeline = gpu->createPipeline(computeParticlePipelineCreation);
+    particleDrawCall = gpu->createPipeline(drawCallCreation);
+
+    //Particle compute
+    PipelineCreation particleUpdateCreation{};
+
+    //Shader state
+    FileReadResult particleUpdateShader = fileReadBinary("Assets/Shaders/particles.comp.spv", &MemoryService::instance()->scratchAllocator);
+
+    particleUpdateCreation.shaders.setName("particleUpdateShader")
+        .addStage(particleUpdateShader.data, uint32_t(particleUpdateShader.size), VK_SHADER_STAGE_COMPUTE_BIT)
+        .setSPVInput(true);
+
+    particleUpdateCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticlePushConstant));
+
+    particleData = gpu->createPipeline(particleUpdateCreation);
 
     loadTexture("Assets/Textures/particles.png");
 
     vec2s spriteOffset = { .x = 1, .y = 1 };
-    vec2s buttonSize = { 256.f, 256.f };
+    vec3s particleScale = { 0.1f, 0.1f, 0.1f };
     vec2s subSpriteSize = { 64.f, 64.f };
 
-    addParticleSet({ 0.f, 0.f, 0.f }, buttonSize, subSpriteSize, { 0, 3 }, spriteOffset);
-    addParticleSet({ 0.f, 0.f, 0.f }, buttonSize, subSpriteSize, { 1, 3 }, spriteOffset);
+    addParticleSet({ 0.f, 8.f, 0.f }, particleScale, subSpriteSize, { 0, 3 }, spriteOffset);
+    addParticleSet({ 0.f, 0.f, 0.f }, particleScale, subSpriteSize, { 2, 3 }, spriteOffset);
     loadBuffer();
 }
 
@@ -130,10 +152,10 @@ void ParticleRenderer::loadTexture(const char* filepath)
     free(imageData);
 }
 
-void ParticleRenderer::addParticleSet(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset)
+void ParticleRenderer::addParticleSet(vec3s position, vec3s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset)
 {
     const mat4s translationMatrix = glms_translate_make(position);
-    const mat4s scaleMatrix = glms_scale_make({ scale.x, scale.y, 1.f });
+    const mat4s scaleMatrix = glms_scale_make(scale);
     const mat4s transform = glms_mat4_mul(translationMatrix, scaleMatrix);
 
     vec2s min{};
@@ -147,10 +169,12 @@ void ParticleRenderer::addParticleSet(vec3s position, vec2s scale, vec2s spriteS
     ParticleSet data{};
     data.textureID = textureAlasHandles.index;
     data.transform = transform;
+    data.colour = vec4s{ 1.f, 1.f, 1.f, 1.f };
     data.texCoords[0] = vec2s{ min.x, max.y };
     data.texCoords[1] = vec2s{ max.x, max.y };
     data.texCoords[2] = vec2s{ max.x, min.y };
     data.texCoords[3] = vec2s{ min.x, min.y };
+    data.maxAge = 0.3f;
 
     particleSets.push(data);
 }
@@ -183,19 +207,122 @@ void ParticleRenderer::loadBuffer()
         .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(ParticleData) * particleCount)
         .setName("Particle buffer");
     particleDataHandle = gpu->createBindlessGPUBuffer(bufferCreation);
+
+    uint32_t particleDataCount = particleCount;
+    bufferCreation.reset()
+        .set(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(uint32_t))
+        .setData(&particleDataCount)
+        .setName("Activity buffer");
+    activityBufferHandle = gpu->createBindlessBuffer(bufferCreation);
 }
 
-void ParticleRenderer::runParticleCompute(CommandBuffer* commandBuffer)
+void ParticleRenderer::updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime)
+{
+    Buffer* particleBuffer = gpu->accessBuffer(particleDataHandle);
+    Buffer* particleSetBuffer = gpu->accessBuffer(particleSetsHandle);
+    Buffer* activityBuffer = gpu->accessBuffer(activityBufferHandle);
+
+    VkBufferMemoryBarrier2 particleComputeBarrier{};
+    particleComputeBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    particleComputeBarrier.srcStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+    particleComputeBarrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    particleComputeBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    particleComputeBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    particleComputeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleComputeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleComputeBarrier.buffer = particleBuffer->vkBuffer;
+    particleComputeBarrier.offset = 0;
+    particleComputeBarrier.size = VK_WHOLE_SIZE;
+
+    VkBufferMemoryBarrier2 particleActivityBarrier{};
+    particleActivityBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    particleActivityBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    particleActivityBarrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    particleActivityBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    particleActivityBarrier.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_READ_BIT;
+    particleActivityBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleActivityBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleActivityBarrier.buffer = activityBuffer->vkBuffer;
+    particleActivityBarrier.offset = 0;
+    particleActivityBarrier.size = VK_WHOLE_SIZE;
+
+    VkBufferMemoryBarrier2 computeBarriers[] =
+    {
+        particleComputeBarrier,
+        particleActivityBarrier
+    };
+
+    VkDependencyInfo dependencyComputeInfo{};
+    dependencyComputeInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyComputeInfo.bufferMemoryBarrierCount = 2;
+    dependencyComputeInfo.pBufferMemoryBarriers = computeBarriers;
+
+    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyComputeInfo);
+
+    commandBuffer->bindPipeline(particleData);
+
+    ParticlePushConstant pushConstants{};
+    pushConstants.particleData = particleBuffer->bufferAddress;
+    pushConstants.activeBufferData = activityBuffer->bufferAddress;
+    pushConstants.particleSetData = particleSetBuffer->bufferAddress;
+    pushConstants.delta = deltaTime;
+    pushConstants.particleSet = particleSet;
+    pushConstants.offset = 0;
+
+    vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushConstants), &pushConstants);
+
+    vkCmdDispatch(commandBuffer->vkCommandBuffer, 20000, 1, 1);
+
+    ParticlePushConstant pushConstants1{};
+    pushConstants1.particleData = particleBuffer->bufferAddress;
+    pushConstants1.activeBufferData = activityBuffer->bufferAddress;
+    pushConstants1.particleSetData = particleSetBuffer->bufferAddress;
+    pushConstants1.delta = deltaTime;
+    pushConstants1.particleSet = 1;
+    pushConstants1.offset = 20000;
+
+    vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushConstants1), &pushConstants1);
+
+    vkCmdDispatch(commandBuffer->vkCommandBuffer, 20000, 1, 1);
+}
+
+void ParticleRenderer::createParticleDrawCalls(CommandBuffer* commandBuffer)
 {
     Buffer* indirectBufferCount = gpu->accessBuffer(indirectCountBufferHandle);
     Buffer* indirectBuffer = gpu->accessBuffer(indirectBufferHandle);
+
     Buffer* particleBuffer = gpu->accessBuffer(particleDataHandle);
+    Buffer* activityBuffer = gpu->accessBuffer(activityBufferHandle);
+
+    VkBufferMemoryBarrier2 particleBarrier{};
+    particleBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    particleBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    particleBarrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+    particleBarrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+    particleBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    particleBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleBarrier.buffer = particleBuffer->vkBuffer;
+    particleBarrier.offset = 0;
+    particleBarrier.size = VK_WHOLE_SIZE;
+
+    VkBufferMemoryBarrier2 particleActivityBarrier2{};
+    particleActivityBarrier2.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+    particleActivityBarrier2.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    particleActivityBarrier2.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+    particleActivityBarrier2.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    particleActivityBarrier2.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+    particleActivityBarrier2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleActivityBarrier2.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    particleActivityBarrier2.buffer = activityBuffer->vkBuffer;
+    particleActivityBarrier2.offset = 0;
+    particleActivityBarrier2.size = VK_WHOLE_SIZE;
 
     VkBufferMemoryBarrier2 bufferBarrier{};
     bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-    bufferBarrier.srcStageMask = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-    bufferBarrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-    bufferBarrier.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    bufferBarrier.srcStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+    bufferBarrier.srcAccessMask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+    bufferBarrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     bufferBarrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
     bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -203,12 +330,19 @@ void ParticleRenderer::runParticleCompute(CommandBuffer* commandBuffer)
     bufferBarrier.offset = 0;
     bufferBarrier.size = VK_WHOLE_SIZE;
 
-    VkDependencyInfo dependencyInfoCount{};
-    dependencyInfoCount.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfoCount.bufferMemoryBarrierCount = 1;
-    dependencyInfoCount.pBufferMemoryBarriers = &bufferBarrier;
+    VkBufferMemoryBarrier2 beginningBarriers[] =
+    {
+        particleBarrier,
+        particleActivityBarrier2,
+        bufferBarrier
+    };
 
-    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyInfoCount);
+    VkDependencyInfo beginningDependencyInfo{};
+    beginningDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    beginningDependencyInfo.bufferMemoryBarrierCount = 3;
+    beginningDependencyInfo.pBufferMemoryBarriers = beginningBarriers;
+
+    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &beginningDependencyInfo);
 
     vkCmdFillBuffer(commandBuffer->vkCommandBuffer, indirectBufferCount->vkBuffer, 0, 4, 0);
 
@@ -236,38 +370,25 @@ void ParticleRenderer::runParticleCompute(CommandBuffer* commandBuffer)
     bufferComputeCountBarrier.offset = 0;
     bufferComputeCountBarrier.size = VK_WHOLE_SIZE;
 
-    VkBufferMemoryBarrier2 particleComputeBarrier{};
-    particleComputeBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-    particleComputeBarrier.srcStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
-    particleComputeBarrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
-    particleComputeBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-    particleComputeBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    particleComputeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    particleComputeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    particleComputeBarrier.buffer = particleBuffer->vkBuffer;
-    particleComputeBarrier.offset = 0;
-    particleComputeBarrier.size = VK_WHOLE_SIZE;
-
     VkBufferMemoryBarrier2 computeBarriers[] =
     {
         bufferComputeBarrier,
-        bufferComputeCountBarrier,
-        particleComputeBarrier
+        bufferComputeCountBarrier
     };
 
     VkDependencyInfo dependencyComputeInfo{};
     dependencyComputeInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyComputeInfo.bufferMemoryBarrierCount = 3;
+    dependencyComputeInfo.bufferMemoryBarrierCount = 2;
     dependencyComputeInfo.pBufferMemoryBarriers = computeBarriers;
 
     vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyComputeInfo);
 
-    ComputePushConstant pushConstants{};
-    commandBuffer->bindPipeline(particleComputePipeline);
+    ParticleDrawCallPushConstant pushConstants{};
+    commandBuffer->bindPipeline(particleDrawCall);
 
     pushConstants.indirectAddress = indirectBuffer->bufferAddress;
     pushConstants.indirectCountAddress = indirectBufferCount->bufferAddress;
-    pushConstants.particleData = particleBuffer->bufferAddress;
+    pushConstants.activeBufferData = activityBuffer->bufferAddress;
 
     vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushConstants), &pushConstants);
 
@@ -278,7 +399,7 @@ void ParticleRenderer::runParticleCompute(CommandBuffer* commandBuffer)
     bufferIndirectBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     bufferIndirectBarrier.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
     bufferIndirectBarrier.dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
-    bufferIndirectBarrier.dstAccessMask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT; //current we don't read thin the sahder.*/ 
+    bufferIndirectBarrier.dstAccessMask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT; //current we don't read thin the shader.*/ 
     bufferIndirectBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     bufferIndirectBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     bufferIndirectBarrier.buffer = indirectBuffer->vkBuffer;
@@ -297,28 +418,15 @@ void ParticleRenderer::runParticleCompute(CommandBuffer* commandBuffer)
     bufferIndirectCountBarrier.offset = 0;
     bufferIndirectCountBarrier.size = VK_WHOLE_SIZE;
 
-    VkBufferMemoryBarrier2 particleBarrier{};
-    particleBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-    particleBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-    particleBarrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
-    particleBarrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
-    particleBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
-    particleBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    particleBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    particleBarrier.buffer = particleBuffer->vkBuffer;
-    particleBarrier.offset = 0;
-    particleBarrier.size = VK_WHOLE_SIZE;
-
     VkBufferMemoryBarrier2 barriers[] =
     {
         bufferIndirectBarrier,
-        bufferIndirectCountBarrier,
-        particleBarrier
+        bufferIndirectCountBarrier
     };
 
     VkDependencyInfo dependencyInfo{};
     dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.bufferMemoryBarrierCount = 3;
+    dependencyInfo.bufferMemoryBarrierCount = 2;
     dependencyInfo.pBufferMemoryBarriers = barriers;
 
     vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &dependencyInfo);
@@ -362,7 +470,9 @@ void ParticleRenderer::shutdown()
     gpu->destroyBuffer(indirectBufferHandle);
     gpu->destroyBuffer(indirectCountBufferHandle);
     gpu->destroyBuffer(particleDataHandle);
+    gpu->destroyBuffer(activityBufferHandle);
 
     gpu->destroyPipeline(particlePipeline);
-    gpu->destroyPipeline(particleComputePipeline);
+    gpu->destroyPipeline(particleDrawCall);
+    gpu->destroyPipeline(particleData);
 }

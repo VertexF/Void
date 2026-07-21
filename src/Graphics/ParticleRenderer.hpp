@@ -27,9 +27,10 @@ struct ParticleRenderer
 {
 	void init(GPUDevice& inGPU);
 	void loadTexture(const char* filepath);
-	void addParticleSet(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
+	void addParticleSet(vec3s position, vec3s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
 	void loadBuffer();
-	void runParticleCompute(CommandBuffer* commandBuffer);
+	void updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime);
+	void createParticleDrawCalls(CommandBuffer* commandBuffer);
 	void drawParticles(CommandBuffer& commandBuffer, const Camera& camera3D);
 	void shutdown();
 
@@ -43,10 +44,9 @@ struct ParticleRenderer
 	int height;
 
 	PipelineHandle particlePipeline;
-	PipelineHandle particleComputePipeline;
+	PipelineHandle particleDrawCall;
+	PipelineHandle particleData;
 	DescriptorSetLayoutHandle descriptorSetLayout2D;
-	BufferHandle particleSetsHandle;
-	BufferHandle sceneBDAHandle = INVALID_BUFFER;
 };
 
 #endif // !PARTICLE_RENDERER_HDR

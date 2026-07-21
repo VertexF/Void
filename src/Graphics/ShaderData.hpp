@@ -41,11 +41,21 @@ struct PushConstants
     VkDeviceAddress sceneAddress;
 };
 
-struct ComputePushConstant 
+struct ParticleDrawCallPushConstant 
 {
     VkDeviceAddress indirectAddress;
     VkDeviceAddress indirectCountAddress;
+    VkDeviceAddress activeBufferData;
+};
+
+struct ParticlePushConstant
+{
     VkDeviceAddress particleData;
+    VkDeviceAddress particleSetData;
+    VkDeviceAddress activeBufferData;
+    float delta;
+    uint32_t particleSet;
+    uint32_t offset;
 };
 
 #endif // !SHADER_DATA_HDR
