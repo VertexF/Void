@@ -225,7 +225,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
             {
                 //static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
-                gameCamera.resetPlayerCamera();
+                //gameCamera.resetPlayerCamera();
             }
 
             ////NOTE: This must be after the OS messages.
@@ -242,7 +242,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             //    gpuProfiler.imguiDraw();
             //}
             //ImGui::End();
-
+            
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
             //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
@@ -267,8 +267,11 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
-            particleRenderer.updateParticles(gpuCommands, 0, deltaTime);
-            particleRenderer.createParticleDrawCalls(gpuCommands);
+
+            vec3s directionalVec = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 1.f));
+
+            //particleRenderer.updateParticles(gpuCommands, 0, deltaTime, gameCamera.internal3DCamera.direction, gameCamera.internal3DCamera.view);
+            //particleRenderer.createParticleDrawCalls(gpuCommands);
             gpuCommands->beginRendering();
 
             gpuCommands->setScissor(nullptr);
@@ -285,8 +288,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             globalSceneData.view = gameCamera.internal3DCamera.view;
             globalSceneData.project = gameCamera.internal3DCamera.projection;
             globalSceneData.eye = vec4s{ gameCamera.internal3DCamera.direction.x, gameCamera.internal3DCamera.direction.y, gameCamera.internal3DCamera.direction.z, 1.f };
-            vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 10.f));
-            //globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z, 1.f };
+            vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, -10.f));
+            //globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z };
             globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             vmaCopyMemoryToAllocation(gpu->VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
@@ -384,7 +387,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             }
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
-            particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
+            //particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
 
             //imgui->render(*gpuCommands);
 

@@ -246,10 +246,7 @@ void main()
     mat3 TBN = mat3(1.0);
     vec4 baseColour = vec4(0.5);
     baseColour.a = 1.f;
-    if(textures.x != INVALID_TEXTURE_INDEX)
-    {
-        baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
-    }
+    baseColour = texture(globalTextures[nonuniformEXT(textures.x)], vTexcoord0) * baseColourFactor;
 
     //bool useAlphaMask = (flags & DrawFlags_AlphaMask) != 0;
     //if (useAlphaMask && baseColour.a < alphaCutoff)
@@ -272,49 +269,36 @@ void main()
         N = normalize(texture(globalTextures[nonuniformEXT(textures.z)], vTexcoord0).rgb * 2.0 - 1.0);
         N = normalize(TBN * N);
     }
-    vec3 H = normalize(L + V);
 
     float metalness = metallicRoughnessOcclusionFactor.x;
     float roughness = metallicRoughnessOcclusionFactor.y;
 
-    if (textures.y != INVALID_TEXTURE_INDEX) 
-    {
-        //Red channel for occlusion value.
-        //Green channel contains roughness values.
-        //Blue channel contains metalness.
-        vec4 rm = texture(globalTextures[nonuniformEXT(textures.y)], vTexcoord0);
+    //Red channel for occlusion value.
+    //Green channel contains roughness values.
+    //Blue channel contains metalness.
+    vec4 rm = texture(globalTextures[nonuniformEXT(textures.y)], vTexcoord0);
 
-        roughness *= rm.g;
-        metalness *= rm.b;
-    } 
+    roughness *= rm.g;
+    metalness *= rm.b;
 
     float occlusion = metallicRoughnessOcclusionFactor.z;
-    if (textures.w != INVALID_TEXTURE_INDEX) 
-    {
-        vec4 o = texture(globalTextures[nonuniformEXT(textures.w)], vTexcoord0);
-        occlusion *= o.r;
-    }
+    vec4 o = texture(globalTextures[nonuniformEXT(textures.w)], vTexcoord0);
+    occlusion *= o.r;
 
     float alpha = pow(roughness, 2.0);
 
     baseColour.rgb = decodeSRGB(baseColour.rgb);
 
     vec3 emissive = vec3(0);
-    if (emissiveTextureIndex != INVALID_TEXTURE_INDEX) 
-    {
-        vec4 e = texture(globalTextures[nonuniformEXT(emissiveTextureIndex)], vTexcoord0);
+    vec4 e = texture(globalTextures[nonuniformEXT(emissiveTextureIndex)], vTexcoord0);
 
-        emissive += decodeSRGB(e.rgb) * emissiveFactor;
-    }
-
-    vec3 lightDirection = vec3(1.f, -1.f, 10.f);
-    vec3 l = normalize(-lightDirection);
-
-    vec3 h = normalize(V + l);
+    emissive += decodeSRGB(e.rgb) * emissiveFactor;
+	
+	vec3 H = normalize(L + V);
     float NoV = abs(dot(N, V)) + 1e-5;
     float NoL = clamp(dot(N, L), 0, 1.0);
-    float NoH = clamp(dot(N, h), 0, 1.0);
-    float LoH = clamp(dot(L, h), 0, 1.0);
+    float NoH = clamp(dot(N, H), 0, 1.0);
+    float LoH = clamp(dot(L, H), 0, 1.0);
 
     //diffuse BRDF
     vec3 Fd = baseColour.rgb * diffuseLambert();
@@ -325,7 +309,7 @@ void main()
     vec3 f0 = mix(vec3(0.04), baseColour.rgb, metalness);
     float D = distributionGGX(NoH, roughness); 
     float G = visibilitySmithGGXCorrelated(NoL, NoV, roughness);
-    vec3 F = fresnelSchlick(clamp(dot(h, V), 0, 1.0), f0);
+    vec3 F = fresnelSchlick(clamp(dot(H, V), 0, 1.0), f0);
 
     vec3 specular = ((D * G) * F);
     

@@ -56,6 +56,7 @@ struct ParticlePushConstant
     float delta;
     uint32_t particleSet;
     uint32_t offset;
+    mat4s view;
 };
 
 #endif // !SHADER_DATA_HDR

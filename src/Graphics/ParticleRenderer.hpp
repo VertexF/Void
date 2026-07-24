@@ -29,7 +29,7 @@ struct ParticleRenderer
 	void loadTexture(const char* filepath);
 	void addParticleSet(vec3s position, vec3s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
 	void loadBuffer();
-	void updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime);
+	void updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime, vec3s directionVec, mat4s view);
 	void createParticleDrawCalls(CommandBuffer* commandBuffer);
 	void drawParticles(CommandBuffer& commandBuffer, const Camera& camera3D);
 	void shutdown();

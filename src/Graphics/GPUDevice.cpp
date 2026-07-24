@@ -992,8 +992,18 @@ vprint("Instance created.\n");
     dummyTextureCreation.format = VK_FORMAT_R8G8B8A8_SRGB;
     dummyTextureCreation.imageType = VK_IMAGE_TYPE_2D;
     dummyTextureCreation.imageViewType = VK_IMAGE_VIEW_TYPE_2D;
-    dummyTextureCreation.name = "DummyTexture";
-    dummyTexture = createTexture(dummyTextureCreation);
+    dummyTextureCreation.name = "dummyAlebdoTexture";
+    dummyAlbedoTexture = createTexture(dummyTextureCreation);
+
+    dummyData = 0x00000000;
+    dummyTextureCreation.initialData = &dummyData;
+    dummyTextureCreation.name = "dummyEmissiveOcclusionTexture";
+    dummyEmissiveOcclusionTexture = createTexture(dummyTextureCreation);
+
+    dummyData = 0x00FF00FF;
+    dummyTextureCreation.initialData = &dummyData;
+    dummyTextureCreation.name = "dummyMentalRoughnessTexture";
+    dummyMentalRoughnessTexture = createTexture(dummyTextureCreation);
 
     DescriptorSetLayoutCreation bindlessLayoutCreation{};
     bindlessLayoutCreation.addBinding({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, BINDLESS_TEXTURE_BINDING, MAX_BINDLESS_RESOURCES, VK_SHADER_STAGE_FRAGMENT_BIT, "BindlessTextures" })
@@ -1038,7 +1048,9 @@ void GPUDevice::shutdown()
 
     destroySampler(defaultSampler);
     destroyBuffer(fullscreenVertexBuffer);
-    destroyTexture(dummyTexture);
+    destroyTexture(dummyAlbedoTexture);
+    destroyTexture(dummyEmissiveOcclusionTexture);
+    destroyTexture(dummyMentalRoughnessTexture);
     destroyTexture(depthTexture);
 
     destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
@@ -2839,9 +2851,19 @@ BufferHandle GPUDevice::getFullscreenVertexBuffer() const
     return fullscreenVertexBuffer;
 }
 
-TextureHandle GPUDevice::getDummyTexture() const
+TextureHandle GPUDevice::getDummyAlbedoTexture() const
 {
-    return dummyTexture;
+    return dummyAlbedoTexture;
+}
+
+TextureHandle GPUDevice::getDummyEmissiveOcclusionTexture() const 
+{
+    return dummyEmissiveOcclusionTexture;
+}
+
+TextureHandle GPUDevice::getDummyMetalRoughnessTexture() const 
+{
+    return dummyMentalRoughnessTexture;
 }
 
 const DynamicRenderingData& GPUDevice::getSwapchainOutput() const

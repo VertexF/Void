@@ -383,7 +383,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                     }
                     else
                     {
-                        meshDraw.diffuseTextureIndex = UINT16_MAX;
+                        meshDraw.diffuseTextureIndex = gpu.getDummyAlbedoTexture().index;
                     }
 
                     if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
@@ -406,7 +406,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                     }
                     else
                     {
-                        meshDraw.roughnessTextureIndex = UINT16_MAX;
+                        meshDraw.roughnessTextureIndex = gpu.getDummyMetalRoughnessTexture().index;
                     }
                 }
 
@@ -436,7 +436,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                 else
                 {
                     meshDraw.metallicRoughnessOcclusionFactor.z = 1.f;
-                    meshDraw.occlusionTextureIndex = UINT16_MAX;
+                    meshDraw.occlusionTextureIndex = gpu.getDummyEmissiveOcclusionTexture().index;
                 }
 
                 if (material->emissive_texture.texture != nullptr)
@@ -467,7 +467,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                 }
                 else
                 {
-                    meshDraw.emisiveTextureIndex = UINT16_MAX;
+                    meshDraw.emisiveTextureIndex = gpu.getDummyEmissiveOcclusionTexture().index;
                 }
 
                 if (material->normal_texture.texture != nullptr)
@@ -612,22 +612,22 @@ void Model::shutdownModel(GPUDevice& gpu)
 
     meshDraws.shutdown();
 
-        gpu.destroySampler(dummySampler);
+    gpu.destroySampler(dummySampler);
 
-        //This is here to solve a bug that happens when allocating image from a .glb file. 
-        for (uint32_t i = 0; i < images.size; ++i)
-        {
-            gpu.destroyTexture(images[i]);
-        }
+    //This is here to solve a bug that happens when allocating image from a .glb file. 
+    for (uint32_t i = 0; i < images.size; ++i)
+    {
+        gpu.destroyTexture(images[i]);
+    }
 
-        for (uint32_t i = 0; i < samplers.size; ++i)
-        {
-            gpu.destroySampler(samplers[i]);
-        }
+    for (uint32_t i = 0; i < samplers.size; ++i)
+    {
+        gpu.destroySampler(samplers[i]);
+    }
 
-        images.shutdown();
-        samplers.shutdown();
-        resourceNameBuffer.shutdown();
+    images.shutdown();
+    samplers.shutdown();
+    resourceNameBuffer.shutdown();
 }
 
 void DebugModel::loadCollider(const char* modelPath, GPUDevice& gpu)

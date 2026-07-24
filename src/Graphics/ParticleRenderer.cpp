@@ -174,7 +174,7 @@ void ParticleRenderer::addParticleSet(vec3s position, vec3s scale, vec2s spriteS
     data.texCoords[1] = vec2s{ max.x, max.y };
     data.texCoords[2] = vec2s{ max.x, min.y };
     data.texCoords[3] = vec2s{ min.x, min.y };
-    data.maxAge = 0.3f;
+    data.maxAge = 0.03f;
 
     particleSets.push(data);
 }
@@ -216,11 +216,17 @@ void ParticleRenderer::loadBuffer()
     activityBufferHandle = gpu->createBindlessBuffer(bufferCreation);
 }
 
-void ParticleRenderer::updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime)
+void ParticleRenderer::updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime, vec3s directionVec, mat4s view)
 {
+    VOID_ERROR("You need to transfer the memory types themselves as well as the pipelining.");
+
     Buffer* particleBuffer = gpu->accessBuffer(particleDataHandle);
-    Buffer* particleSetBuffer = gpu->accessBuffer(particleSetsHandle);
     Buffer* activityBuffer = gpu->accessBuffer(activityBufferHandle);
+    Buffer* particleSetBuffer = gpu->accessBuffer(particleSetsHandle);
+
+    particleSets[0].transform = glms_translate_make(directionVec);//glms_mat4_mul(glms_translate_make(directionVec), glms_quat_mat4(camerRot));
+
+    vmaCopyMemoryToAllocation(gpu->VMAAllocator, particleSets.data, particleSetBuffer->vmaAllocation, 0, sizeof(ParticleSet) * particleSets.size);
 
     VkBufferMemoryBarrier2 particleComputeBarrier{};
     particleComputeBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
@@ -268,10 +274,11 @@ void ParticleRenderer::updateParticles(CommandBuffer* commandBuffer, uint32_t pa
     pushConstants.delta = deltaTime;
     pushConstants.particleSet = particleSet;
     pushConstants.offset = 0;
+    pushConstants.view = view;
 
     vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushConstants), &pushConstants);
 
-    vkCmdDispatch(commandBuffer->vkCommandBuffer, 20000, 1, 1);
+    vkCmdDispatch(commandBuffer->vkCommandBuffer, 500, 1, 1);
 
     ParticlePushConstant pushConstants1{};
     pushConstants1.particleData = particleBuffer->bufferAddress;
@@ -279,11 +286,12 @@ void ParticleRenderer::updateParticles(CommandBuffer* commandBuffer, uint32_t pa
     pushConstants1.particleSetData = particleSetBuffer->bufferAddress;
     pushConstants1.delta = deltaTime;
     pushConstants1.particleSet = 1;
-    pushConstants1.offset = 20000;
+    pushConstants1.offset = 500;
+    pushConstants1.view = view;
 
     vkCmdPushConstants(commandBuffer->vkCommandBuffer, commandBuffer->currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushConstants1), &pushConstants1);
 
-    vkCmdDispatch(commandBuffer->vkCommandBuffer, 20000, 1, 1);
+    vkCmdDispatch(commandBuffer->vkCommandBuffer, 500, 1, 1);
 }
 
 void ParticleRenderer::createParticleDrawCalls(CommandBuffer* commandBuffer)

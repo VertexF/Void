@@ -105,11 +105,11 @@ void main()
     mat4 modelPostion = modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model;
 
     gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * modelPostion * vec4(position, 1.0);
-    vPosition  =  sceneBufferReference.sceneData.globalModel * modelPostion * vec4(position, 1.0);
+    vPosition = sceneBufferReference.sceneData.globalModel * modelPostion * vec4(position, 1.0);
 
     vTexcoord0 = texcoord;
     vNormal = mat3(adjugate(modelPostion)) * normal;
 
-    vTangent = tangent;
-    vColour = vec4(1.f, 1.f, 1.f, 1.f);//modelPositionsReference.modelPositions[2].colour;
+    vTangent = modelPostion * tangent;
+    vColour = modelPositionsReference.modelPositions[gl_InstanceIndex].colour;
 }

@@ -156,7 +156,9 @@ struct GPUDevice
     //Returns a vertex buffer usable for fullscreen that uses no vertices.
     BufferHandle getFullscreenVertexBuffer() const;
 
-    TextureHandle getDummyTexture() const;
+    TextureHandle getDummyAlbedoTexture() const;
+    TextureHandle getDummyEmissiveOcclusionTexture() const;
+    TextureHandle getDummyMetalRoughnessTexture() const;
     const DynamicRenderingData& getSwapchainOutput() const;
 
     //Names and markers
@@ -218,7 +220,10 @@ struct GPUDevice
     SamplerHandle defaultSampler;
 
     //Dummy resources
-    TextureHandle dummyTexture;
+    TextureHandle dummyAlbedoTexture;
+    TextureHandle dummyEmissiveOcclusionTexture;
+    TextureHandle dummyMentalRoughnessTexture;
+    TextureHandle dummyNormalTexture;
 
     DynamicRenderingData dymanicRenderingData;
 

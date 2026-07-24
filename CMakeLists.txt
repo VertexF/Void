@@ -22,11 +22,14 @@ set(CGLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/cglm/include")
 set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf")
 set(STACK_WALKER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/StackWalker/Main/StackWalker")
 set(RAPID_HASH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/rapidhash")
-set(VENDER_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
+set(VENDIR_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
 set(IMGUI_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
 set(CGLTF_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/cgltf")
 set(SPRIV_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/SPIRV-Reflect")
 set(MESHOP_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/meshoptimizer/src/")
+set(KTX_OTHER_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software/other_include")
+set(KTX_LIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software/lib/include")
+set(KTX_LIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software/external/dfdutils/KHR")
 #Set the location of the engine source.
 set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(JOLT_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src/Physics/")
@@ -130,7 +133,8 @@ target_include_directories(Void SYSTEM PUBLIC  ${VULKAN_INCLUDE_DIR}
                                                ${CGLTF_INCLUDE}
                                                ${SPRIV_INCLUDE}
                                                ${MESHOP_INCLUDE}
-                                               ${JOLT_INCLUDE})
+                                               ${JOLT_INCLUDE}
+                                               ${KTX_LIB_INCLUDE_DIR})
 
 add_compile_definitions(SDL_MAIN_HANDLED)
 
@@ -143,8 +147,8 @@ else()
     target_link_libraries(Void PRIVATE
                           dl
                           pthread
-              ${SDL_LIB}
-              ${VULKAN_LIB})
+                          ${SDL_LIB}
+                          ${VULKAN_LIB})
 endif()
 
 ###Foundation
@@ -253,6 +257,14 @@ add_library(External STATIC
 
     vender/miniaudio.h
     vender/miniaudio.c
+
+    vender/KTX-Software/lib/src/texture.c
+    vender/KTX-Software/lib/src/hashlist.c
+    vender/KTX-Software/lib/src/checkheader.c
+    vender/KTX-Software/lib/src/swap.c
+    vender/KTX-Software/lib/src/memstream.c
+    vender/KTX-Software/lib/src/filestream.c
+    vender/KTX-Software/lib/src/vkloader.c
 )
 
 set_target_properties(External PROPERTIES SYSTEM ON)
@@ -271,13 +283,17 @@ target_compile_definitions(External PRIVATE
 if (WIN32)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE})
+                               ${IMGUI_INCLUDE}
+                               ${KTX_LIB_INCLUDE_DIR}
+                               ${KTX_OTHER_INCLUDE_DIR})
 else()
     target_link_libraries(External PRIVATE
                           dl)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE})
+                               ${IMGUI_INCLUDE}
+                               ${KTX_LIB_INCLUDE_DIR}
+                               ${KTX_OTHER_INCLUDE_DIR})
 endif()
 
 ###Physics

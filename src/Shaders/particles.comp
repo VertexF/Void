@@ -31,6 +31,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) buffer ActiveBuffer
     uint activeSet;
 };
 
+//52 bytes
 layout(scalar, push_constant) uniform entityIndex
 {
     Particles particleDataPtr;
@@ -39,6 +40,7 @@ layout(scalar, push_constant) uniform entityIndex
     float delta;
     uint particleSet;
 	uint offset;
+	mat4 view;
 };
 
 layout(local_size_x_id = 64, local_size_y_id = 2, local_size_z_id = 1) in;
@@ -58,17 +60,14 @@ float prng(inout uint state)
 }
 
 void main()
-{	
-//activeBufferPtr.activeSet = 10k, 10k, 10k.
-//globalActive = 10k + 10k + 10k
-// -1k on particleEffect = 1;
-//globalActive = 10k + 9k + 10k
-
-	// uint globalOffset = 0;
-	// for(uint i = 0; i < particleEffect; ++i)
-	// {
-		// globalOffset += activeBufferPtr.partiset[i].activeSet;
-	// }
+{
+	vec3 up = vec3(0.f, 0.f, 0.f);
+	vec3 forward = vec3(0.f, 1.f, 0.f);
+	vec3 right = vec3(0.f, 0.f, 1.f);
+	
+	vec3 cameraRightWorld = { view[0][0], view[1][0], view[2][0] };
+    vec3 cameraUpWorld = { view[0][1], view[1][1], view[2][1] };
+    vec3 cameraForwardWorld = { view[0][2], view[1][2], view[2][2] };
 	
 	uint dataIndex = gl_GlobalInvocationID.x + offset;
 
@@ -90,12 +89,18 @@ void main()
 	float speed = prng(state) * 50.f;
 	//float speed = 25.f;
 
-	vec3 velocity = normalize(vec3(rand0 + EPSILON, rand1 + EPSILON, rand2 + EPSILON) - vec3(0.5)) * speed;
+	//vec3 velocity = normalize(vec3(rand0 + EPSILON, rand1 + EPSILON, rand2 + EPSILON) - vec3(0.5)) * speed;
 	//vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * 50.f;
+	// vec3 vel = cameraUpWorld;
+	// vel += forward;
+	// vel += cameraRightWorld;
+	
+	
+	vec3 vel = cameraRightWorld;//vec3(0.f, 0.f, 1.f);
 	vec4 newPositionAndAge;
-	newPositionAndAge.xyz = oldPosition.xyz + velocity * delta;
+	//newPositionAndAge.xyz = oldPosition.xyz + velocity * delta;
+	newPositionAndAge.xyz = oldPosition.xyz + vel.xyz * delta * 20.f;
 	newPositionAndAge.w = oldPosition.w + (prng(state) + 0.05) * delta;
-	//newPositionAndAge.w = 0.f;
 
 	//Add particle logic + cull
 	particleDataPtr.particleData[dataIndex].positionAndAge = newPositionAndAge;
