@@ -20,8 +20,8 @@
 
 namespace 
 {
-#define VULKAN_DEBUG_REPORT
-#define VULKAN_SYNCHRONIZATION_VALIDATION
+//#define VULKAN_DEBUG_REPORT
+//#define VULKAN_SYNCHRONIZATION_VALIDATION
     const char* REQUESTED_EXTENSIONS[] =
     {
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -1240,7 +1240,7 @@ BufferHandle GPUDevice::createBindlessGPUBuffer(const BufferCreation& creation)
     bufferInfo.size = creation.size > 0 ? creation.size : 1;
 
     VmaAllocationCreateInfo memoryInfo{};
-    memoryInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    memoryInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     memoryInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     VmaAllocationInfo allocationInfo{};

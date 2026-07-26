@@ -22,6 +22,7 @@
 #include <SDL3/SDL_mouse.h>
 
 struct GPUDevice;
+class ktxTexture2;
 
 struct Renderer2D
 {
@@ -35,6 +36,8 @@ struct Renderer2D
 	void shutdown();
 
 	TextureHandle textureAlasHandles;
+
+	ktxTexture2* kTexture = nullptr;
 
 	SceneData2D scene2d{};
 

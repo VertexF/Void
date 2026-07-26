@@ -27,9 +27,11 @@ set(IMGUI_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/imgui")
 set(CGLTF_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/cgltf")
 set(SPRIV_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/SPIRV-Reflect")
 set(MESHOP_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender/meshoptimizer/src/")
-set(KTX_OTHER_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software/other_include")
-set(KTX_LIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software/lib/include")
-set(KTX_LIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software/external/dfdutils/KHR")
+set(KTX_OTHER_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software-4.4.2/other_include")
+set(KTX_LIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software-4.4.2/include")
+set(KTX_LIB_UTILS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software-4.4.2/utils")
+set(KTX_STDZ "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software-4.4.2/external/basisu/zstd")
+set(KTX_EXTERNAL "${CMAKE_CURRENT_SOURCE_DIR}/vender/KTX-Software-4.4.2/external")
 #Set the location of the engine source.
 set(ENGINE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(JOLT_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/src/Physics/")
@@ -257,15 +259,42 @@ add_library(External STATIC
 
     vender/miniaudio.h
     vender/miniaudio.c
-
-    vender/KTX-Software/lib/src/texture.c
-    vender/KTX-Software/lib/src/hashlist.c
-    vender/KTX-Software/lib/src/checkheader.c
-    vender/KTX-Software/lib/src/swap.c
-    vender/KTX-Software/lib/src/memstream.c
-    vender/KTX-Software/lib/src/filestream.c
-    vender/KTX-Software/lib/src/vkloader.c
 )
+
+set(DF_INCLUDE "vender/KTX-Software-4.4.2/external/dfdutils/KHR")
+
+set(KTX_SOURCES
+    vender/KTX-Software-4.4.2/external/basisu/zstd/zstd.c
+    vender/KTX-Software-4.4.2/external/dfdutils/interpretdfd.c
+    vender/KTX-Software-4.4.2/external/dfdutils/vk2dfd.c
+    vender/KTX-Software-4.4.2/external/dfdutils/createdfd.c
+    vender/KTX-Software-4.4.2/external/dfdutils/queries.c
+    vender/KTX-Software-4.4.2/lib/texture.c
+    vender/KTX-Software-4.4.2/lib/miniz_wrapper.cpp
+    vender/KTX-Software-4.4.2/lib/vk_funcs.c
+    vender/KTX-Software-4.4.2/lib/vkformat_check.c
+    vender/KTX-Software-4.4.2/lib/vkformat_typesize.c
+    vender/KTX-Software-4.4.2/lib/vkformat_check_variant.c
+    vender/KTX-Software-4.4.2/lib/texture2.c
+    vender/KTX-Software-4.4.2/lib/texture1.c
+    vender/KTX-Software-4.4.2/lib/hashlist.c
+    vender/KTX-Software-4.4.2/lib/checkheader.c
+    vender/KTX-Software-4.4.2/lib/swap.c
+    vender/KTX-Software-4.4.2/lib/memstream.c
+    vender/KTX-Software-4.4.2/lib/filestream.c
+    vender/KTX-Software-4.4.2/lib/vkloader.c)
+
+add_library(ktx STATIC ${KTX_SOURCES})
+
+target_include_directories(ktx SYSTEM PRIVATE ${KTX_LIB_INCLUDE_DIR}
+                           ${KTX_OTHER_INCLUDE_DIR}
+                           ${KTX_LIB_UTILS_DIR}
+                           ${VULKAN_INCLUDE_DIR}
+                           ${KTX_STDZ}
+                           ${KTX_EXTERNAL}
+                           ${DF_INCLUDE})
+
+target_compile_definitions(ktx PUBLIC KHRONOS_STATIC)
 
 set_target_properties(External PROPERTIES SYSTEM ON)
 
@@ -283,17 +312,13 @@ target_compile_definitions(External PRIVATE
 if (WIN32)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE}
-                               ${KTX_LIB_INCLUDE_DIR}
-                               ${KTX_OTHER_INCLUDE_DIR})
+                               ${IMGUI_INCLUDE})
 else()
     target_link_libraries(External PRIVATE
                           dl)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE}
-                               ${KTX_LIB_INCLUDE_DIR}
-                               ${KTX_OTHER_INCLUDE_DIR})
+                               ${IMGUI_INCLUDE})
 endif()
 
 ###Physics
@@ -843,7 +868,7 @@ else()
     endif()
 endif()
 
-target_link_libraries(Void PRIVATE Foundation External Jolt)
+target_link_libraries(Void PRIVATE Foundation External Jolt ktx)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${VOID_SOURCE} ${GLSL_SOURCE_FILES} ${GLSL_HEADER_FILES} ${FOUNDATION_SOURCE} ${JOLT_PHYSICS_SRC_FILES})
 

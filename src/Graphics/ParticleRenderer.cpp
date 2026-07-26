@@ -218,8 +218,6 @@ void ParticleRenderer::loadBuffer()
 
 void ParticleRenderer::updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime, vec3s directionVec, mat4s view)
 {
-    VOID_ERROR("You need to transfer the memory types themselves as well as the pipelining.");
-
     Buffer* particleBuffer = gpu->accessBuffer(particleDataHandle);
     Buffer* activityBuffer = gpu->accessBuffer(activityBufferHandle);
     Buffer* particleSetBuffer = gpu->accessBuffer(particleSetsHandle);

@@ -270,8 +270,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             vec3s directionalVec = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 1.f));
 
-            //particleRenderer.updateParticles(gpuCommands, 0, deltaTime, gameCamera.internal3DCamera.direction, gameCamera.internal3DCamera.view);
-            //particleRenderer.createParticleDrawCalls(gpuCommands);
+            particleRenderer.updateParticles(gpuCommands, 0, deltaTime, gameCamera.internal3DCamera.direction, gameCamera.internal3DCamera.view);
+            particleRenderer.createParticleDrawCalls(gpuCommands);
             gpuCommands->beginRendering();
 
             gpuCommands->setScissor(nullptr);
@@ -387,7 +387,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             }
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
-            //particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
+            particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
 
             //imgui->render(*gpuCommands);
 

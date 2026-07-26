@@ -91,12 +91,11 @@ void main()
 
 	//vec3 velocity = normalize(vec3(rand0 + EPSILON, rand1 + EPSILON, rand2 + EPSILON) - vec3(0.5)) * speed;
 	//vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * 50.f;
-	// vec3 vel = cameraUpWorld;
-	// vel += forward;
-	// vel += cameraRightWorld;
+	vec3 vel = up;
+	vel += forward * prng(state) * 10.f;
+	vel += right * prng(state) * 10.f;
 	
-	
-	vec3 vel = cameraRightWorld;//vec3(0.f, 0.f, 1.f);
+	//vec3 vel = cameraRightWorld;//vec3(0.f, 0.f, 1.f);
 	vec4 newPositionAndAge;
 	//newPositionAndAge.xyz = oldPosition.xyz + velocity * delta;
 	newPositionAndAge.xyz = oldPosition.xyz + vel.xyz * delta * 20.f;

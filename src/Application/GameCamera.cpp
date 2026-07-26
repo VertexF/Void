@@ -7,7 +7,7 @@
 
 #include <cglm/struct/affine.h>
 #include <cglm/struct/cam.h>
-#include <imgui/imgui.h>
+//#include <imgui/imgui.h>
 
 //We are doing this to get frame indepenent lerp.
 //http://www.rorydriscoll.com/2016/03/07/frame-rate-independent-damping-using-lerp/
