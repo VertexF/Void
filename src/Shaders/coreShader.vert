@@ -7,6 +7,8 @@
 #extension GL_EXT_shader_8bit_storage: require
 #extension GL_ARB_gpu_shader_int64 : enable
 
+uint DrawFlags_NoTangents = 1 << 0;
+
 struct Vertices
 {
     float px, py, pz;
@@ -91,25 +93,28 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].py, 
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
-    vec4 tangent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
-                       int(vertexDataReference.vertexData[gl_VertexIndex].ty), 
-                       int(vertexDataReference.vertexData[gl_VertexIndex].tz), 
-                       int(vertexDataReference.vertexData[gl_VertexIndex].tw)) / 127.f - 1.0;
+    vTangent = vec4(1.f, 0.f, 0.f, 1.f);
+    mat4 modelPostion = modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model;
+    if ((flags & DrawFlags_NoTangents) != 0)
+    {
+        vec4 tangent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
+                            int(vertexDataReference.vertexData[gl_VertexIndex].ty), 
+                            int(vertexDataReference.vertexData[gl_VertexIndex].tz), 
+                            int(vertexDataReference.vertexData[gl_VertexIndex].tw)) / 127.f - 1.0;
 
+        vTangent = normalize(modelPostion * tangent);
+    }
     vec3 normal = vec3(int(vertexDataReference.vertexData[gl_VertexIndex].nx), 
                        int(vertexDataReference.vertexData[gl_VertexIndex].ny),
                        int(vertexDataReference.vertexData[gl_VertexIndex].nz)) / 127.f - 1.0;
 
     vec2 texcoord = vec2(vertexDataReference.vertexData[gl_VertexIndex].tu, vertexDataReference.vertexData[gl_VertexIndex].tv);
 
-    mat4 modelPostion = modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model;
-
     gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * modelPostion * vec4(position, 1.0);
     vPosition = sceneBufferReference.sceneData.globalModel * modelPostion * vec4(position, 1.0);
 
     vTexcoord0 = texcoord;
-    vNormal = mat3(adjugate(modelPostion)) * normal;
+    vNormal = normalize(mat3(adjugate(modelPostion)) * normal);
 
-    vTangent = modelPostion * tangent;
     vColour = modelPositionsReference.modelPositions[gl_InstanceIndex].colour;
 }

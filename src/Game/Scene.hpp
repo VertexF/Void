@@ -34,7 +34,7 @@ struct Scene
     JPH::BodyCreationSettings sphereSettings;
     JPH::BodyCreationSettings sphereSettings2;
 
-    uint32_t totalEntities = 4444;
+    uint32_t totalEntities = 8888;
     uint32_t currentLastEntity = 0;
 
     Array<Entity> entities;

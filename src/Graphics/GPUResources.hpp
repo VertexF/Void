@@ -286,6 +286,7 @@ struct TextureCreation
     uint16_t width = 1;
     uint16_t height = 1;
     uint16_t depth = 1;
+    uint32_t size = 0;
     uint8_t mipmaps = 1;
     VkImageUsageFlags usage = VK_IMAGE_USAGE_FLAG_BITS_MAX_ENUM;
 
@@ -296,7 +297,7 @@ struct TextureCreation
 
     const char* name = nullptr;
 
-    TextureCreation& setSize(uint16_t newWidth, uint16_t newHeight, uint16_t newDepth);
+    TextureCreation& setSize(uint16_t newWidth, uint16_t newHeight, uint16_t newDepth, uint32_t newSize);
     TextureCreation& setFlags(uint8_t newMipmaps, VkImageUsageFlags newUsage);
     TextureCreation& setFormatType(VkFormat newFormat, VkImageType newImageType, VkImageViewType newImageViewType);
     TextureCreation& setName(const char* inName);

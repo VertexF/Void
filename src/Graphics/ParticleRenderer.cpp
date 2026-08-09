@@ -6,6 +6,9 @@
 #include "cglm/struct/cam.h"
 #include "vender/stb_image.h"
 
+#include <ktx.h>
+#include <ktxvulkan.h>
+
 namespace
 {
     struct PushConstant 
@@ -112,7 +115,7 @@ void ParticleRenderer::init(GPUDevice& inGPU)
 
     particleData = gpu->createPipeline(particleUpdateCreation);
 
-    loadTexture("Assets/Textures/particles.png");
+    loadKtxTexture("Assets/Textures/particles.ktx2");
 
     vec2s spriteOffset = { .x = 1, .y = 1 };
     vec3s particleScale = { 0.1f, 0.1f, 0.1f };
@@ -138,11 +141,13 @@ void ParticleRenderer::loadTexture(const char* filepath)
         VOID_ERROR("Error loading texture %s", filepath);
     }
 
+    uint32_t size = static_cast<uint16_t>(width) * static_cast<uint16_t>(height) * 4;
+
     TextureCreation creation;
     creation.setData(imageData)
-        .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+        .setFormatType(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
         .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-        .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
+        .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1, size)
         .setName(filepath);
 
     textureAlasHandles = gpu->createTexture(creation);
@@ -150,6 +155,47 @@ void ParticleRenderer::loadTexture(const char* filepath)
     VOID_ASSERT(textureAlasHandles.index != INVALID_TEXTURE.index);
 
     free(imageData);
+}
+
+void ParticleRenderer::loadKtxTexture(const char* filepath)
+{
+    TextureHandle textureResource;
+
+    ktxTexture2* kTexture = nullptr;
+    uint8_t mipLevels = 1;
+    KTX_error_code code = ktxTexture2_CreateFromNamedFile(filepath, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
+    if (code != KTX_SUCCESS)
+    {
+        textureResource = INVALID_TEXTURE;
+        VOID_ERROR("Error loading texture %s", filepath);
+    }
+
+    width = kTexture->baseWidth;
+    height = kTexture->baseHeight;
+
+    ktx_transcode_fmt_e formatSelected = KTX_TTF_BC7_RGBA;
+
+    if (ktxTexture2_NeedsTranscoding(kTexture))
+    {
+        code = ktxTexture2_TranscodeBasis(kTexture, formatSelected, 0);
+        if (code != KTX_SUCCESS)
+        {
+            VOID_ERROR("Could not transcode the input texture to the selected target format.");
+        }
+    }
+
+    TextureCreation creation;
+    creation.setData(kTexture->pData)
+        .setFormatType(ktxTexture2_GetVkFormat(kTexture), VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+        .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+        .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1, (uint32_t)kTexture->dataSize)
+        .setName(filepath);
+
+    textureAlasHandles = gpu->createTexture(creation);
+
+    VOID_ASSERT(textureAlasHandles.index != INVALID_TEXTURE.index);
+
+    ktxTexture2_Destroy(kTexture);
 }
 
 void ParticleRenderer::addParticleSet(vec3s position, vec3s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset)

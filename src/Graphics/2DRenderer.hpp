@@ -23,11 +23,11 @@
 
 struct GPUDevice;
 class ktxTexture2;
+enum ktx_transcode_fmt_e;
 
 struct Renderer2D
 {
 	void init(GPUDevice& inGPU);
-	void loadTexture(const char* filepath);
 	void addQuad(vec3s position, vec2s scale);
 	void addQuad(vec3s position, vec2s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
 	void loadBuffer();
@@ -37,16 +37,14 @@ struct Renderer2D
 
 	TextureHandle textureAlasHandles;
 
-	ktxTexture2* kTexture = nullptr;
-
 	SceneData2D scene2d{};
 
 	Camera camera2D;
 
 	GPUDevice* gpu;
 
-	int width;
-	int height;
+	uint32_t width;
+	uint32_t height;
 
 	PipelineHandle pipeline2D;
 	DescriptorSetLayoutHandle descriptorSetLayout2D;

@@ -69,8 +69,6 @@ namespace
         meshData.model = model;
         meshData.modelInv = glms_mat4_inv(glms_mat4_transpose(model));
     }
-
-    static constexpr uint16_t INVALID_SCENE_TEXTURE_INDEX = UINT16_MAX;
 }
 
 void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui)
@@ -387,6 +385,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             }
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
+
             particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
 
             //imgui->render(*gpuCommands);

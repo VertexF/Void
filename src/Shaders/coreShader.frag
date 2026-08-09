@@ -6,6 +6,8 @@
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_buffer_reference : require
 
+uint DrawFlags_NoTangents = 1 << 0;
+
 struct SceneData
 {
     mat4 view;
@@ -255,9 +257,20 @@ void main()
         baseColour.a = 0.f;
     }
 
+    vec3 N = normalize(vNormal);
     vec3 tangent = normalize(vTangent.xyz);
     vec3 bitangent = cross(normalize(vNormal), tangent) * vTangent.w;
-    vec3 N = normalize(vNormal);
+    if ((flags & DrawFlags_NoTangents) == 0)
+    {
+        vec3 uvDX = dFdx(vec3(vTexcoord0, 0.0));
+        vec3 uvDY = dFdy(vec3(vTexcoord0, 0.0));
+
+        //NOTE: Code taken from https://github.com/KhronosGroup/glTF-Sample-Viewer
+        vec3 t_ = (uvDY.t * dFdx(vPosition.xyz) - uvDX.t * dFdy(vPosition.xyz)) / (uvDX.s * uvDY.t - uvDY.s * uvDX.t);
+
+        tangent = normalize(t_ - N.xyz * dot(N.xyz, t_));
+        bitangent = cross(N, tangent) * vTangent.w;
+    }
 
     TBN = mat3(tangent, bitangent, N);
 
@@ -287,12 +300,10 @@ void main()
 
     float alpha = pow(roughness, 2.0);
 
-    baseColour.rgb = decodeSRGB(baseColour.rgb);
-
     vec3 emissive = vec3(0);
     vec4 e = texture(globalTextures[nonuniformEXT(emissiveTextureIndex)], vTexcoord0);
 
-    emissive += decodeSRGB(e.rgb) * emissiveFactor;
+    emissive += e.rgb * emissiveFactor;
 	
 	vec3 H = normalize(L + V);
     float NoV = abs(dot(N, V)) + 1e-5;
@@ -324,5 +335,5 @@ void main()
 
     vec3 ambient = occlusion * (baseColour.rgb * 0.01);
 
-    fragColour = vec4(encodeSRGB(lightOutput + ambient + emissive), baseColour.a);
+    fragColour = vec4(lightOutput + ambient + emissive, baseColour.a);
 }

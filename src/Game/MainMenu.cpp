@@ -2,6 +2,8 @@
 
 #include "Foundation/Time.hpp"
 
+#include <ktx.h>
+
 void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui)
 {
     gpu = &inGPU;
@@ -10,7 +12,6 @@ void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& 
     beginFrameTick = timeNow();
 
     renderer2D.init(*gpu);
-    renderer2D.loadTexture("Assets/Textures/mainMenuUI.ktx2");
     userInterface.init(renderer2D);
     userInterface.buildMainMenu();
     renderer2D.loadBuffer();

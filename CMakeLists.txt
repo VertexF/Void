@@ -92,6 +92,8 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/2DRenderer.cpp
                 src/Graphics/ParticleRenderer.hpp
                 src/Graphics/ParticleRenderer.cpp
+                src/Graphics/Textures.hpp
+                src/Graphics/Textures.cpp
 
                 src/Game/Scene.hpp
                 src/Game/Scene.cpp
@@ -282,7 +284,9 @@ set(KTX_SOURCES
     vender/KTX-Software-4.4.2/lib/swap.c
     vender/KTX-Software-4.4.2/lib/memstream.c
     vender/KTX-Software-4.4.2/lib/filestream.c
-    vender/KTX-Software-4.4.2/lib/vkloader.c)
+    vender/KTX-Software-4.4.2/lib/vkloader.c
+    vender/KTX-Software-4.4.2/lib/basis_transcode.cpp
+    vender/KTX-Software-4.4.2/external/basisu/transcoder/basisu_transcoder.cpp)
 
 add_library(ktx STATIC ${KTX_SOURCES})
 

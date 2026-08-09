@@ -86,11 +86,12 @@ TextureCreation::~TextureCreation()
     }
 }
 
-TextureCreation& TextureCreation::setSize(uint16_t newWidth, uint16_t newHeight, uint16_t newDepth)
+TextureCreation& TextureCreation::setSize(uint16_t newWidth, uint16_t newHeight, uint16_t newDepth, uint32_t newSize)
 {
     width = newWidth;
     height = newHeight;
     depth = newDepth;
+    size = newSize;
 
     return *this;
 }

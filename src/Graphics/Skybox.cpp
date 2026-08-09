@@ -9,6 +9,9 @@
 
 #include <vender/stb_image.h>
 
+#include <ktx.h>
+#include <ktxvulkan.h>
+
 namespace
 {
     //TODO: Figure out if you need this stuff.
@@ -26,9 +29,11 @@ namespace
         uint32_t skyboxTextureIndex;
     };
 
-    //TODO: Move this to a place that make sense.
-    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, Array<uint8_t*>& skyboxImageArray, const char* name)
+    TextureHandle createACubemap(GPUDevice& gpu, const Array<const char*>& images, const char* name)
     {
+        Array<uint8_t*> skyboxImageArray;
+        skyboxImageArray.init(&MemoryService::instance()->scratchAllocator, 6);
+
         int comp;
         int width;
         int height;
@@ -37,7 +42,7 @@ namespace
         {
             if (images[i])
             {
-                stbi_set_flip_vertically_on_load(1);
+                //stbi_set_flip_vertically_on_load(1);
                 //Load 6 images.
                 uint8_t* imageData = stbi_load(images[i], &width, &height, &comp, 4);
                 if (imageData == nullptr)
@@ -47,18 +52,68 @@ namespace
                 }
 
                 skyboxImageArray.push(imageData);
-                //free(imageData);
             }
         }
 
+        uint32_t size = static_cast<uint16_t>(width) * static_cast<uint16_t>(height) * 4 * images.size;
+
         //Create the single texture.
         TextureCreation creation{};
-        creation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
+        creation.setFormatType(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
             .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-            .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(width), 1)
+            .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(width), 1, size)
             .setImages(skyboxImageArray, skyboxImageArray.size)
             .setName(name);
+
         TextureHandle newTexture = gpu.createTexture(creation);
+
+        for (uint32_t i = 0; i < skyboxImageArray.size; ++i)
+        {
+            stbi_image_free(skyboxImageArray[i]);
+        }
+
+        return newTexture;
+    }
+
+    TextureHandle createACubemap(GPUDevice& gpu, const char* images) 
+    {
+        TextureHandle textureResource;
+
+        ktxTexture2* kTexture = nullptr;
+
+        KTX_error_code code = ktxTexture2_CreateFromNamedFile(images, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
+        if (code != KTX_SUCCESS)
+        {
+            textureResource = INVALID_TEXTURE;
+            VOID_ERROR("Error loading texture %s", images);
+        }
+
+        //If transcoding is too slow with the ETC1S compression type use compression type KTX_TTF_ETC2_RGBA if supported.
+        //OR look into making faster a different way.
+        ktx_transcode_fmt_e formatSelected = KTX_TTF_BC7_RGBA;
+
+        if (ktxTexture2_NeedsTranscoding(kTexture))
+        {
+            code = ktxTexture2_TranscodeBasis(kTexture, formatSelected, 0);
+            if (code != KTX_SUCCESS)
+            {
+                VOID_ERROR("Could not transcode the input texture to the selected target format.");
+            }
+        }
+
+        TextureCreation creation;
+        creation.setData(kTexture->pData)
+            .setFormatType(ktxTexture2_GetVkFormat(kTexture), VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_CUBE)
+            .setFlags((uint8_t)kTexture->numLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+            .setSize(static_cast<uint16_t>(kTexture->baseWidth), static_cast<uint16_t>(kTexture->baseHeight), 1, (uint32_t)kTexture->dataSize)
+            .setName(images);
+        creation.layerCount = 6;
+
+        TextureHandle newTexture = gpu.createTexture(creation, kTexture);
+
+        VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
+
+        ktxTexture2_Destroy(kTexture);
 
         return newTexture;
     }
@@ -97,19 +152,8 @@ void initSkybox(GPUDevice& gpu)
 
     skyboxPipeline = gpu.createPipeline(skyboxPipelineCreation);
 
-    Array<uint8_t*> skyboxImageArray;
-    skyboxImageArray.init(&MemoryService::instance()->systemAllocator, 6);
+    skyboxTextureHandle = createACubemap(gpu, "Assets/Textures/orangeSpaceSkybox.ktx2");
 
-    Array<const char*> cubemapsImage;
-    cubemapsImage.init(&MemoryService::instance()->scratchAllocator, 6);
-    cubemapsImage.push("Assets/Textures/4.png");
-    cubemapsImage.push("Assets/Textures/2.png");
-    cubemapsImage.push("Assets/Textures/6.png");
-    cubemapsImage.push("Assets/Textures/5.png");
-    cubemapsImage.push("Assets/Textures/1.png");
-    cubemapsImage.push("Assets/Textures/3.png");
-
-    skyboxTextureHandle = createACubemap(gpu, cubemapsImage, skyboxImageArray, "SpaceCubeMap");
     SamplerCreation skyboxSamplerCreation{};
     skyboxSamplerCreation.minFilter = VK_FILTER_LINEAR;
     skyboxSamplerCreation.magFilter = VK_FILTER_LINEAR;
@@ -118,8 +162,6 @@ void initSkybox(GPUDevice& gpu)
     skyboxSamplerCreation.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     skyboxSampler = gpu.createSampler(skyboxSamplerCreation);
     gpu.linkTextureSampler(skyboxTextureHandle, skyboxSampler);
-
-    skyboxImageArray.shutdown();
 
     BufferCreation bufferCreation{};
 

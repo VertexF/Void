@@ -2,6 +2,8 @@
 
 #include "Application/Window.hpp"
 
+#include "Textures.hpp"
+
 #include <meshoptimizer.h>
 #include "cglm/struct/cam.h"
 
@@ -77,47 +79,8 @@ void Renderer2D::init(GPUDevice& inGPU)
     pipelineCreation2D.addDescriptorSetLayout(gpu->bindlessDescriptorSetLayoutHandle);
 
     pipeline2D = gpu->createPipeline(pipelineCreation2D);
-}
 
-void Renderer2D::loadTexture(const char* filepath)
-{
-    TextureHandle textureResource;
-
-    int comp;
-    uint8_t mipLevels = 1;
-
-    //stbi_set_flip_vertically_on_load(1);
-    //uint8_t* imageData = stbi_load(filepath, &width, &height, &comp, 4);
-    //if (imageData == nullptr)
-    //{
-    //    textureResource = INVALID_TEXTURE;
-    //    VOID_ERROR("Error loading texture %s", filepath);
-    //}
-
-    KTX_error_code code = ktxTexture2_CreateFromNamedFile(filepath, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
-    if (code != KTX_SUCCESS)
-    {
-        textureResource = INVALID_TEXTURE;
-        VOID_ERROR("Error loading texture %s", filepath);
-    }
-
-    VkFormat format = ktxTexture2_GetVkFormat(kTexture);
-    width = kTexture->baseWidth;
-    height = kTexture->baseHeight;
-    uint32_t ssize = kTexture->dataSize;
-
-    TextureCreation creation;
-    creation.setData(kTexture->pData)
-        .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-        .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-        .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
-        .setName(filepath);
-
-    textureAlasHandles = gpu->createTexture(creation);
-
-    VOID_ASSERT(textureAlasHandles.index != INVALID_TEXTURE.index);
-
-    //free(imageData);
+    textureAlasHandles = loadTexture(*gpu, "Assets/Textures/mainMenuUI.ktx2", KTX_TTF_BC7_RGBA, &width, &height);
 }
 
 void Renderer2D::addQuad(vec3s position, vec2s scale)

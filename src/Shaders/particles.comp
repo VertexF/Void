@@ -98,7 +98,7 @@ void main()
 	//vec3 vel = cameraRightWorld;//vec3(0.f, 0.f, 1.f);
 	vec4 newPositionAndAge;
 	//newPositionAndAge.xyz = oldPosition.xyz + velocity * delta;
-	newPositionAndAge.xyz = oldPosition.xyz + vel.xyz * delta * 20.f;
+	newPositionAndAge.xyz = oldPosition.xyz + vel.xyz * delta * 1.f;
 	newPositionAndAge.w = oldPosition.w + (prng(state) + 0.05) * delta;
 
 	//Add particle logic + cull

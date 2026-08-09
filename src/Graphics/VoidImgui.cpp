@@ -15,6 +15,8 @@
 #include "Graphics/CommandBuffer.hpp"
 #include "Application/Window.hpp"
 
+#include <ktx.h>
+
 namespace
 {
     TextureHandle fontTextureHandle;
@@ -267,11 +269,12 @@ namespace
         //likely to be compatible with user's existing shaders. If your ImTextureID represent a higher-level
         //concept than just a GL texture id, consider calling GetTexDataAsAlpha8() instead to save on GPU memory.
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        uint32_t size = static_cast<uint16_t>(width) * static_cast<uint16_t>(height) * 4;
 
         TextureCreation textureCreation;
         textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
             .setData(pixels)
-            .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
+            .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1, size)
             .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
             .setName("Imgui_Font");
         fontTextureHandle = gpu->createTexture(textureCreation);

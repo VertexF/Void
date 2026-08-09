@@ -81,6 +81,8 @@ struct DeviceCreation
     DeviceCreation& setLinearAllocator(StackAllocator* alloc);
 };
 
+class ktxTexture2;
+
 struct GPUDevice
 {
     virtual ~GPUDevice() = default;
@@ -94,7 +96,7 @@ struct GPUDevice
     BufferHandle createBuffer(const BufferCreation& creation);
     BufferHandle createBindlessBuffer(const BufferCreation& creation);
     BufferHandle createBindlessGPUBuffer(const BufferCreation& creation);
-    TextureHandle createTexture(const TextureCreation& creation);
+    TextureHandle createTexture(const TextureCreation& creation, ktxTexture2* texture = nullptr);
     PipelineHandle createPipeline(const PipelineCreation& creation, bool debugRendering = false);
     SamplerHandle createSampler(const SamplerCreation& creation);
     DescriptorSetLayoutHandle createDescriptorSetLayout(const DescriptorSetLayoutCreation& creation);

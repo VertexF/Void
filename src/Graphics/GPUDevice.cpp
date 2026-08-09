@@ -16,12 +16,15 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include <ktx.h>
+#include <ktxvulkan.h>
+
 #include <cctype>
 
 namespace 
 {
-//#define VULKAN_DEBUG_REPORT
-//#define VULKAN_SYNCHRONIZATION_VALIDATION
+#define VULKAN_DEBUG_REPORT
+#define VULKAN_SYNCHRONIZATION_VALIDATION
     const char* REQUESTED_EXTENSIONS[] =
     {
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -170,7 +173,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
             info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         }
 
-        info.subresourceRange.levelCount = 1;
+        info.subresourceRange.levelCount = creation.mipmaps;
         info.subresourceRange.layerCount = creation.layerCount;
         check(vkCreateImageView(gpu.vulkanDevice, &info, gpu.vulkanAllocationCallbacks, &texture->vkImageView));
 
@@ -320,7 +323,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         numResources = usedResources;
     }
 
-    void vulkanResizeTexture(GPUDevice gpu, Texture* texture, Texture* textureToDelete, uint16_t width, uint16_t height, uint16_t depth)
+    void vulkanResizeTexture(GPUDevice gpu, Texture* texture, Texture* textureToDelete, uint16_t width, uint16_t height, uint16_t depth, uint32_t size)
     {
         //The caching handles destroying this texture.
         textureToDelete->vkImageView = texture->vkImageView;
@@ -332,7 +335,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         textureCreation.setFlags(texture->mipmaps, texture->usage)
                        .setFormatType(texture->vkFormat, texture->imageType, texture->imageViewType)
                        .setName(texture->name)
-                       .setSize(width, height, depth);
+                       .setSize(width, height, depth, size);
         vulkanCreateTexture(gpu, textureCreation, texture->handle, texture);
     }
 }//Anon
@@ -782,7 +785,7 @@ vprint("Instance created.\n");
     SDL_GetWindowSize(window, &windowWidth, &windowHeight);
 
     //Select surface format
-    const VkFormat surfaceImageFormats[] = { VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM };
+    const VkFormat surfaceImageFormats[] = { VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_B8G8R8_SRGB, VK_FORMAT_R8G8B8_SRGB };
     const VkColorSpaceKHR surfaceColourSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
 
     uint32_t supportCount;
@@ -967,6 +970,7 @@ vprint("Instance created.\n");
     depthTextureCreation.initialData = nullptr;
     depthTextureCreation.width = swapchainWidth;
     depthTextureCreation.height = swapchainHeight;
+    depthTextureCreation.size = swapchainWidth * swapchainHeight;
     depthTextureCreation.depth = 1;
     depthTextureCreation.mipmaps = 1;
     depthTextureCreation.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -986,6 +990,7 @@ vprint("Instance created.\n");
     dummyTextureCreation.initialData = &dummyData;
     dummyTextureCreation.width = 1;
     dummyTextureCreation.height = 1;
+    dummyTextureCreation.size = 4;
     dummyTextureCreation.depth = 1;
     dummyTextureCreation.mipmaps = 1;
     dummyTextureCreation.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -1263,7 +1268,7 @@ BufferHandle GPUDevice::createBindlessGPUBuffer(const BufferCreation& creation)
     return handle;
 }
 
-TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
+TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTexture2* ktxTexture)
 {
     uint32_t resourceIndex = textures.obtainResource();
     TextureHandle handle = { resourceIndex };
@@ -1284,7 +1289,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-        uint32_t totalBufferSize = (creation.width * creation.height * 4) * creation.layerCount;
+        uint32_t totalBufferSize = creation.size;
         uint32_t imageSize = (creation.width * creation.height * 4);
         bufferInfo.size = totalBufferSize;
 
@@ -1330,7 +1335,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         barrierStaging.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
         barrierStaging.image = texture->vkImage;
         barrierStaging.subresourceRange.baseMipLevel = 0;
-        barrierStaging.subresourceRange.levelCount = 1;
+        barrierStaging.subresourceRange.levelCount = creation.mipmaps;
         barrierStaging.subresourceRange.baseArrayLayer = 0;
         barrierStaging.subresourceRange.layerCount = creation.layerCount;
         barrierStaging.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1342,24 +1347,66 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
 
         vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierStagingDependencyInfo);
 
-        VkBufferImageCopy2 region{};
-        region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
+        Array<VkBufferImageCopy2> regions;
+        regions.init(&MemoryService::instance()->scratchAllocator, 4);
+        for (uint32_t mipLevel = 0; mipLevel < creation.mipmaps; ++mipLevel)
+        {
+            if (ktxTexture)
+            {
+                for (uint32_t arrayLayer = 0; arrayLayer < ktxTexture->numLayers; ++arrayLayer)
+                {
+                    for (uint32_t face = 0; face < 1; ++face)
+                    {
+                        uint32_t mipWidth = max(creation.width >> mipLevel, 1);
+                        uint32_t mipHeight = max(creation.height >> mipLevel, 1);
 
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = creation.layerCount;
+                        ktx_size_t mipOffset{ 0 };
+                        KTX_error_code ret = ktxTexture2_GetImageOffset(ktxTexture, mipLevel, 0, arrayLayer, &mipOffset);
 
-        region.imageOffset = { 0, 0, 0 };
-        region.imageExtent = { creation.width, creation.height, creation.depth };
+                        VkBufferImageCopy2 region{};
+                        region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+                        region.bufferOffset = mipOffset;
+                        region.bufferRowLength = 0;
+                        region.bufferImageHeight = 0;
+                        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                        region.imageSubresource.mipLevel = mipLevel;
+                        region.imageSubresource.baseArrayLayer = 0;// ktxTexture->numFaces* arrayLayer + face;
+                        region.imageSubresource.layerCount = creation.layerCount;
+                        region.imageOffset = { 0, 0, 0 };
+                        region.imageExtent = { mipWidth, mipHeight, creation.depth };
+
+                        regions.push(region);
+                    }
+                }
+            }
+            else 
+            {
+                uint32_t mipWidth = creation.width >> mipLevel;
+                uint32_t mipHeight = creation.height >> mipLevel;
+
+                ktx_size_t mipOffset{ 0 };
+                KTX_error_code ret = ktxTexture2_GetImageOffset(ktxTexture, mipLevel, 0, 0, &mipOffset);
+
+                VkBufferImageCopy2 region{};
+                region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+                region.bufferOffset = mipOffset;
+                region.bufferRowLength = 0;
+                region.bufferImageHeight = 0;
+                region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                region.imageSubresource.mipLevel = mipLevel;
+                region.imageSubresource.baseArrayLayer = 0;
+                region.imageSubresource.layerCount = creation.layerCount;
+                region.imageOffset = { 0, 0, 0 };
+                region.imageExtent = { mipWidth, mipHeight, creation.depth };
+
+                regions.push(region);
+            }
+        }
 
         VkCopyBufferToImageInfo2 bufferTransfer{};
         bufferTransfer.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2;
-        bufferTransfer.pRegions = &region;
-        bufferTransfer.regionCount = 1;
+        bufferTransfer.pRegions = regions.data;
+        bufferTransfer.regionCount = regions.size;
         bufferTransfer.dstImage = texture->vkImage;
         bufferTransfer.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         bufferTransfer.srcBuffer = stagingBuffer;
@@ -1378,7 +1425,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation)
         barrierImage.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
         barrierImage.image = texture->vkImage;
         barrierImage.subresourceRange.baseMipLevel = 0;
-        barrierImage.subresourceRange.levelCount = 1;
+        barrierImage.subresourceRange.levelCount = creation.mipmaps;
         barrierImage.subresourceRange.baseArrayLayer = 0;
         barrierImage.subresourceRange.layerCount = creation.layerCount;
         barrierImage.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2400,6 +2447,7 @@ void GPUDevice::resizeSwapchain()
     depthTextureCreation.initialData = nullptr;
     depthTextureCreation.width = swapchainWidth;
     depthTextureCreation.height = swapchainHeight;
+    depthTextureCreation.size = swapchainWidth * swapchainHeight;
     depthTextureCreation.depth = 1;
     depthTextureCreation.mipmaps = 1;
     depthTextureCreation.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;

@@ -272,22 +272,22 @@ void StackAllocator::shutdown()
 
 void* StackAllocator::allocate(size_t size, size_t alignment) 
 {
-    VOID_ASSERT(size > 0);                     
-                                                                  
+    VOID_ASSERT(size > 0);
+  
     const size_t newStart = memoryAlign(allocatedSize, alignment);
-    VOID_ASSERT(newStart < totalSize);                            
-                                                                  
+    VOID_ASSERT(newStart < totalSize);       
+   
     const size_t newAllocatedSize = newStart + size;              
-    if (newAllocatedSize > totalSize)                             
-    {                                                             
-        VOID_MEM_ASSERT(false, "Overflow");                       
-        return nullptr;                                           
-    }                                                             
-                                                                  
+    if (newAllocatedSize > totalSize)        
+    {    
+        VOID_MEM_ASSERT(false, "Overflow");  
+        return nullptr; 
+    }    
+   
     allocatedSize = newAllocatedSize;
-    return memory + newStart;               
-}                                                                 
-                                                                  
+    return memory + newStart;
+}  
+   
 void* StackAllocator::allocate(size_t size, size_t alignment, const char* file, int32_t line) 
 {
     return allocate(size, alignment);

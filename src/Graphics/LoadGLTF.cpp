@@ -3,7 +3,6 @@
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <vender/stb_image.h>
 #include <tlsf.h>
 #include <meshoptimizer.h>
@@ -13,6 +12,10 @@
 #include "Foundation/Numerics.hpp"
 
 #include "GPUResources.hpp"
+
+#include "Textures.hpp"
+
+constexpr const uint32_t DrawFlag_NoTangent = 1 << 0;
 
 struct Transform
 {
@@ -156,7 +159,125 @@ static cgltf_data* setupModel(const char* modelPath, Array<cgltf_node>& nodeStac
     return cgltfData;
 }
 
-void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout)
+//static TextureHandle loadTexture(GPUDevice& gpu, const char* filePath)
+//{
+//    TextureHandle textureResource;
+//
+//    int comp;
+//    int width;
+//    int height;
+//    uint8_t mipLevels = 1;
+//
+//    uint8_t* imageData = stbi_load(filePath, &width, &height, &comp, 4);
+//    if (imageData == nullptr)
+//    {
+//        textureResource = INVALID_TEXTURE;
+//        VOID_ERROR("Error loading texture %s", filePath);
+//    }
+//
+//    // TODO: Add mipmap support later.
+//    uint32_t w = width;
+//    uint32_t h = height;
+//
+//    while (w > 1 && h > 1)
+//    {
+//        w /= 2;
+//        h /= 2;
+//
+//        ++mipLevels;
+//    }
+//
+//    uint32_t size = static_cast<uint16_t>(width) * static_cast<uint16_t>(height) * 4;
+//
+//    TextureCreation creation;
+//    creation.setData(imageData)
+//        .setFormatType(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+//        .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+//        .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1, size)
+//        .setName(filePath);
+//
+//    TextureHandle newTexture = gpu.createTexture(creation);
+//
+//    VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
+//
+//    stbi_image_free(imageData);
+//
+//    return newTexture;
+//}
+//
+//static TextureHandle loadTexture(GPUDevice& gpu, uint8_t* bufferData, size_t size)
+//{
+//    int comp = 0;
+//    int width = 0;
+//    int height = 0;
+//    uint8_t mipLevels = 1;
+//    stbi_info_from_memory(bufferData, (int)size, &width, &height, &comp);
+//
+//    int x;
+//    int y;
+//    uint8_t* textureData = stbi_load_from_memory(bufferData, (int)size, &x, &y, &comp, 4);
+//
+//    uint32_t imageSize = static_cast<uint16_t>(width) * static_cast<uint16_t>(height) * 4;
+//
+//    TextureCreation textureCreation{};
+//    textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+//        .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1, imageSize)
+//        .setData(textureData)
+//        .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+//        .setName(nullptr);
+//
+//    TextureHandle newTexture = gpu.createTexture(textureCreation);
+//    VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
+//
+//    stbi_image_free(textureData);
+//
+//    return newTexture;
+//}
+//
+//static TextureHandle loadTexture(GPUDevice& gpu, uint8_t* bufferData, size_t size, ktx_transcode_fmt_e selectedFormat)
+//{
+//    TextureHandle textureResource;
+//
+//    ktxTexture2* kTexture = nullptr;
+//
+//    KTX_error_code code = ktxTexture2_CreateFromMemory(bufferData, size, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
+//    if (code != KTX_SUCCESS)
+//    {
+//        textureResource = INVALID_TEXTURE;
+//        VOID_ERROR("Error loading ktx memory based textures.");
+//    }
+//
+//    uint32_t width = kTexture->baseWidth;
+//    uint32_t height = kTexture->baseHeight;
+//
+//    //If transcoding is too slow with the ETC1S compression type use compression type KTX_TTF_ETC2_RGBA if supported.
+//    //OR look into making faster a different way.
+//    if (ktxTexture2_NeedsTranscoding(kTexture))
+//    {
+//        code = ktxTexture2_TranscodeBasis(kTexture, selectedFormat, 0);
+//        if (code != KTX_SUCCESS)
+//        {
+//            VOID_ERROR("Could not transcode the input texture to the selected target format.");
+//        }
+//    }
+//
+//    TextureCreation creation;
+//    creation.setData(kTexture->pData)
+//        .setFormatType(ktxTexture2_GetVkFormat(kTexture), VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+//        .setFlags(kTexture->numLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+//        .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1, (uint32_t)kTexture->dataSize)
+//        .setName(nullptr);
+//
+//    TextureHandle newTexture = gpu.createTexture(creation, kTexture);
+//
+//    VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
+//
+//    ktxTexture2_Destroy(kTexture);
+//
+//    return newTexture;
+//}
+
+void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout, bool ktx2On)
 {
     cgltf_data* cgltfData = setupModel(modelPath, nodeStack, finalMatrix);
     allocator = &MemoryService::instance()->systemAllocator;
@@ -165,94 +286,40 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
     meshDraws.init(allocator, uint32_t(cgltfData->meshes_count));
 
     images.init(allocator, cgltfData->images_count);
-    //GLB version.
-    for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
+
+    if (ktx2On == false)
     {
-        cgltf_image image = cgltfData->images[imageIndex];
-
-        stbi_set_flip_vertically_on_load(0);
-        if (image.uri != nullptr)
+        //GLB version.
+        for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
         {
-            TextureHandle textureResource;
+            cgltf_image image = cgltfData->images[imageIndex];
 
-            int comp;
-            int width;
-            int height;
-            uint8_t mipLevels = 1;
-
-            uint8_t *imageData = stbi_load(image.uri, &width, &height, &comp, 4);
-            if (imageData == nullptr)
+            stbi_set_flip_vertically_on_load(0);
+            if (image.uri != nullptr)
             {
-                textureResource = INVALID_TEXTURE;
-                VOID_ERROR("Error loading texture %s", image.uri);
+                TextureHandle newTexture = loadTexture(gpu, image.uri);
+
+                images.push(newTexture);
             }
-
-            // TODO: Add mipmap support later.
-            uint32_t w = width;
-            uint32_t h = height;
-
-            while (w > 1 && h > 1)
+            else
             {
-                w /= 2;
-                h /= 2;
+                uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
+                TextureHandle newTexture = loadTexture(gpu, rawBufferData, image.buffer_view->size);
 
-                ++mipLevels;
+                images.push(newTexture);
             }
-
-            TextureCreation creation;
-            creation.setData(imageData)
-                .setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-                .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
-                .setName(image.uri);
-
-            TextureHandle newTexture = gpu.createTexture(creation);
-            
-            VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
-
-            free(imageData);
-
-            images.push(newTexture);
         }
-        else
+    }
+    else 
+    {
+        for (uint32_t imageIndex = 0; imageIndex < cgltfData->images_count; ++imageIndex)
         {
-            int comp = 0;
-            int width = 0;
-            int height = 0;
-            uint8_t mipLevels = 1;
+            cgltf_image image = cgltfData->images[imageIndex];
 
             uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
-            stbi_info_from_memory(rawBufferData, int(image.buffer_view->size), &width, &height, &comp);
-
-            //TODO: Add mipmap support later.
-            uint32_t w = width;
-            uint32_t h = height;
-
-            while (w > 1 && h > 1)
-            {
-                w /= 2;
-                h /= 2;
-
-                ++mipLevels;
-            }
-
-            int x;
-            int y;
-            uint8_t* textureData = stbi_load_from_memory(rawBufferData, int(image.buffer_view->size), &x, &y, &comp, 4);
-
-            TextureCreation textureCreation{};
-            textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
-                .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1)
-                .setData(textureData)
-                .setFlags(mipLevels, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                .setName(nullptr);
-
-            TextureHandle newTexture = gpu.createTexture(textureCreation);
-            VOID_ASSERT(newTexture.index != INVALID_TEXTURE.index);
+            TextureHandle newTexture = loadTexture(gpu, rawBufferData, image.buffer_view->size);
 
             images.push(newTexture);
-
-            stbi_image_free(textureData);
         }
     }
 
@@ -368,7 +435,16 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                         cgltf_texture* textureInfo = material->pbr_metallic_roughness.base_color_texture.texture;
                         SamplerHandle samplerHandle = dummySampler;
 
-                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                        uint32_t imageIndex;
+                        if (material->pbr_metallic_roughness.base_color_texture.texture->has_basisu)
+                        {
+                            imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->basisu_image));
+                        }
+                        else 
+                        {
+                            imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                        }
+
                         TextureHandle& textureGPU = images[imageIndex];
 
                         if (textureInfo->sampler)
@@ -391,7 +467,15 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                         cgltf_texture* textureInfo = material->pbr_metallic_roughness.metallic_roughness_texture.texture;
                         SamplerHandle samplerHandle = dummySampler;
 
-                        uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                        uint32_t imageIndex;
+                        if (material->pbr_metallic_roughness.base_color_texture.texture->has_basisu)
+                        {
+                            imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->basisu_image));
+                        }
+                        else
+                        {
+                            imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                        }
                         TextureHandle& textureGPU = images[imageIndex];
 
                         if (textureInfo->sampler)
@@ -415,7 +499,15 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                     cgltf_texture* textureInfo = material->occlusion_texture.texture;
                     SamplerHandle samplerHandle = dummySampler;
 
-                    uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                    uint32_t imageIndex;
+                    if (material->pbr_metallic_roughness.base_color_texture.texture->has_basisu)
+                    {
+                        imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->basisu_image));
+                    }
+                    else
+                    {
+                        imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                    }
                     TextureHandle& textureGPU = images[imageIndex];
 
                     if (textureInfo->sampler)
@@ -444,7 +536,15 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                     cgltf_texture* textureInfo = material->emissive_texture.texture;
                     SamplerHandle samplerHandle = dummySampler;
 
-                    uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                    uint32_t imageIndex;
+                    if (material->pbr_metallic_roughness.base_color_texture.texture->has_basisu)
+                    {
+                        imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->basisu_image));
+                    }
+                    else
+                    {
+                        imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                    }
                     TextureHandle& textureGPU = images[imageIndex];
 
                     if (textureInfo->sampler)
@@ -475,7 +575,15 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                     cgltf_texture* textureInfo = material->normal_texture.texture;
                     SamplerHandle samplerHandle = dummySampler;
 
-                    uint32_t imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                    uint32_t imageIndex;
+                    if (material->pbr_metallic_roughness.base_color_texture.texture->has_basisu)
+                    {
+                        imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->basisu_image));
+                    }
+                    else
+                    {
+                        imageIndex = uint32_t(cgltf_image_index(cgltfData, textureInfo->image));
+                    }
                     TextureHandle& textureGPU = images[imageIndex];
 
                     if (textureInfo->sampler)
@@ -561,7 +669,8 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
                 }
                 else
                 {
-                    VOID_ERROR("The model needs tangent model %s", modelPath);
+                    meshDraw.flags = DrawFlag_NoTangent;
+                    //VOID_ERROR("The model needs tangent model %s", modelPath);
                 }
 
                 if (textureAccessor)
