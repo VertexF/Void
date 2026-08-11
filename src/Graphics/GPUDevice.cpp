@@ -683,7 +683,7 @@ vprint("Instance created.\n");
         }
 
 
-        if (vulkanPhysicalProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+        if (vulkanPhysicalProperties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
         {
             if (getFamilyQueue(physicalDevice))
             {
