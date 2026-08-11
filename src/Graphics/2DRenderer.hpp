@@ -21,9 +21,10 @@
 
 #include <SDL3/SDL_mouse.h>
 
+#include <ktxvulkan.h>
+
 struct GPUDevice;
 class ktxTexture2;
-enum ktx_transcode_fmt_e;
 
 struct Renderer2D
 {

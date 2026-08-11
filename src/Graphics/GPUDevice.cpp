@@ -666,12 +666,13 @@ vprint("Instance created.\n");
     vprint("SDL window created\n");
     VkPhysicalDevice discreteGPU = VK_NULL_HANDLE;
     VkPhysicalDevice integrateGPU = VK_NULL_HANDLE;
+    vulkanPhysicalProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     for (uint32_t i = 0; i < numPhysicalDevice; ++i)
     {
         VkPhysicalDevice physicalDevice = gpus[i];
-        vkGetPhysicalDeviceProperties(physicalDevice, &vulkanPhysicalProperties);
+        vkGetPhysicalDeviceProperties2(physicalDevice, &vulkanPhysicalProperties);
 
-        if (vulkanPhysicalProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+        if (vulkanPhysicalProperties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
         {
             if (getFamilyQueue(physicalDevice))
             {
@@ -689,7 +690,7 @@ vprint("Instance created.\n");
                 integrateGPU = physicalDevice;
             }
 
-            continue;
+           continue;
         }
     }
 
@@ -703,18 +704,18 @@ vprint("Instance created.\n");
     }
     else
     {
-        VOID_ASSERTM(false, "No suitable GPU found.");
+        VOID_ASSERTM(false, "No suitable GPU found the type was labled %d", vulkanPhysicalProperties.properties.deviceType);
     }
 
     void_free(gpus, allocator);
 
-    vkGetPhysicalDeviceProperties(vulkanPhysicalDevice, &vulkanPhysicalProperties);
-    gpuTimestampFrequency = vulkanPhysicalProperties.limits.timestampPeriod / (1000 * 1000);
+    vkGetPhysicalDeviceProperties2(vulkanPhysicalDevice, &vulkanPhysicalProperties);
+    gpuTimestampFrequency = vulkanPhysicalProperties.properties.limits.timestampPeriod / (1000 * 1000);
 
-    vprint("GPU Used: %s\n", vulkanPhysicalProperties.deviceName);
+    vprint("GPU Used: %s\n", vulkanPhysicalProperties.properties.deviceName);
 
-    UBO_ALIGNMENT = vulkanPhysicalProperties.limits.minUniformBufferOffsetAlignment;
-    SSBO_ALIGNMENT = vulkanPhysicalProperties.limits.minStorageBufferOffsetAlignment;
+    UBO_ALIGNMENT = vulkanPhysicalProperties.properties.limits.minUniformBufferOffsetAlignment;
+    SSBO_ALIGNMENT = vulkanPhysicalProperties.properties.limits.minStorageBufferOffsetAlignment;
 
     //Get the logical device
     uint32_t deviceExtensionCount = 1;
@@ -1362,7 +1363,8 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
 
                         ktx_size_t mipOffset{ 0 };
                         KTX_error_code ret = ktxTexture2_GetImageOffset(ktxTexture, mipLevel, 0, arrayLayer, &mipOffset);
-
+			VOID_ASSERTM(ret == KTX_SUCCESS, "Could not get image offset");
+			
                         VkBufferImageCopy2 region{};
                         region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
                         region.bufferOffset = mipOffset;
@@ -1384,12 +1386,9 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
                 uint32_t mipWidth = creation.width >> mipLevel;
                 uint32_t mipHeight = creation.height >> mipLevel;
 
-                ktx_size_t mipOffset{ 0 };
-                KTX_error_code ret = ktxTexture2_GetImageOffset(ktxTexture, mipLevel, 0, 0, &mipOffset);
-
                 VkBufferImageCopy2 region{};
                 region.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
-                region.bufferOffset = mipOffset;
+                region.bufferOffset = 0;
                 region.bufferRowLength = 0;
                 region.bufferImageHeight = 0;
                 region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

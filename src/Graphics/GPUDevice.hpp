@@ -250,7 +250,7 @@ struct GPUDevice
     VkAllocationCallbacks* vulkanAllocationCallbacks;
     VkInstance vulkanInstance;
     VkPhysicalDevice vulkanPhysicalDevice;
-    VkPhysicalDeviceProperties vulkanPhysicalProperties;
+    VkPhysicalDeviceProperties2 vulkanPhysicalProperties;
     VkDevice vulkanDevice;
     VkQueue vulkanQueue;
     uint32_t vulkanQueueFamily;

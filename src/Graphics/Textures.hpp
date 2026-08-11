@@ -3,8 +3,10 @@
 
 #include "GPUResources.hpp"
 
+#include "ktx.h"
+#include "ktxvulkan.h"
+
 struct GPUDevice;
-enum ktx_transcode_fmt_e;
 
 TextureHandle loadTexture(GPUDevice& gpu, const char* filePath, uint32_t* width = nullptr, uint32_t* height = nullptr);
 TextureHandle loadTexture(GPUDevice& gpu, uint8_t* bufferData, size_t size, uint32_t* width = nullptr, uint32_t* height = nullptr);

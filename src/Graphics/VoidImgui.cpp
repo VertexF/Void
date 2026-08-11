@@ -272,7 +272,7 @@ namespace
         uint32_t size = static_cast<uint16_t>(width) * static_cast<uint16_t>(height) * 4;
 
         TextureCreation textureCreation;
-        textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
+        textureCreation.setFormatType(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_VIEW_TYPE_2D)
             .setData(pixels)
             .setSize(static_cast<uint16_t>(width), static_cast<uint16_t>(height), 1, size)
             .setFlags(1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)

@@ -7,9 +7,6 @@
 #include <meshoptimizer.h>
 #include "cglm/struct/cam.h"
 
-#include <ktx.h>
-#include <ktxvulkan.h>
-
 namespace
 {
     struct PushConstant 
