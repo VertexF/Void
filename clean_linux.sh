@@ -1,3 +1,4 @@
+echo "IMPORTANT! The assets don't come with the source code."
 rm -rf build
 mkdir build
 read -p "Debug or release? [d/r]" version && [[ $version == [dD] || $version == [rR] ]]

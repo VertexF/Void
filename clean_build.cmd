@@ -1,3 +1,4 @@
+echo IMPORTANT! The assets don't come with the source code.
 rmdir build /S /Q
 mkdir build
 :: Adding "src" in the commandline makes it so CMake is looking for the main CMakeLists.txt in the src directory, not the root.
