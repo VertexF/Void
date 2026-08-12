@@ -667,6 +667,7 @@ vprint("Instance created.\n");
     VkPhysicalDevice discreteGPU = VK_NULL_HANDLE;
     VkPhysicalDevice integrateGPU = VK_NULL_HANDLE;
     vulkanPhysicalProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    vulkanPhysicalProperties.pNext = nullptr;
     for (uint32_t i = 0; i < numPhysicalDevice; ++i)
     {
         VkPhysicalDevice physicalDevice = gpus[i];
@@ -683,7 +684,7 @@ vprint("Instance created.\n");
         }
 
 
-        if (vulkanPhysicalProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+        if (vulkanPhysicalProperties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
         {
             if (getFamilyQueue(physicalDevice))
             {
