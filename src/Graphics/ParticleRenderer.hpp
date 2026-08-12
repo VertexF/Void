@@ -26,8 +26,6 @@ struct GPUDevice;
 struct ParticleRenderer
 {
 	void init(GPUDevice& inGPU);
-	void loadTexture(const char* filepath);
-	void loadKtxTexture(const char* filepath);
 	void addParticleSet(vec3s position, vec3s scale, vec2s spriteSize, vec2s rowAndColumn, vec2s offset);
 	void loadBuffer();
 	void updateParticles(CommandBuffer* commandBuffer, uint32_t particleSet, float deltaTime, vec3s directionVec, mat4s view);
@@ -41,8 +39,8 @@ struct ParticleRenderer
 
 	GPUDevice* gpu;
 
-	int width;
-	int height;
+	uint32_t width;
+	uint32_t height;
 
 	PipelineHandle particlePipeline;
 	PipelineHandle particleDrawCall;
