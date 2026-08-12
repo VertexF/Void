@@ -386,7 +386,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             drawSkybox(*gpu, *gpuCommands, pushConstants);
 
-            particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
+            //particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
 
             //imgui->render(*gpuCommands);
 

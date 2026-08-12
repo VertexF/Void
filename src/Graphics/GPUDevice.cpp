@@ -106,7 +106,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     }
 #endif //VULKAN_DEBUG_REPORT
 
-#define check(result) VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Asset Code %u", result)
+#define check(result) VOID_ASSERTM(result == VK_SUCCESS, "Vulkan Asset Code %d", result)
 
     SDL_Window* SDLWindow;
 

@@ -200,7 +200,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
             cgltf_image image = cgltfData->images[imageIndex];
 
             uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
-            TextureHandle newTexture = loadTexture(gpu, rawBufferData, image.buffer_view->size);
+            TextureHandle newTexture = loadTexture(gpu, rawBufferData, image.buffer_view->size, KTX_TTF_BC7_RGBA);
 
             images.push(newTexture);
         }

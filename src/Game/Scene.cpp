@@ -17,8 +17,8 @@ void Scene::initScene(HeapAllocator *inAllocator, GPUDevice & gpu, DescriptorSet
     models.init(allocator, 2, 2);
     debugModels.init(allocator, 1, 1);
 
-    models[EntityModels::ROCK_MODEL].loadModel("Assets/Models/out/rock.glb", gpu, descriptorSetLayout);
-    models[EntityModels::DUCK_MODEL].loadModel("Assets/Models/out/Duck.glb", gpu, descriptorSetLayout);
+    models[EntityModels::ROCK_MODEL].loadModel("Assets/Models/out/RockOP2.glb", gpu, descriptorSetLayout, true);
+    models[EntityModels::DUCK_MODEL].loadModel("Assets/Models/out/DuckOP2.glb", gpu, descriptorSetLayout, true);
 
     debugModels[DebugModelType::SPHERE].loadCollider("Assets/Models/Debug/debugSphere.glb", gpu);
 }
