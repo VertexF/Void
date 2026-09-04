@@ -160,6 +160,11 @@ static cgltf_data* setupModel(const char* modelPath, Array<cgltf_node>& nodeStac
     return cgltfData;
 }
 
+void Model::loadParticle(const char* particleSpriteSheet)
+{
+    
+}
+
 void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout, bool ktx2On)
 {
     cgltf_data* cgltfData = setupModel(modelPath, nodeStack, finalMatrix);
@@ -596,8 +601,8 @@ void Model::shutdownModel(GPUDevice& gpu)
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
         MeshDraw& meshDraw = meshDraws[meshIndex];
-            gpu.destroyDescriptorSet(meshDraw.descriptorSet);
-            gpu.destroyBuffer(meshDraw.materialBuffer);
+        gpu.destroyDescriptorSet(meshDraw.descriptorSet);
+        gpu.destroyBuffer(meshDraw.materialBuffer);
         gpu.destroyBuffer(meshDraw.vertexBuffer);
         gpu.destroyBuffer(meshDraw.indexBuffer);
     }

@@ -225,6 +225,10 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 //static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
                 //gameCamera.resetPlayerCamera();
             }
+            else if (inputHandler.isKeyJustReleased(Keys::KEY_2))
+            {
+                scene.testSwarn();
+            }
 
             ////NOTE: This must be after the OS messages.
             //imgui->newFrame();
@@ -369,7 +373,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 {
                     VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
 
-                    MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
+                    const MeshDraw& meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
 
                     Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;

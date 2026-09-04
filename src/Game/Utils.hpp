@@ -14,6 +14,7 @@ enum EntityType : uint8_t
     PLAYER,
     ROCK,
     DUCK,
+    BULLET,
     SPEC_SPHERE,
 
     COUNT_TYPE
@@ -24,6 +25,8 @@ enum EntityModels : uint8_t
     ROCK_MODEL,
     DUCK_MODEL,
     SPEC_SPHERE_MODEL,
+
+    BULLET_2D_RENDERER,
 
     MODEL_COUNT
 };
@@ -49,7 +52,7 @@ struct Entity
     bool isDeleted = false;
 };
 
-static mat4s convertToMat4(const JPH::RMat44& jphMat)
+inline mat4s convertToMat4(const JPH::RMat44& jphMat)
 {
     JPH::Vec4 col1 = jphMat.mCol[0];
     JPH::Vec4 col2 = jphMat.mCol[1];

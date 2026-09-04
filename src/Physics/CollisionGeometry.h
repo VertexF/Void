@@ -1,6 +1,7 @@
 #ifndef COLLISION_GEOMETRY_HDR
 #define COLLISION_GEOMETRY_HDR
 
+//TODO: Create debug geometry for collision and lighting etc here rather than loading in a model on disk.
 //1.000000 1.000000 - 1.000000
 //1.000000 - 1.000000 - 1.000000
 //1.000000 1.000000 1.000000
