@@ -192,8 +192,8 @@ void AudioSystem::loadAudio()
     MemoryService::instance()->scratchAllocator.freeMarker(musicMarker);
     fullAddress.shutdown();
 
-    //ma_sound_set_looping(&music[mus::Lufia2Battle], MA_TRUE);
-    //ma_sound_start(&music[mus::Lufia2Battle]);
+    ma_sound_set_looping(&music[mus::Lufia2Battle], MA_TRUE);
+    ma_sound_start(&music[mus::Lufia2Battle]);
 
     //ma_sound_set_looping(&soundEffects[sfx::FlyingNoise], MA_TRUE);
     //ma_sound_start(&soundEffects[sfx::FlyingNoise]);

@@ -56,7 +56,8 @@ namespace
         float padd[3];
     };
 
-    constexpr const uint32_t particleCount = 40000;
+    //IMPORTANT: Make sure the size of the buffer is the same as the number of particles used in a scene.
+    constexpr const uint32_t particleCount = 1000;
     constexpr const uint32_t maxDrawCount = 101;
 }
 
@@ -150,7 +151,7 @@ void ParticleRenderer::addParticleSet(vec3s position, vec3s scale, vec2s spriteS
     data.texCoords[1] = vec2s{ max.x, max.y };
     data.texCoords[2] = vec2s{ max.x, min.y };
     data.texCoords[3] = vec2s{ min.x, min.y };
-    data.maxAge = 0.03f;
+    data.maxAge = 10.f;
 
     particleSets.push(data);
 }

@@ -43,7 +43,7 @@ layout(scalar, push_constant) uniform entityIndex
 	mat4 view;
 };
 
-layout(local_size_x_id = 64, local_size_y_id = 2, local_size_z_id = 1) in;
+layout(local_size_x_id = 1, local_size_y_id = 1, local_size_z_id = 1) in;
 
 #define EPSILON 0.000002
 
@@ -89,7 +89,7 @@ void main()
 	float speed = prng(state) * 50.f;
 	//float speed = 25.f;
 
-	//vec3 velocity = normalize(vec3(rand0 + EPSILON, rand1 + EPSILON, rand2 + EPSILON) - vec3(0.5)) * speed;
+	vec3 velocity = normalize(vec3(rand0 + EPSILON, rand1 + EPSILON, rand2 + EPSILON) - vec3(0.5)) * speed;
 	//vec3 velocity = normalize(vec3(rand0, rand1, rand2) - vec3(0.5)) * 50.f;
 	vec3 vel = up;
 	vel += forward * prng(state) * 10.f;
@@ -97,8 +97,8 @@ void main()
 	
 	//vec3 vel = cameraRightWorld;//vec3(0.f, 0.f, 1.f);
 	vec4 newPositionAndAge;
-	//newPositionAndAge.xyz = oldPosition.xyz + velocity * delta;
-	newPositionAndAge.xyz = oldPosition.xyz + vel.xyz * delta * 1.f;
+	newPositionAndAge.xyz = oldPosition.xyz + velocity * delta;
+	//newPositionAndAge.xyz = oldPosition.xyz + vel.xyz * delta * 1.f;
 	newPositionAndAge.w = oldPosition.w + (prng(state) + 0.05) * delta;
 
 	//Add particle logic + cull
