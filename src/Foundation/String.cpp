@@ -40,7 +40,7 @@ void StringView::copyTo(const StringView& string, char* buffer, size_t bufferSiz
 {
     //We are taking into account a null vector.
     const size_t maxLength = bufferSize - 1 < string.length ? bufferSize : string.length;
-    memoryCopy(buffer, string.text, maxLength);
+    memcpy(buffer, string.text, maxLength);
     buffer[string.length] = 0;
 }
 
@@ -87,7 +87,7 @@ void StringBuffer::append(const StringView& text)
         return;
     }
 
-    memoryCopy(&data[currentSize], text.text, maxLength);
+    memcpy(&data[currentSize], text.text, maxLength);
     currentSize += static_cast<uint32_t>(maxLength);
 
     //Add null termination for string. By allocating one extra character for the null termination this is safe to do.
@@ -104,7 +104,7 @@ void StringBuffer::appendM(void* memory, size_t size)
         return;
     }
 
-    memoryCopy(&data[currentSize], memory, size);
+    memcpy(&data[currentSize], memory, size);
     currentSize += static_cast<uint32_t>(size);
 }
 
@@ -122,7 +122,7 @@ void StringBuffer::append(const StringBuffer& otherBuffer)
         return;
     }
 
-    memoryCopy(&data[currentSize], otherBuffer.data, otherBuffer.currentSize);
+    memcpy(&data[currentSize], otherBuffer.data, otherBuffer.currentSize);
     currentSize += otherBuffer.currentSize;
 }
 
@@ -210,7 +210,6 @@ char* StringBuffer::appendUseSubString(const char* string, uint32_t startIndex, 
 
     uint32_t cachedOffset = currentSize;
 
-    //memoryCopy() can't be used 
     memcpy(&data[currentSize], string, size);
     currentSize += size;
 

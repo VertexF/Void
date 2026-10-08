@@ -5,6 +5,8 @@
 
 #include <stdlib.h>
 #include <memory.h>
+#include <thread>
+#include <chrono>
 
 #if defined VOID_IMGUI
     #include <vender/imgui/imgui.h>
@@ -55,6 +57,7 @@ void MemoryService::init(uint64_t heapSize, uint64_t stackSize, uint32_t physics
     scratchAllocator.init(stackSize != 0 ? stackSize : void_mega(8));
     physicsAllocator.init(physicsStackSize != 0 ? physicsStackSize : void_mega(8));
     systemAllocator.init(heapSize != 0 ? heapSize : MEMORY_SIZE);
+    threadedHeapAllocator.init(void_mega(32));
 }
 
 void MemoryService::shutdown()
@@ -62,6 +65,7 @@ void MemoryService::shutdown()
     scratchAllocator.shutdown();
     physicsAllocator.shutdown();
     systemAllocator.shutdown();
+    threadedHeapAllocator.shutdown();
 
     vprint("Memory Service Shutdown.\n");
 }
@@ -226,9 +230,47 @@ void HeapAllocator::deallocate(void* pointer)
 #endif
 }
 
-void memoryCopy(void* destination, void* source, size_t size) 
+void ThreadedHeapAllocator::init(size_t size)
 {
-    memcpy(destination, source, size);
+    memory = malloc(size);
+    maxSize = size;
+    allocatedSize = 0;
+
+    memset(memory, 0, size);
+
+    tlsf_thread_init(&tlsfThreadHandle, memory, size);
+    vprint("HeapAllocator of size %llu created.\n", size);
+}
+
+void ThreadedHeapAllocator::shutdown() 
+{
+    tlsf_thread_destroy(&tlsfThreadHandle);
+}
+
+void* ThreadedHeapAllocator::allocate(size_t size, size_t alignment) 
+{
+    void* memory = tlsf_thread_malloc(&tlsfThreadHandle, size);
+    VOID_ASSERTM(memory != nullptr, "tlsf_thread_malloc failed to allocate memory.\n");
+    vthreadprint("Memory: %p, size %llu \n", memory, size);
+    return memory;
+}
+
+void* ThreadedHeapAllocator::allocate(size_t size, size_t alignment, const char* file, int32_t line) 
+{
+    return allocate(size, alignment);
+}
+
+void* ThreadedHeapAllocator::reallocate(void* pointer, size_t size) 
+{
+    return nullptr;
+}
+
+void ThreadedHeapAllocator::deallocate(void* pointer) 
+{
+    tlsf_thread_free(&tlsfThreadHandle, pointer);
+
+    size_t actualSize = tlsf_usable_size(pointer);
+    allocatedSize -= actualSize;
 }
 
 size_t memoryAlign(size_t size, size_t alignment) 

@@ -493,7 +493,7 @@ void GPUTimestampManager::reset()
 //Returns the total queries for this frame.
 uint32_t GPUTimestampManager::resolve(uint32_t currentFrame, GPUTimestamp* timestampsToFill)
 {
-    memoryCopy(timestampsToFill, &timestamps[currentFrame * queriesPerFrame], sizeof(GPUTimestamp) * currentQuery);
+    memcpy(timestampsToFill, &timestamps[currentFrame * queriesPerFrame], sizeof(GPUTimestamp) * currentQuery);
     return currentQuery;
 }
 

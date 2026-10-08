@@ -130,8 +130,23 @@ FileReadResult fileReadText(const char* filename, Allocator* alloc)
 void fileWriteBinary(const char* filename, void* memory, size_t size)
 {
     FILE* file = fopen(filename, "wb");
-    fwrite(memory, size, 1, file);
-    fclose(file);
+    if (file)
+    {
+        fwrite(memory, size, 1, file);
+        fclose(file);
+    }
+}
+
+void fileWriteText(const char* filename, char* memory, size_t size, int stringLenght)
+{
+    //const char test[100] = "Hello world!";
+
+    FILE* file = fopen(filename, "a+");
+    if (file)
+    {
+        fwrite(memory, sizeof(memory[0]), stringLenght, file);
+        fclose(file);
+    }
 }
 
 bool fileExists(const char* path)
@@ -236,7 +251,7 @@ void fileNameFromPath(char* path)
     if (lastSeparator != nullptr) 
     {
         size_t nameLength = strlen(lastSeparator + 1);
-        memoryCopy(path, lastSeparator + 1, nameLength);
+        memcpy(path, lastSeparator + 1, nameLength);
         path[nameLength] = 0;
     }
 }

@@ -59,11 +59,11 @@ void BlobSerialiser::serialise(char* data)
 {
     if (isReading) 
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(char));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(char));
     }
     else 
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(char));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(char));
     }
 
     serialisedOffset += sizeof(char);
@@ -73,11 +73,11 @@ void BlobSerialiser::serialise(int8_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(int8_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(int8_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(int8_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(int8_t));
     }
 
     serialisedOffset += sizeof(int8_t);
@@ -87,11 +87,11 @@ void BlobSerialiser::serialise(uint8_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(uint8_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(uint8_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(uint8_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(uint8_t));
     }
 
     serialisedOffset += sizeof(uint8_t);
@@ -101,11 +101,11 @@ void BlobSerialiser::serialise(int16_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(int16_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(int16_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(int16_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(int16_t));
     }
 
     serialisedOffset += sizeof(int16_t);
@@ -115,11 +115,11 @@ void BlobSerialiser::serialise(uint16_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(uint16_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(uint16_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(uint16_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(uint16_t));
     }
 
     serialisedOffset += sizeof(uint16_t);
@@ -129,11 +129,11 @@ void BlobSerialiser::serialise(int32_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(int32_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(int32_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(int32_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(int32_t));
     }
 
     serialisedOffset += sizeof(int32_t);
@@ -143,11 +143,11 @@ void BlobSerialiser::serialise(uint32_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(uint32_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(uint32_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(uint32_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(uint32_t));
     }
 
     serialisedOffset += sizeof(uint32_t);
@@ -157,11 +157,11 @@ void BlobSerialiser::serialise(int64_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(int64_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(int64_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(int64_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(int64_t));
     }
 
     serialisedOffset += sizeof(int64_t);
@@ -171,11 +171,11 @@ void BlobSerialiser::serialise(uint64_t* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(uint64_t));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(uint64_t));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(uint64_t));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(uint64_t));
     }
 
     serialisedOffset += sizeof(uint64_t);
@@ -185,11 +185,11 @@ void BlobSerialiser::serialise(float* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(float));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(float));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(float));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(float));
     }
 
     serialisedOffset += sizeof(float);
@@ -199,11 +199,11 @@ void BlobSerialiser::serialise(double* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(double));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(double));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(double));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(double));
     }
 
     serialisedOffset += sizeof(double);
@@ -213,11 +213,11 @@ void BlobSerialiser::serialise(bool* data)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], sizeof(bool));
+        memcpy(data, &blobMemory[serialisedOffset], sizeof(bool));
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, sizeof(bool));
+        memcpy(&blobMemory[serialisedOffset], data, sizeof(bool));
     }
 
     serialisedOffset += sizeof(bool);
@@ -249,7 +249,7 @@ void BlobSerialiser::serialise(RelativeString* data)
             allocateStatic(static_cast<size_t>(data->size + 1));
 
             char* sourceData = blobMemory + cachedSerialised + sourceDataOffset - 4;
-            memoryCopy((char*)data->c_str(), sourceData, (size_t)data->size + 1);
+            memcpy((char*)data->c_str(), sourceData, (size_t)data->size + 1);
             vprint("Found %s\n", data->c_str());
             //Restore serialised
             serialisedOffset = cachedSerialised;
@@ -274,7 +274,7 @@ void BlobSerialiser::serialise(RelativeString* data)
         allocateStatic(static_cast<size_t>(data->size + 1));
 
         char* destinationData = blobMemory + serialisedOffset;
-        memoryCopy(destinationData, (char*)data->c_str(), static_cast<size_t>(data->size + 1));
+        memcpy(destinationData, (char*)data->c_str(), static_cast<size_t>(data->size + 1));
         vprint("Written %s, Found %s\n", data->c_str(), destinationData);
 
         //Restore serilised
@@ -286,11 +286,11 @@ void BlobSerialiser::serialiseMemory(void* data, size_t size)
 {
     if (isReading)
     {
-        memoryCopy(data, &blobMemory[serialisedOffset], size);
+        memcpy(data, &blobMemory[serialisedOffset], size);
     }
     else
     {
-        memoryCopy(&blobMemory[serialisedOffset], data, size);
+        memcpy(&blobMemory[serialisedOffset], data, size);
     }
 
     serialisedOffset += static_cast<uint32_t>(size);
@@ -318,7 +318,7 @@ void BlobSerialiser::serialiseMemoryBlock(void** data, uint32_t* size)
             allocateStatic(*size);
 
             char* sourceData = blobMemory + cachedSerialised + sourceDataOffset - 4;
-            memoryCopy(*data, sourceData, *size);
+            memcpy(*data, sourceData, *size);
             //Restore serialised
             serialisedOffset = cachedSerialised;
         }
@@ -342,7 +342,7 @@ void BlobSerialiser::serialiseMemoryBlock(void** data, uint32_t* size)
         allocateStatic(*size);
 
         char* destinationdata = blobMemory + serialisedOffset;
-        memoryCopy(destinationdata, *data, *size);
+        memcpy(destinationdata, *data, *size);
 
         //Restore serialised.
         serialisedOffset = cachedSerialised;

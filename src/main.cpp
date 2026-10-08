@@ -19,58 +19,58 @@ int main(int argc, char** argv)
     MemoryService::instance()->init(/*heapSize=*/ void_giga(1ull), /*stackSize=*/ void_mega(8), /*physicsStackSiz=*/ void_mega(40));
     timeServiceInit();
 
-    HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
-    StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
+    //HeapAllocator* allocator = &MemoryService::instance()->systemAllocator;
+    //StackAllocator scratchAllocator = MemoryService::instance()->scratchAllocator;
 
-    Window::instance()->init(1280, 800, "Void Engine");
+    //Window::instance()->init(1280, 800, "Void Engine");
 
-    InputHandler inputHandler;
-    inputHandler.init(allocator);
+    //InputHandler inputHandler;
+    //inputHandler.init(allocator);
 
-    DeviceCreation deviceCreation;
-    deviceCreation.setWindow(Window::instance()->width, Window::instance()->height, Window::instance()->platformHandle)
-        .setAllocator(allocator)
-        .setLinearAllocator(&scratchAllocator);
+    //DeviceCreation deviceCreation;
+    //deviceCreation.setWindow(Window::instance()->width, Window::instance()->height, Window::instance()->platformHandle)
+    //    .setAllocator(allocator)
+    //    .setLinearAllocator(&scratchAllocator);
 
-    GPUDevice gpu;
-    gpu.init(deviceCreation);
+    //GPUDevice gpu;
+    //gpu.init(deviceCreation);
 
-    GPUProfiler gpuProfiler;
-    gpuProfiler.init(allocator, 100);
+    //GPUProfiler gpuProfiler;
+    //gpuProfiler.init(allocator, 100);
 
-    ImguiService* imgui;
-    imgui = ImguiService::instance();
-    ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
-    imgui->init(&imguiConfig);
+    //ImguiService* imgui;
+    //imgui = ImguiService::instance();
+    //ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
+    //imgui->init(&imguiConfig);
 
-    AudioSystem audioSystem;
-    audioSystem.init();
-    audioSystem.loadAudio();
+    //AudioSystem audioSystem;
+    //audioSystem.init();
+    //audioSystem.loadAudio();
 
-    //Window::instance()->setFullscreen(true);
+    ////Window::instance()->setFullscreen(true);
 
-    MainMenu mainMenu;
-    mainMenu.init(gpu, audioSystem, *imgui);
-    mainMenu.loop(inputHandler, gpuProfiler);
-    mainMenu.shutdown();
+    //MainMenu mainMenu;
+    //mainMenu.init(gpu, audioSystem, *imgui);
+    //mainMenu.loop(inputHandler, gpuProfiler);
+    //mainMenu.shutdown();
 
-    if (Window::instance()->exitRequested == false)
-    {
-        Game game;
-        game.init(gpu, audioSystem, *imgui);
-        game.loop(inputHandler, gpuProfiler);
-        game.shutdown();
-    }
+    //if (Window::instance()->exitRequested == false)
+    //{
+    //    Game game;
+    //    game.init(gpu, audioSystem, *imgui);
+    //    game.loop(inputHandler, gpuProfiler);
+    //    game.shutdown();
+    //}
 
-    audioSystem.shutdown();
+    //audioSystem.shutdown();
 
-    imgui->shutdown();
+    //imgui->shutdown();
 
-    gpuProfiler.shutdown();
+    //gpuProfiler.shutdown();
 
-    gpu.shutdown();
+    //gpu.shutdown();
 
-    inputHandler.shutdown();
+    //inputHandler.shutdown();
     Window::instance()->shutdown();
 
     MemoryService::instance()->shutdown();

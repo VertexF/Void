@@ -128,7 +128,7 @@ struct Array
         T* newData = (T*)allocator->allocate(newCapacity * sizeof(T), alignof(T));
         if (capacity)
         {
-            memoryCopy(newData, data, capacity * sizeof(T));
+            memcpy(newData, data, capacity * sizeof(T));
 
             allocator->deallocate(data);
         }
@@ -177,7 +177,7 @@ struct Array
         //As it will overrun the allocated memory of the destination array.
         VOID_ASSERTM(capacity >= source.size, "Source array's size can't be bigger than the capacity of the desination array's size.");
 
-        memoryCopy(data, source.data, source.size * sizeof(T));
+        memcpy(data, source.data, source.size * sizeof(T));
         size = source.size;
     }
 
@@ -189,7 +189,7 @@ struct Array
             grow(newSize);
         }
 
-        memoryCopy(data + size, source.data, source.size * sizeof(T));
+        memcpy(data + size, source.data, source.size * sizeof(T));
         size += source.size;
     }
 

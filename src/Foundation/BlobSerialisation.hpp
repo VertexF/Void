@@ -325,7 +325,7 @@ struct BlobSerialiser
 
         if (sourceData)
         {
-            memoryCopy(destinationMemory, sourceData, sizeof(T));
+            memcpy(destinationMemory, sourceData, sizeof(T));
         }
     }
 
@@ -338,7 +338,7 @@ struct BlobSerialiser
 
         if (sourceData)
         {
-            memoryCopy(destinationMemory, sourceData, sizeof(T) * numElements);
+            memcpy(destinationMemory, sourceData, sizeof(T) * numElements);
         }
 
     }

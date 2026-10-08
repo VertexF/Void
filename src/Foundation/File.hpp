@@ -43,6 +43,7 @@ FileReadResult fileReadBinary(const char* filename, Allocator* alloc);
 FileReadResult fileReadText(const char* filename, Allocator* alloc);
 
 void fileWriteBinary(const char* filename, void* memory, size_t size);
+void fileWriteText(const char* filename, char* memory, size_t size, int stringLength);
 
 bool fileExists(const char* path);
 void fileOpen(const char* filename, const char* mode, FileHandle* file);

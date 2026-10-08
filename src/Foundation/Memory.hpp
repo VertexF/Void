@@ -2,12 +2,12 @@
 #define MEMORY_HDR
 
 #include <tlsf.h>
+#include <tlsf_thread.h>
 
 #include "Platform.hpp"
 
 //#define VOID_IMGUI
 
-void memoryCopy(void* destination, void* source, size_t size);
 //Calculate memory alignment size.
 size_t memoryAlign(size_t size, size_t alignment);
 
@@ -56,6 +56,25 @@ struct HeapAllocator : public Allocator
     virtual void deallocate(void* pointer) override;
 
     tlsf_t TLSFHandle;
+    void* memory = nullptr;
+    size_t allocatedSize = 0;
+    size_t maxSize = 0;
+};
+
+struct ThreadedHeapAllocator : public Allocator
+{
+    virtual ~ThreadedHeapAllocator() = default;
+
+    void init(size_t size);
+    void shutdown();
+
+    virtual void* allocate(size_t size, size_t alignment) override;
+    virtual void* allocate(size_t size, size_t alignment, const char* file, int32_t line) override;
+    virtual void* reallocate(void* pointer, size_t size) override;
+
+    virtual void deallocate(void* pointer) override;
+
+    tlsf_thread_t tlsfThreadHandle;
     void* memory = nullptr;
     size_t allocatedSize = 0;
     size_t maxSize = 0;
@@ -143,6 +162,7 @@ struct MemoryService
     //The jolt needs a larger sized piece of temporary memory.
     StackAllocator physicsAllocator{};
     HeapAllocator systemAllocator{};
+    ThreadedHeapAllocator threadedHeapAllocator{};
 };
 
 #define void_alloca(size, allocator) ((allocator)->allocate(size, 1, __FILE__, __LINE__))
