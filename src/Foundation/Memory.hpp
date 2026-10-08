@@ -1,6 +1,8 @@
 #ifndef MEMORY_HDR
 #define MEMORY_HDR
 
+#include <tlsf.h>
+
 #include "Platform.hpp"
 
 //#define VOID_IMGUI
@@ -53,7 +55,7 @@ struct HeapAllocator : public Allocator
 
     virtual void deallocate(void* pointer) override;
 
-    void* TLSFHandle  = nullptr;
+    tlsf_t TLSFHandle;
     void* memory = nullptr;
     size_t allocatedSize = 0;
     size_t maxSize = 0;

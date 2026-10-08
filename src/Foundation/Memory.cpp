@@ -38,7 +38,7 @@
     #endif //VOID_MEMORY_DEBUG
 #endif
 
-static size_t MEMORY_SIZE = void_mega(32) + tlsf_size() + 8;
+static size_t MEMORY_SIZE = void_mega(32) + sizeof(tlsf_t) + 8;
 
 static void exitWalker(void* ptr, size_t size, int used, void* user);
 static void imguiWalker(void* ptr, size_t size, int used, void* user);
@@ -120,16 +120,16 @@ void HeapAllocator::init(size_t size)
 
     memset(memory, 0, size);
 
-    TLSFHandle = tlsf_create_with_pool(memory, size);
+    TLSFHandle = TLSF_INIT;
+    tlsf_pool_init(&TLSFHandle, memory, size);
     vprint("HeapAllocator of size %llu created.\n", size);
 }
 
 void HeapAllocator::shutdown()
 {
     MemoryStatistics stats{ 0, maxSize };
-    pool_t pool = tlsf_get_pool(TLSFHandle);
-    tlsf_walk_pool(pool, exitWalker, (void*)&stats);
 
+    tlsf_check(&TLSFHandle);
     if (stats.allocatedBytes)
     {
         vprint("HeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", stats.allocatedBytes, stats.totalBytes);
@@ -140,8 +140,6 @@ void HeapAllocator::shutdown()
     }
 
     VOID_ASSERTM(stats.allocatedBytes == 0, "Allocated bytes are still present.\n");
-
-    tlsf_destroy(TLSFHandle);
 
     free(memory);
 }
@@ -184,7 +182,8 @@ protected:
 
 void* HeapAllocator::allocate(size_t size, size_t alignment)
 {
-    void* memory = tlsf_malloc(TLSFHandle, size);
+    void* memory = tlsf_malloc(&TLSFHandle, size);
+    VOID_ASSERTM(memory != nullptr, "tlsf_malloc failed to allocate memory.\n");
     vprint("Memory: %p, size %llu \n", memory, size);
     return memory;
 }
@@ -192,13 +191,13 @@ void* HeapAllocator::allocate(size_t size, size_t alignment)
 void* HeapAllocator::allocate(size_t size, size_t alignment)
 {
 #if defined(HEAP_ALLOCATOR_STATS)
-    void* allocatedMemory = alignment == 1 ? tlsf_malloc(TLSFHandle, size) : tlsf_memalign(TLSFHandle, alignment, size);
-    size_t actualSize = tlsf_block_size(allocatedMemory);
+    void* allocatedMemory = alignment == 1 ? tlsf_malloc(&TLSFHandle, size) : tlsf_aalloc(&TLSFHandle, alignment, size);
+    size_t actualSize = tlsf_usable_size(allocatedMemory);
     allocatedSize += actualSize;
 
     return allocatedMemory;
 #else
-    return tlsf_malloc(TLSFHandle, size);
+    return tlsf_malloc(&TLSFHandle, size);
 #endif
 }
 #endif //VOID_MEMORY_STACK
@@ -210,7 +209,7 @@ void* HeapAllocator::allocate(size_t size, size_t alignment, const char* file, i
 
 void* HeapAllocator::reallocate(void* pointer, size_t size) 
 {
-    void* memory = tlsf_realloc(TLSFHandle, pointer, size);
+    void* memory = tlsf_realloc(&TLSFHandle, pointer, size);
     vprint("Memory: %p, size %llu \n", memory, size);
     return memory;
 }
@@ -218,10 +217,10 @@ void* HeapAllocator::reallocate(void* pointer, size_t size)
 void HeapAllocator::deallocate(void* pointer)
 {
 #if defined (HEAP_ALLOCATOR_STATS)
-    size_t actualSize = tlsf_block_size(pointer);
+    size_t actualSize = tlsf_usable_size(pointer);
     allocatedSize -= actualSize;
 
-    tlsf_free(TLSFHandle, pointer);
+    tlsf_free(&TLSFHandle, pointer);
 #else
     tlsf_free(TLSFHandle, pointer);
 #endif

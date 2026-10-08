@@ -19,7 +19,7 @@ else(UNIX)
     set(VULKAN_INCLUDE_DIR "$ENV{VULKAN_SDK}/include")
 endif()
 set(CGLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/cglm/include")
-set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf")
+set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf-bsd/include")
 set(STACK_WALKER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/StackWalker/Main/StackWalker")
 set(RAPID_HASH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/rapidhash")
 set(VENDIR_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
@@ -114,11 +114,13 @@ if (WIN32)
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX
+                               TLSF_ENABLE_CHECK
                                #VOID_IMGUI                        
                                VK_USE_PLATFORM_WIN32_KHR)
 else(UNIX)
     target_compile_definitions(Void PRIVATE 
                                CGLM_FORCE_DEPTH_ZERO_TO_ONE
+                               TLSF_ENABLE_CHECK
                                #VOID_IMGUI                     
                                VK_USE_PLATFORM_WAYLAND_KHR)
     target_compile_options(Void PRIVATE -Wno-unused-function)
@@ -217,8 +219,8 @@ target_include_directories(Foundation SYSTEM PRIVATE
 ###External
 
 add_library(External STATIC
-    vender/tlsf/tlsf.c
-    vender/tlsf/tlsf.h
+    vender/tlsf-bsd/src/tlsf.c
+    vender/tlsf-bsd/src/tlsf_thread.c
 
     vender/imgui/imconfig.h
     vender/imgui/imgui_draw.cpp
@@ -296,7 +298,8 @@ target_include_directories(ktx SYSTEM PRIVATE ${KTX_LIB_INCLUDE_DIR}
                            ${VULKAN_INCLUDE_DIR}
                            ${KTX_STDZ}
                            ${KTX_EXTERNAL}
-                           ${DF_INCLUDE})
+                           ${DF_INCLUDE}
+						   ${TLSF_INCLUDE_DIR})
 
 target_compile_definitions(ktx PUBLIC KHRONOS_STATIC)
 
@@ -311,18 +314,21 @@ endif()
 target_compile_definitions(External PRIVATE
                           TRACY_ENABLE
                           TRACY_ON_DEMAND
-                          TRACY_NO_SYSTEM_TRACING)
+                          TRACY_NO_SYSTEM_TRACING
+                          TLSF_ENABLE_CHECK)
 
 if (WIN32)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE})
+                               ${IMGUI_INCLUDE}
+							   ${TLSF_INCLUDE_DIR})
 else()
     target_link_libraries(External PRIVATE
                           dl)
     target_include_directories(External PRIVATE
                                ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE})
+                               ${IMGUI_INCLUDE}
+							   ${TLSF_INCLUDE_DIR})
 endif()
 
 ###Physics

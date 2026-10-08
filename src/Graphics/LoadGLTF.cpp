@@ -46,9 +46,9 @@ static cgltf_data* setupModel(const char* modelPath, Array<cgltf_node>& nodeStac
     cgltf_data* cgltfData = nullptr;
 
     cgltf_options options{};
-    options.memory.alloc_func = tlsf_malloc;
-    options.memory.free_func = tlsf_free;
-    options.memory.user_data = MemoryService::instance()->systemAllocator.TLSFHandle;
+    //options.memory.alloc_func = tlsf_malloc;
+    //options.memory.free_func = tlsf_free;
+    //options.memory.user_data = &MemoryService::instance()->systemAllocator.TLSFHandle;
     cgltf_result result = cgltf_parse_file(&options, modelPath, &cgltfData);
     if (result != cgltf_result_success)
     {

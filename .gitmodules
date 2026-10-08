@@ -22,3 +22,6 @@
 [submodule "vender/meshoptimizer"]
 	path = vender/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer.git
+[submodule "vender/tlsf-bsd"]
+	path = vender/tlsf-bsd
+	url = https://github.com/sysprog21/tlsf-bsd.git

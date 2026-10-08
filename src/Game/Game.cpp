@@ -191,7 +191,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
         //New Frame
         if (Window::instance()->minimised == false)
         {
-            playerPosition = convertToVec3(static_cast<Player*>(scene.entities[0].entityData)->character->GetPosition());
+            //playerPosition = convertToVec3(static_cast<Player*>(scene.entities[0].entityData)->character->GetPosition());
 
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
@@ -261,20 +261,20 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             Physics::instance().updatePhysics(deltaTime);
 
-            static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
+            //static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
 
             gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
-            //Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
+            //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
+            Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
             
-            deleteEntity();
+            //deleteEntity();
 
             CommandBuffer* gpuCommands = gpu->getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
 
-            vec3s directionalVec = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 1.f));
+            //vec3s directionalVec = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 1.f));
 
             particleRenderer.updateParticles(gpuCommands, 0, deltaTime, gameCamera.internal3DCamera.direction, gameCamera.internal3DCamera.view);
             particleRenderer.createParticleDrawCalls(gpuCommands);
@@ -294,9 +294,9 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             globalSceneData.view = gameCamera.internal3DCamera.view;
             globalSceneData.project = gameCamera.internal3DCamera.projection;
             globalSceneData.eye = vec4s{ gameCamera.internal3DCamera.direction.x, gameCamera.internal3DCamera.direction.y, gameCamera.internal3DCamera.direction.z, 1.f };
-            vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, -10.f));
-            globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z };
-            //globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
+            //vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, -10.f));
+            //globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z };
+            globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             vmaCopyMemoryToAllocation(gpu->VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
 
