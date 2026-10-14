@@ -175,10 +175,8 @@ struct ArrayThread
         lock.unlock();
     }
 
-    void grow(uint32_t newCapacity) 
-    {
-        //lock.lock();
-        
+    void grow(uint32_t newCapacity)
+    {   
         if (newCapacity < capacity * 2)
         {
             newCapacity = capacity * 2;
@@ -198,7 +196,6 @@ struct ArrayThread
 
         data = newData;
         capacity = newCapacity;
-        //lock.unlock();
     }
 
     T& back()
@@ -240,6 +237,11 @@ struct ArrayThread
     uint32_t capacityInByte() const
     {
         return capacity * sizeof(T);
+    }
+
+    uint32_t get(uint32_t index) const 
+    {
+        return data[index];
     }
 
     void copyArray(const Array<T>& source)
