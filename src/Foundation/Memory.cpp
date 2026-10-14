@@ -132,18 +132,18 @@ void HeapAllocator::init(size_t size)
 void HeapAllocator::shutdown()
 {
     MemoryStatistics stats{ 0, maxSize };
-
-    tlsf_check(&TLSFHandle);
-    if (stats.allocatedBytes)
+    tlsf_stats_t tlsfStats;
+    tlsf_get_stats(&TLSFHandle, &tlsfStats);
+    if (tlsfStats.total_used)
     {
-        vprint("HeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", stats.allocatedBytes, stats.totalBytes);
+        vprint("HeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", tlsfStats.total_used, tlsfStats.total_free + tlsfStats.total_used);
     }
     else
     {
         vprint("HeapAllocator Shutdown - all memory freed.\n");
     }
 
-    VOID_ASSERTM(stats.allocatedBytes == 0, "Allocated bytes are still present.\n");
+    VOID_ASSERTM(tlsfStats.total_used == 0, "Allocated bytes are still present.\n");
 
     free(memory);
 }

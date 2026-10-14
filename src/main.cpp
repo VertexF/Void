@@ -75,7 +75,7 @@ int main(int argc, char** argv)
 
     gpu.shutdown();
 
-    //inputHandler.shutdown();
+    inputHandler.shutdown();
     Window::instance()->shutdown();
 
     MemoryService::instance()->shutdown();
