@@ -9,7 +9,7 @@
 
 VoidContactListener::VoidContactListener()
 {
-    toDeleteQueue.init(&MemoryService::instance()->systemAllocator, 4);
+    toDeleteQueue.init(&MemoryService::instance()->threadedHeapAllocator, 4);
 }
 
 // See: ContactListener

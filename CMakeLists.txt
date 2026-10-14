@@ -160,6 +160,7 @@ endif()
 ###Foundation
 
 set(FOUNDATION_SOURCE src/Foundation/Array.hpp
+                      src/Foundation/ArrayThread.hpp
                       src/Foundation/Assert.hpp
                       src/Foundation/Bit.cpp
                       src/Foundation/Bit.hpp

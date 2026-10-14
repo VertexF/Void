@@ -139,8 +139,6 @@ void fileWriteBinary(const char* filename, void* memory, size_t size)
 
 void fileWriteText(const char* filename, char* memory, size_t size, int stringLenght)
 {
-    //const char test[100] = "Hello world!";
-
     FILE* file = fopen(filename, "a+");
     if (file)
     {

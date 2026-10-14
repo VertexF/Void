@@ -57,7 +57,7 @@ void MemoryService::init(uint64_t heapSize, uint64_t stackSize, uint32_t physics
     scratchAllocator.init(stackSize != 0 ? stackSize : void_mega(8));
     physicsAllocator.init(physicsStackSize != 0 ? physicsStackSize : void_mega(8));
     systemAllocator.init(heapSize != 0 ? heapSize : MEMORY_SIZE);
-    threadedHeapAllocator.init(void_mega(32));
+    threadedHeapAllocator.init(void_mega(256));
 }
 
 void MemoryService::shutdown()
@@ -267,10 +267,10 @@ void* ThreadedHeapAllocator::reallocate(void* pointer, size_t size)
 
 void ThreadedHeapAllocator::deallocate(void* pointer) 
 {
-    tlsf_thread_free(&tlsfThreadHandle, pointer);
-
     size_t actualSize = tlsf_usable_size(pointer);
     allocatedSize -= actualSize;
+
+    tlsf_thread_free(&tlsfThreadHandle, pointer);
 }
 
 size_t memoryAlign(size_t size, size_t alignment) 

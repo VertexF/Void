@@ -78,6 +78,7 @@ struct ThreadedHeapAllocator : public Allocator
     void* memory = nullptr;
     size_t allocatedSize = 0;
     size_t maxSize = 0;
+    //std::mutex lock;
 };
 
 struct StackAllocator : public Allocator
