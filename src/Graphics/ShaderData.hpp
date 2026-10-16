@@ -40,6 +40,11 @@ struct PushConstants
     VkDeviceAddress sceneAddress;
 };
 
+struct SkyboxPushConstants
+{
+    VkDeviceAddress sceneAddress;
+};
+
 struct ParticleDrawCallPushConstant 
 {
     VkDeviceAddress indirectAddress;

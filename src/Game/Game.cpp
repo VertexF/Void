@@ -391,7 +391,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 }
             }
 
-            drawSkybox(*gpu, *gpuCommands, pushConstants);
+            SkyboxPushConstants skyboxPushConstants{ .sceneAddress  = globalSceneBuffer->bufferAddress };
+            drawSkybox(*gpu, *gpuCommands, skyboxPushConstants);
 
             particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
 
