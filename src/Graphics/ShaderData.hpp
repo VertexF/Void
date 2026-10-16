@@ -25,7 +25,6 @@ struct EntityData
     mat4s debugModel;
     //Colour will be used as a key for various different objects.
     vec4s colour;
-    float padd[4];
 };
 
 struct SceneData2D
@@ -37,7 +36,7 @@ struct SceneData2D
 struct PushConstants
 {
     VkDeviceAddress vertexDataAddress;
-    VkDeviceAddress modelPositionAddress;
+    VkDeviceAddress entityDataAddress;
     VkDeviceAddress sceneAddress;
 };
 

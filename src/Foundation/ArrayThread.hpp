@@ -6,60 +6,6 @@
 
 #include <semaphore>
 
-//A super basic linked list with std::thread
-struct Node
-{
-	int value = -1;
-	Node* next = nullptr;
-};
-
-struct List
-{
-	List() : head(nullptr)
-	{
-	}
-
-	Node* head;
-	uint32_t size = 0;
-	std::mutex lock{};
-};
-
-int listInsert(List* list, int value)
-{
-	Node* newNode = (Node*)malloc(sizeof(Node));
-	if (newNode == nullptr)
-	{
-		perror("malloc");
-		return -1;
-	}
-	newNode->value = value;
-	list->lock.lock();
-	newNode->next = list->head;
-	list->head = newNode;
-	list->size++;
-	list->lock.unlock();
-	return 0;
-}
-
-int listLookup(List* list, int value)
-{
-	int rv = -1;
-	list->lock.lock();
-	Node* currentNode = list->head;
-	while (currentNode)
-	{
-		if (currentNode->value == value)
-		{
-			rv = 0;
-			break;
-		}
-		currentNode = currentNode->next;
-	}
-	list->lock.unlock();
-	return rv;
-}
-
-
 //AlignedArray
 template<typename T>
 struct ArrayThread

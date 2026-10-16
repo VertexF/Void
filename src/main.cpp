@@ -13,11 +13,6 @@
 #include "Game/Game.hpp"
 #include "Game/MainMenu.hpp"
 
-#include "Foundation/ArrayThread.hpp"
-#include "Foundation/Array.hpp"
-#include <thread>
-#include <chrono>
-
 int main(int argc, char** argv)
 {
     //Init services

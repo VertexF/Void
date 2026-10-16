@@ -18,7 +18,7 @@ struct Vertices
 };
 
 //Here we are going to attempt full bindless for the debug renderer to make this as painless as possible in the future.
-struct ModelPosition
+struct EntityData
 {
     mat4 pos; 
     mat4 debugModel;
@@ -57,9 +57,9 @@ layout(buffer_reference, buffer_reference_align = 8, scalar) readonly buffer Ver
     Vertices vertexData[];
 };
 
-layout(buffer_reference, buffer_reference_align = 8, scalar) readonly buffer ModelPositionData
+layout(buffer_reference, buffer_reference_align = 8, scalar) readonly buffer EntityDataPtr
 {
-    ModelPosition modelPositions[];
+    EntityData entityData[];
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
@@ -70,7 +70,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Sce
 layout(scalar, push_constant) uniform entityIndex
 {
     VertexData vertexDataReference;
-    ModelPositionData modelPositionsReference;
+    EntityDataPtr entityDataReference;
     SceneBufferData sceneBufferReference;
 };
 
@@ -94,7 +94,7 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
     vTangent = vec4(1.f, 0.f, 0.f, 1.f);
-    mat4 modelPostion = modelPositionsReference.modelPositions[gl_InstanceIndex].pos * model;
+    mat4 modelPostion = entityDataReference.entityData[gl_InstanceIndex].pos * model;
     if ((flags & DrawFlags_NoTangents) != 0)
     {
         vec4 tangent = vec4(int(vertexDataReference.vertexData[gl_VertexIndex].tx), 
@@ -116,5 +116,5 @@ void main()
     vTexcoord0 = texcoord;
     vNormal = normalize(mat3(adjugate(modelPostion)) * normal);
 
-    vColour = modelPositionsReference.modelPositions[gl_InstanceIndex].colour;
+    vColour = entityDataReference.entityData[gl_InstanceIndex].colour;
 }

@@ -2,13 +2,13 @@
 #define CONTACT_LISTENER_HDR
 
 #include "Foundation/Array.hpp"
+#include "Foundation/ArrayThread.hpp"
 
 #include <Jolt/Jolt.h>
 
 // Jolt includes
 #include <Jolt/Physics/Collision/ContactListener.h>
 
-#include <mutex>
 
 class VoidContactListener : public JPH::ContactListener
 {
@@ -25,8 +25,7 @@ public:
 
     virtual void OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) override;
 
-    Array<uint32_t> toDeleteQueue;
-    std::mutex mutex;
+    ArrayThread<uint32_t> toDeleteQueue;
 };
 
 #endif // !CONTACT_LISTENER_HDR

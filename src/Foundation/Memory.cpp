@@ -244,7 +244,22 @@ void ThreadedHeapAllocator::init(size_t size)
 
 void ThreadedHeapAllocator::shutdown() 
 {
+    MemoryStatistics stats{ 0, maxSize };
+    tlsf_stats_t tlsfStats;
+    tlsf_thread_stats(&tlsfThreadHandle, &tlsfStats);
+    if (tlsfStats.total_used)
+    {
+        vprint("ThreadHeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", tlsfStats.total_used, tlsfStats.total_free + tlsfStats.total_used);
+    }
+    else
+    {
+        vprint("ThreadHeapAllocator Shutdown - all memory freed.\n");
+    }
+
+    VOID_ASSERTM(tlsfStats.total_used == 0, "Allocated bytes are still present.\n");
+
     tlsf_thread_destroy(&tlsfThreadHandle);
+    free(memory);
 }
 
 void* ThreadedHeapAllocator::allocate(size_t size, size_t alignment) 
