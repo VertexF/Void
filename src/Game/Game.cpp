@@ -173,7 +173,7 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
     recreatePositionBuffer = false;
 }
 
-void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)
+void Game::loop(InputHandler& inputHandler)
 {
     while (Window::instance()->exitRequested == false)
     {
@@ -271,7 +271,13 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             deleteEntity();
 
-            CommandBuffer* gpuCommands = gpu->getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
+            CommandBuffer* gpuCommands = gpu->commandBuffer[gpu->currentFrame];
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.pNext = nullptr;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(gpuCommands->vkCommandBuffer, &beginInfo);
+
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
@@ -402,7 +408,6 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             //gpuProfiler.update(gpu);
 
-            gpu->queueCommandBuffer(gpuCommands);
             gpu->present();
         }
         else

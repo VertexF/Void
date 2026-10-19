@@ -5,7 +5,6 @@
 #include "Application/Audio.hpp"
 
 #include "Graphics/GPUDevice.hpp"
-#include "Graphics/GPUProfiler.hpp"
 #include "Graphics/2DRenderer.hpp"
 
 #include "vender/imgui/imgui.h"
@@ -35,9 +34,6 @@ int main(int argc, char** argv)
     GPUDevice gpu;
     gpu.init(deviceCreation);
 
-    GPUProfiler gpuProfiler;
-    gpuProfiler.init(allocator, 100);
-
     ImguiService* imgui;
     imgui = ImguiService::instance();
     ImguiServiceConfiguration imguiConfig = { &gpu, Window::instance()->platformHandle };
@@ -51,22 +47,20 @@ int main(int argc, char** argv)
 
     MainMenu mainMenu;
     mainMenu.init(gpu, audioSystem, *imgui);
-    mainMenu.loop(inputHandler, gpuProfiler);
+    mainMenu.loop(inputHandler);
     mainMenu.shutdown();
 
     if (Window::instance()->exitRequested == false)
     {
         Game game;
         game.init(gpu, audioSystem, *imgui);
-        game.loop(inputHandler, gpuProfiler);
+        game.loop(inputHandler);
         game.shutdown();
     }
 
     audioSystem.shutdown();
 
     imgui->shutdown();
-
-    gpuProfiler.shutdown();
 
     gpu.shutdown();
 

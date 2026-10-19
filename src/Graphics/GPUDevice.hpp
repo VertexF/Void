@@ -20,49 +20,6 @@ struct DeviceRenderFrame;
 struct GPUTimestampManager;
 struct GPUDevice;
 
-struct GPUTimestamp
-{
-    uint32_t start;
-    uint32_t end;
-
-    double elapsedMS;
-
-    uint16_t parentIndex;
-    uint16_t depth;
-
-    uint32_t colour;
-    uint32_t frameIndex;
-
-    const char* name;
-};
-
-struct GPUTimestampManager
-{
-    void init(Allocator* newAllocator, uint16_t newQueriesPerFrame, uint16_t maxFrame);
-    void shutdown();
-
-    bool hasValidQueries() const;
-    void reset();
-    //Returns the total queries for this frame.
-    uint32_t resolve(uint32_t currentFrame, GPUTimestamp* timestampsToFill);
-
-    //Returns the timestamp query index.
-    uint32_t push(uint32_t currentFrame, const char* name);
-    uint32_t pop(uint32_t currentFrame);
-
-    Allocator* allocator = nullptr;
-    GPUTimestamp* timestamps = nullptr;
-    uint64_t* timestampsData = nullptr;
-
-    uint32_t queriesPerFrame = 0;
-    uint32_t currentQuery = 0;
-    uint32_t parentIndex = 0;
-    uint32_t depth = 0;
-
-    //Used to query the GPU only once per frame if getGPUTimestamps is called more than once per frame.
-    bool currentFrameResolved = false;
-};
-
 struct DeviceCreation
 {
     Allocator* allocator = nullptr;
@@ -143,17 +100,11 @@ struct GPUDevice
 
     void setBufferGlobalOffset(BufferHandle buffer, uint32_t offset);
 
-    //Command buffers
-    CommandBuffer* getCommandBuffer(VkQueueFlagBits type, bool begin);
-    CommandBuffer* getInstantCommandBuffer();
-
-    void queueCommandBuffer(CommandBuffer* commandBuffer);
-
     //Rendering
     bool newFrame();
     void present();
     void resize(uint16_t width, uint16_t height);
-    void beginRenderingTransition(CommandBuffer* commandBuffer);
+    void beginRenderingTransition(CommandBuffer* inCommandBuffer);
 
     //Returns a vertex buffer usable for fullscreen that uses no vertices.
     BufferHandle getFullscreenVertexBuffer() const;
@@ -165,15 +116,8 @@ struct GPUDevice
 
     //Names and markers
     void setResourceName(VkObjectType objectType, uint64_t handle, const char* name);
-    void pushMarker(VkCommandBuffer commandBuffer, const char* name);
-    void popMarker(VkCommandBuffer commandBuffer);
-
-    //GPU timings
-    void setGPUTimestampsEnable(bool flag);
-
-    uint32_t getGPUTimestamps(GPUTimestamp* outTimestamps);
-    void pushGPUTimestamp(CommandBuffer* commandBuffer, const char* name);
-    void popGPUTimestamp(CommandBuffer* commandBuffer);
+    void pushMarker(const char* name);
+    void popMarker();
 
     //Instant functions
     void destroyBufferInstant(uint32_t buffer);
@@ -214,7 +158,6 @@ struct GPUDevice
     ResourcePool samplers;
     ResourcePool descriptorSetLayouts;
     ResourcePool descriptorSets;
-    ResourcePool commandBuffers;
     ResourcePool shaders;
 
     //Primitive resources
@@ -232,9 +175,8 @@ struct GPUDevice
     Allocator* allocator;
     StackAllocator* tempAllocator;
 
-    CommandBuffer** queuedCommandBuffers = nullptr;
-    uint32_t numAllocatedCommandBuffers = 0;
-    uint32_t numQueuedCommandBuffers = 0;
+    VkCommandPool commandPool;
+    CommandBuffer* commandBuffer[FRAMES_IN_FLIGHT];
 
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
     uint32_t currentFrame;
@@ -244,8 +186,6 @@ struct GPUDevice
 
     uint16_t swapchainWidth = 1;
     uint16_t swapchainHeight = 1;
-
-    GPUTimestampManager* gpuTimestampManager = nullptr;
 
     VkAllocationCallbacks* vulkanAllocationCallbacks;
     VkInstance vulkanInstance;
@@ -293,11 +233,9 @@ struct GPUDevice
     DescriptorSetHandle bindlessDescriptorSetHandle{};
 
     float gpuTimestampFrequency;
-    bool gpuTimestampReset = true;
     bool debugUtilsExtensionPresent = false;
     bool swapchainIsValid = false;
 
-    bool timestampsEnabled = false;
     bool verticalSync = false;
 };
 

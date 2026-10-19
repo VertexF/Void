@@ -340,192 +340,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
     }
 }//Anon
 
-struct CommandBufferRing
-{
-    void init(GPUDevice* newGPU);
-    void shutdown();
-
-    void resetPools(uint32_t frameIndex);
-
-    CommandBuffer* getCommandBuffer(uint32_t frame, bool begin);
-    CommandBuffer* getCommandBufferInstant(uint32_t frame, bool begin);
-
-    static uint16_t poolFromIndex(uint32_t index);
-
-    GPUDevice* gpu = nullptr;
-    Array<VkCommandPool> vulkanCommandPools;
-    Array<CommandBuffer> commandBuffers;
-    Array<uint8_t> nextFreePerThreadFrame;
-
-    static constexpr uint16_t MAX_THREADS = 1;
-    static constexpr uint16_t BUFFER_PER_POOL = 4;
-    uint8_t imageThreadCount = 0;
-    uint8_t commandBufferCount = 0;
-};
-static CommandBufferRing commandBufferRing;
-
-void CommandBufferRing::init(GPUDevice* newGPU)
-{
-    gpu = newGPU;
-
-    imageThreadCount = uint8_t(MAX_THREADS * gpu->swapchainImageCount);
-    commandBufferCount = imageThreadCount * BUFFER_PER_POOL;
-    
-    vulkanCommandPools.init(gpu->allocator, imageThreadCount, imageThreadCount);
-    commandBuffers.init(gpu->allocator, commandBufferCount, commandBufferCount);
-    nextFreePerThreadFrame.init(gpu->allocator, imageThreadCount, imageThreadCount);
-
-    for (uint32_t i = 0; i < imageThreadCount; ++i)
-    {
-        VkCommandPoolCreateInfo cmdPoolInfo{};
-        cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        cmdPoolInfo.pNext = nullptr;
-        cmdPoolInfo.queueFamilyIndex = gpu->vulkanQueueFamily;
-        cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-        check(vkCreateCommandPool(gpu->vulkanDevice, &cmdPoolInfo, gpu->vulkanAllocationCallbacks, &vulkanCommandPools[i]));
-    }
-
-    for (uint32_t i = 0; i < commandBufferCount; ++i)
-    {
-        VkCommandBufferAllocateInfo cmd{};
-        cmd.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        cmd.pNext = nullptr;
-
-        const uint32_t poolNext = poolFromIndex(i);
-        cmd.commandPool = vulkanCommandPools[poolNext];
-        cmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        cmd.commandBufferCount = 1;
-        check(vkAllocateCommandBuffers(gpu->vulkanDevice, &cmd, &commandBuffers[i].vkCommandBuffer));
-
-        commandBuffers[i].device = gpu;
-        commandBuffers[i].handle = i;
-        commandBuffers[i].reset();
-    }
-}
-
-void CommandBufferRing::shutdown()
-{
-    for (uint32_t i = 0; i < imageThreadCount; ++i)
-    {
-        vkDestroyCommandPool(gpu->vulkanDevice, vulkanCommandPools[i], gpu->vulkanAllocationCallbacks);
-    }
-
-    vulkanCommandPools.shutdown();
-    commandBuffers.shutdown();
-    nextFreePerThreadFrame.shutdown();
-}
-
-void CommandBufferRing::resetPools(uint32_t frameIndex)
-{
-    for (uint32_t i = 0; i < MAX_THREADS; ++i)
-    {
-        vkResetCommandPool(gpu->vulkanDevice, vulkanCommandPools[frameIndex * MAX_THREADS + i], 0);
-    }
-}
-
-CommandBuffer* CommandBufferRing::getCommandBuffer(uint32_t frame, bool begin)
-{
-    //TODO: Threads aren't handled for this function that's why we are have 1 thread for the command pool set up.
-    CommandBuffer* commandBuffer = &commandBuffers[frame * BUFFER_PER_POOL];
-
-    if (begin)
-    {
-        commandBuffer->reset();
-
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.pNext = nullptr;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
-    }
-
-    return commandBuffer;
-}
-
-CommandBuffer* CommandBufferRing::getCommandBufferInstant(uint32_t frame, bool /*begin*/)
-{
-    CommandBuffer* commandBuffer = &commandBuffers[frame * BUFFER_PER_POOL + 1];
-    return commandBuffer;
-}
-
-uint16_t CommandBufferRing::poolFromIndex(uint32_t index)
-{
-    return static_cast<uint16_t>(index) / BUFFER_PER_POOL;
-}
-
-void GPUTimestampManager::init(Allocator* newAllocator, uint16_t newQueriesPerFrame, uint16_t maxFrame)
-{
-    allocator = newAllocator;
-    queriesPerFrame = newQueriesPerFrame;
-
-    //Data is start, end in 2 uint64_t numbers.
-    const uint32_t dataDataPerQuery = 2;
-    const size_t allocatorSize = sizeof(GPUTimestamp) * queriesPerFrame * maxFrame + sizeof(uint64_t) * queriesPerFrame * maxFrame * dataDataPerQuery;
-    uint8_t* memory = void_allocam(allocatorSize, allocator);
-
-    timestamps = reinterpret_cast<GPUTimestamp*>(memory);
-    //Data is start, end in 2 uint64_t numbers.
-    timestampsData = reinterpret_cast<uint64_t*>(memory + sizeof(GPUTimestamp) * queriesPerFrame * maxFrame);
-
-    reset();
-}
-
-void GPUTimestampManager::shutdown()
-{
-    void_free(timestamps, allocator);
-}
-
-bool GPUTimestampManager::hasValidQueries() const
-{
-    //Even number of queries asymettrical queries, thus we don't sample.
-    return currentQuery > 0 && (depth == 0);
-}
-
-void GPUTimestampManager::reset()
-{
-    currentQuery = 0;
-    parentIndex = 0;
-    currentFrameResolved = false;
-    depth = 0;
-}
-
-//Returns the total queries for this frame.
-uint32_t GPUTimestampManager::resolve(uint32_t currentFrame, GPUTimestamp* timestampsToFill)
-{
-    memcpy(timestampsToFill, &timestamps[currentFrame * queriesPerFrame], sizeof(GPUTimestamp) * currentQuery);
-    return currentQuery;
-}
-
-//Returns the timestamp query index.
-uint32_t GPUTimestampManager::push(uint32_t currentFrame, const char* name)
-{
-    uint32_t queryIndex = (currentFrame * queriesPerFrame) + currentQuery;
-
-    GPUTimestamp& timestamp = timestamps[queryIndex];
-    timestamp.parentIndex = static_cast<uint16_t>(parentIndex);
-    timestamp.start = queryIndex * 2;
-    timestamp.end = timestamp.start + 1;
-    timestamp.name = name;
-    timestamp.depth = static_cast<uint16_t>(depth++);
-
-    parentIndex = currentQuery;
-    ++currentQuery;
-
-    return (queryIndex * 2);
-}
-
-uint32_t GPUTimestampManager::pop(uint32_t currentFrame)
-{
-    uint32_t queryIndex = (currentFrame * queriesPerFrame) + parentIndex;
-    GPUTimestamp& timestamp = timestamps[queryIndex];
-    //Go up a level
-    parentIndex = timestamp.parentIndex;
-    --depth;
-
-    return (queryIndex * 2) + 1;
-}
-
 DeviceCreation& DeviceCreation::setWindow(uint32_t newWidth, uint32_t newHeight, void* handle)
 {
     width = static_cast<uint16_t>(newWidth);
@@ -835,7 +649,6 @@ vprint("Instance created.\n");
     currentFrame = 1;
     previousFrame = 0;
     absoluteFrame = 0;
-    timestampsEnabled = false;
 
     setPresentMode(presentMode);
     //Create swapchain
@@ -915,10 +728,6 @@ vprint("Instance created.\n");
     descriptorSets.init(allocator, 256, sizeof(DescriptorSet));
     samplers.init(allocator, 32, sizeof(Sampler));
 
-    //Init render frame informations. This includes fences, semaphores and command buffers.
-    //TODO: memory allocate memory of all the Device render frame stuff.
-    uint8_t* memory = void_allocam(sizeof(GPUTimestampManager) + sizeof(CommandBuffer*) * 128, allocator);
-
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -938,16 +747,30 @@ vprint("Instance created.\n");
         vkCreateFence(vulkanDevice, &fenceInfo, vulkanAllocationCallbacks, &fences[i]);
     }
 
-    gpuTimestampManager = reinterpret_cast<GPUTimestampManager*>(memory);
-    gpuTimestampManager->init(allocator, creation.GPUTimeQueriesPerFrame, uint16_t(swapchainImageCount));
+    commandBuffer[0] = (CommandBuffer*)void_allocam(sizeof(CommandBuffer), allocator);
+    commandBuffer[1] = (CommandBuffer*)void_allocam(sizeof(CommandBuffer), allocator);
 
-    commandBufferRing.init(this);
+    VkCommandPoolCreateInfo cmdPoolInfo{};
+    cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cmdPoolInfo.pNext = nullptr;
+    cmdPoolInfo.queueFamilyIndex = vulkanQueueFamily;
+    cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-    //Allocate queued command buffers array
-    queuedCommandBuffers = reinterpret_cast<CommandBuffer**>(gpuTimestampManager + 1);
-    CommandBuffer** correctlyAllocatedBuffer = reinterpret_cast<CommandBuffer**>(memory + sizeof(GPUTimestampManager));
-    VOID_ASSERTM(queuedCommandBuffers == correctlyAllocatedBuffer, "Wrong calculations for queue command buffers arrays. Should be %p, but it's %p",
-        correctlyAllocatedBuffer, queuedCommandBuffers);
+    check(vkCreateCommandPool(vulkanDevice, &cmdPoolInfo, vulkanAllocationCallbacks, &commandPool));
+
+    for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
+    {
+        VkCommandBufferAllocateInfo cmd{};
+        cmd.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        cmd.pNext = nullptr;
+        cmd.commandPool = commandPool;
+        cmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        cmd.commandBufferCount = 2;
+        vkAllocateCommandBuffers(vulkanDevice, &cmd, &commandBuffer[i]->vkCommandBuffer);
+
+        commandBuffer[i]->device = this;
+        commandBuffer[i]->reset();
+    }
 
     resourceDeletionQueue.init(allocator, 16);
     descriptorSetUpdates.init(allocator, 16);
@@ -1034,7 +857,7 @@ vprint("Instance created.\n");
 void GPUDevice::shutdown()
 {
     vkDeviceWaitIdle(vulkanDevice);
-    commandBufferRing.shutdown();
+    vkDestroyCommandPool(vulkanDevice, commandPool, vulkanAllocationCallbacks);
 
     for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; ++i)
     {
@@ -1045,7 +868,8 @@ void GPUDevice::shutdown()
     imageAvailableSemaphore.shutdown();
     fences.shutdown();
 
-    gpuTimestampManager->shutdown();
+    void_free(commandBuffer[0], allocator);
+    void_free(commandBuffer[1], allocator);
     //Add pending bindless textures to delete.
     for (uint32_t i = 0; i < textureToUpdateBindless.size; ++i)
     {
@@ -1062,9 +886,6 @@ void GPUDevice::shutdown()
 
     destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
     destroyDescriptorSet(bindlessDescriptorSetHandle);
-
-    //Memory: this contains allocation for GPU timestamp memory, queued command buffers and render frames.
-    void_free(gpuTimestampManager, allocator);
 
     //Destroy all pending resources.
     for (uint32_t i = 0; i < resourceDeletionQueue.size; ++i)
@@ -1321,8 +1142,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        CommandBuffer* commandBuffer = getInstantCommandBuffer();
-        vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
+        vkBeginCommandBuffer(commandBuffer[currentFrame]->vkCommandBuffer, &beginInfo);
 
         //Copy
         VkImageMemoryBarrier2 barrierStaging{};
@@ -1347,7 +1167,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
         barrierStagingDependencyInfo.imageMemoryBarrierCount = 1;
         barrierStagingDependencyInfo.pImageMemoryBarriers = &barrierStaging;
 
-        vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierStagingDependencyInfo);
+        vkCmdPipelineBarrier2(commandBuffer[currentFrame]->vkCommandBuffer, &barrierStagingDependencyInfo);
 
         Array<VkBufferImageCopy2> regions;
         regions.init(&MemoryService::instance()->scratchAllocator, 4);
@@ -1411,7 +1231,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
         bufferTransfer.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         bufferTransfer.srcBuffer = stagingBuffer;
 
-        vkCmdCopyBufferToImage2(commandBuffer->vkCommandBuffer, &bufferTransfer);
+        vkCmdCopyBufferToImage2(commandBuffer[currentFrame]->vkCommandBuffer, &bufferTransfer);
 
         VkImageMemoryBarrier2 barrierImage{};
         barrierImage.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -1435,15 +1255,15 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
         barrierImageDependencyInfo.imageMemoryBarrierCount = 1;
         barrierImageDependencyInfo.pImageMemoryBarriers = &barrierImage;
 
-        vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierImageDependencyInfo);
+        vkCmdPipelineBarrier2(commandBuffer[currentFrame]->vkCommandBuffer, &barrierImageDependencyInfo);
 
-        vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
+        vkEndCommandBuffer(commandBuffer[currentFrame]->vkCommandBuffer);
 
         //Submit command buffer
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
+        submitInfo.pCommandBuffers = &commandBuffer[currentFrame]->vkCommandBuffer;
 
         vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(vulkanQueue);
@@ -1451,7 +1271,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
         vmaDestroyBuffer(VMAAllocator, stagingBuffer, stagingAllocation);
 
         //TODO: Maybe I need to free the command buffer.
-        vkResetCommandBuffer(commandBuffer->vkCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+        vkResetCommandBuffer(commandBuffer[currentFrame]->vkCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
     }
 
     return handle;
@@ -2466,8 +2286,7 @@ void GPUDevice::transitionDepthImage(TextureHandle texture)
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    CommandBuffer* commandBuffer = getInstantCommandBuffer();
-    vkBeginCommandBuffer(commandBuffer->vkCommandBuffer, &beginInfo);
+    vkBeginCommandBuffer(commandBuffer[currentFrame]->vkCommandBuffer, &beginInfo);
 
     VkImageMemoryBarrier2 barrierStaging{};
     barrierStaging.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -2496,15 +2315,15 @@ void GPUDevice::transitionDepthImage(TextureHandle texture)
     barrierStagingDependencyInfo.imageMemoryBarrierCount = 1;
     barrierStagingDependencyInfo.pImageMemoryBarriers = &barrierStaging;
 
-    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierStagingDependencyInfo);
+    vkCmdPipelineBarrier2(commandBuffer[currentFrame]->vkCommandBuffer, &barrierStagingDependencyInfo);
 
-    vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
+    vkEndCommandBuffer(commandBuffer[currentFrame]->vkCommandBuffer);
 
     //Submit command buffer
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer;
+    submitInfo.pCommandBuffers = &commandBuffer[currentFrame]->vkCommandBuffer;
 
     vkQueueSubmit(vulkanQueue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(vulkanQueue);
@@ -2549,35 +2368,6 @@ void GPUDevice::setBufferGlobalOffset(BufferHandle buffer, uint32_t offset)
     vulkanBuffer->globalOffset = offset;
 }
 
-//Command buffers
-CommandBuffer* GPUDevice::getCommandBuffer(VkQueueFlagBits /*type*/, bool begin)
-{
-    CommandBuffer* comBuffer = commandBufferRing.getCommandBuffer(currentFrame, begin);
-
-    //The first commandBuffer issued in the frame is used to reset the timestamp queries used.
-    if (gpuTimestampReset && begin)
-    {
-        vkCmdResetQueryPool(comBuffer->vkCommandBuffer, vulkanTimestampQueryPool,
-            currentFrame * gpuTimestampManager->queriesPerFrame * 2,
-            gpuTimestampManager->queriesPerFrame);
-
-        gpuTimestampReset = false;
-    }
-
-    return comBuffer;
-}
-
-CommandBuffer* GPUDevice::getInstantCommandBuffer()
-{
-    CommandBuffer* comBuffer = commandBufferRing.getCommandBufferInstant(currentFrame, false);
-    return comBuffer;
-}
-
-void GPUDevice::queueCommandBuffer(CommandBuffer* commandBuffer)
-{
-    queuedCommandBuffers[numQueuedCommandBuffers++] = commandBuffer;
-}
-
 //Rendering
 bool GPUDevice::newFrame()
 {
@@ -2602,9 +2392,6 @@ bool GPUDevice::newFrame()
         return swapchainIsValid;
     }
 
-    //Command pool rest.
-    commandBufferRing.resetPools(currentFrame);
-
     //Descriptor set update.
     if (descriptorSetUpdates.size)
     {
@@ -2623,41 +2410,33 @@ bool GPUDevice::newFrame()
 
 void GPUDevice::present()
 {
-    //Copy all commands
-    VkCommandBuffer enqueuedCommandBuffers[4]{};
-    for (uint32_t comBuffer = 0; comBuffer < numQueuedCommandBuffers; ++comBuffer)
-    {
-        CommandBuffer* commandBuffer = queuedCommandBuffers[comBuffer];
-        enqueuedCommandBuffers[comBuffer] = commandBuffer->vkCommandBuffer;
+    vkCmdEndRendering(commandBuffer[currentFrame]->vkCommandBuffer);
 
-        vkCmdEndRendering(commandBuffer->vkCommandBuffer);
+    VkImageMemoryBarrier2 barrier{}; 
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = vulkanSwapchainImages[vulkanImageIndex];
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-        VkImageMemoryBarrier2 barrier{}; 
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_2_NONE;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = vulkanSwapchainImages[vulkanImageIndex];
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    VkDependencyInfo barrierPresentDependencyInfo{};
+    barrierPresentDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    barrierPresentDependencyInfo.imageMemoryBarrierCount = 1;
+    barrierPresentDependencyInfo.pImageMemoryBarriers = &barrier;
 
-        VkDependencyInfo barrierPresentDependencyInfo{};
-        barrierPresentDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-        barrierPresentDependencyInfo.imageMemoryBarrierCount = 1;
-        barrierPresentDependencyInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(commandBuffer[currentFrame]->vkCommandBuffer, &barrierPresentDependencyInfo);
 
-        vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierPresentDependencyInfo);
-
-        vkEndCommandBuffer(commandBuffer->vkCommandBuffer);
-    }
+    vkEndCommandBuffer(commandBuffer[currentFrame]->vkCommandBuffer);
 
     if (textureToUpdateBindless.size)
     {
@@ -2722,55 +2501,12 @@ void GPUDevice::present()
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = &imageAvailableSemaphore[currentFrame];
     submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = numQueuedCommandBuffers;
-    submitInfo.pCommandBuffers = enqueuedCommandBuffers;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer[currentFrame]->vkCommandBuffer;
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &renderFinishSemaphore[vulkanImageIndex];
 
     vkQueueSubmit(vulkanQueue, 1, &submitInfo, fences[currentFrame]);
-
-    numQueuedCommandBuffers = 0;
-
-    //Resolve GPU Timestamp
-    if (timestampsEnabled)
-    {
-        if (gpuTimestampManager->hasValidQueries())
-        {
-            //Query GPU for timestamps.
-            const uint32_t queryOffset = (currentFrame * gpuTimestampManager->queriesPerFrame) * 2;
-            const uint32_t queryCount = gpuTimestampManager->currentQuery * 2;
-            vkGetQueryPoolResults(vulkanDevice, vulkanTimestampQueryPool, queryOffset, queryCount, sizeof(uint64_t) * queryCount * 2,
-                &gpuTimestampManager->timestampsData[queryOffset], sizeof(gpuTimestampManager->timestampsData[0]),
-                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-
-            //Calcute and cache the elapsed time.
-            for (uint32_t i = 0; i < gpuTimestampManager->currentQuery; ++i)
-            {
-                uint32_t index = (currentFrame * gpuTimestampManager->queriesPerFrame) + i;
-
-                GPUTimestamp& timestamp = gpuTimestampManager->timestamps[index];
-
-                double start = static_cast<double>(gpuTimestampManager->timestampsData[(index * 2)]);
-                double end = static_cast<double>(gpuTimestampManager->timestampsData[(index * 2) + 1]);
-                double range = end - start;
-                double elaspedTime = range * gpuTimestampFrequency;
-
-                timestamp.elapsedMS = elaspedTime;
-                timestamp.frameIndex = absoluteFrame;
-            }
-        }
-        else if (gpuTimestampManager->currentQuery)
-        {
-            vprint("Asymmetrical GPU queries, missing a pop of some markers.\n");
-        }
-
-        gpuTimestampManager->reset();
-        gpuTimestampReset = true;
-    }
-    else
-    {
-        gpuTimestampReset = false;
-    }
 
     frameCountersAdvanced();
 
@@ -2845,7 +2581,7 @@ void GPUDevice::resize(uint16_t width, uint16_t height)
     swapchainHeight = height;
 }
 
-void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
+void GPUDevice::beginRenderingTransition(CommandBuffer* inCommandBuffer)
 {
     VkImageMemoryBarrier2 barrierColour{};
     barrierColour.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -2890,7 +2626,7 @@ void GPUDevice::beginRenderingTransition(CommandBuffer* commandBuffer)
     barrierColourDependencyInfo.imageMemoryBarrierCount = 2;
     barrierColourDependencyInfo.pImageMemoryBarriers = barriers;
 
-    vkCmdPipelineBarrier2(commandBuffer->vkCommandBuffer, &barrierColourDependencyInfo);
+    vkCmdPipelineBarrier2(inCommandBuffer->vkCommandBuffer, &barrierColourDependencyInfo);
 }
 
 //Returns a vertex buffer usable for fullscreen that uses no vertices.
@@ -2936,7 +2672,7 @@ void GPUDevice::setResourceName(VkObjectType objectType, uint64_t handle, const 
     pfnSetDebugUtilsObjectNameEXT(vulkanDevice, &nameInfo);
 }
 
-void GPUDevice::pushMarker(VkCommandBuffer commandBuffer, const char* name)
+void GPUDevice::pushMarker(const char* name)
 {
     VkDebugUtilsLabelEXT label{};
     label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
@@ -2945,45 +2681,12 @@ void GPUDevice::pushMarker(VkCommandBuffer commandBuffer, const char* name)
     label.color[1] = 1.0f;
     label.color[2] = 1.0f;
     label.color[3] = 1.0f;
-    pfnCmdBeginDebugUtilsLabelEXT(commandBuffer, &label);
+    pfnCmdBeginDebugUtilsLabelEXT(commandBuffer[currentFrame]->vkCommandBuffer, &label);
 }
 
-void GPUDevice::popMarker(VkCommandBuffer commandBuffer)
+void GPUDevice::popMarker()
 {
-    pfnCmdEndDebugUtilsLabelEXT(commandBuffer);
-}
-
-//GPU timings
-void GPUDevice::setGPUTimestampsEnable(bool flag)
-{
-    timestampsEnabled = flag;
-}
-
-uint32_t GPUDevice::getGPUTimestamps(GPUTimestamp* outTimestamps)
-{
-    return gpuTimestampManager->resolve(previousFrame, outTimestamps);
-}
-
-void GPUDevice::pushGPUTimestamp(CommandBuffer* commandBuffer, const char* name)
-{
-    if (timestampsEnabled == false)
-    {
-        return;
-    }
-
-    uint32_t queryIndex = gpuTimestampManager->push(currentFrame, name);
-    vkCmdWriteTimestamp(commandBuffer->vkCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, vulkanTimestampQueryPool, queryIndex);
-}
-
-void GPUDevice::popGPUTimestamp(CommandBuffer* commandBuffer)
-{
-    if (timestampsEnabled == false)
-    {
-        return;
-    }
-
-    uint32_t queryIndex = gpuTimestampManager->pop(currentFrame);
-    vkCmdWriteTimestamp(commandBuffer->vkCommandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, vulkanTimestampQueryPool, queryIndex);
+    pfnCmdEndDebugUtilsLabelEXT(commandBuffer[currentFrame]->vkCommandBuffer);
 }
 
 //Instant functions

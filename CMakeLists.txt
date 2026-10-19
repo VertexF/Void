@@ -79,8 +79,6 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/CommandBuffer.cpp
                 src/Graphics/GPUDevice.cpp
                 src/Graphics/GPUDevice.hpp
-                src/Graphics/GPUProfiler.hpp
-                src/Graphics/GPUProfiler.cpp
                 src/Graphics/GPUResources.hpp
                 src/Graphics/GPUResources.cpp
                 src/Graphics/LoadGLTF.hpp
@@ -169,8 +167,6 @@ set(FOUNDATION_SOURCE src/Foundation/Array.hpp
                       src/Foundation/Blob.hpp
                       src/Foundation/Camera.cpp
                       src/Foundation/Camera.hpp
-                      src/Foundation/Colour.cpp
-                      src/Foundation/Colour.hpp
                       src/Foundation/File.cpp
                       src/Foundation/File.hpp
                       src/Foundation/HashMap.hpp
@@ -933,29 +929,6 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
     )
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach()
-
-#if(UNIX)
-#    set(SLANG_COMPILER "slangc")
-#elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
-#    set(SLANG_COMPILER "$ENV{VULKAN_SDK}/Bin/slangc.exe")
-#else()
-#    set(SLANG_COMPILER "$ENV{VULKAN_SDK}/Bin32/slangc.exe")
-#endif()
-#
-#set(SPIRV_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Assets/Shaders/")
-#foreach(SLANG ${SLANG_SOURCE_FILES})
-#	get_filename_component(STEM ${SLANG} NAME)
-#    set(SPIRV "${SPIRV_OUTPUT_DIR}${STEM}.spv")
-#	message(STATUS ${SLANG})
-#    add_custom_command(
-#        OUTPUT ${SPIRV}
-#        COMMAND ${CMAKE_COMMAND} -E make_directory "${SPIRV_OUTPUT_DIR}"
-#        COMMAND ${SLANG_COMPILER} -target spirv ${SLANG} -o ${SPIRV} -fvk-use-scalar-layout
-#        DEPENDS ${SLANG} ${SLANG_HEADER_FILES}
-#    )
-#    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-#endforeach()
-
 
 add_custom_target(CompileShaders DEPENDS ${SPIRV_BINARY_FILES})
 add_dependencies(Void CompileShaders)

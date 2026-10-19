@@ -45,16 +45,6 @@ namespace
     }
 }
 
-void CommandBuffer::init(VkQueueFlagBits newType, uint32_t newBufferSize, uint32_t newSubmitSize, bool newBaked)
-{
-    type = newType;
-    bufferSize = newBufferSize;
-    submitSize = newSubmitSize;
-    baked = newBaked;
-
-    reset();
-}
-
 void CommandBuffer::terminate()
 {
     isRecording = false;
@@ -269,26 +259,22 @@ void CommandBuffer::fillBuffer(BufferHandle buffer, uint32_t offset, uint32_t si
 
 void CommandBuffer::pushMarker(const char* name)
 {
-    device->pushGPUTimestamp(this, name);
-
     if (device->debugUtilsExtensionPresent == false) 
     {
         return;
     }
 
-    device->pushMarker(vkCommandBuffer, name);
+    device->pushMarker(name);
 }
 
 void CommandBuffer::popMarker()
 {
-    device->popGPUTimestamp(this);
-
     if (device->debugUtilsExtensionPresent == false) 
     {
         return;
     }
 
-    device->popMarker(vkCommandBuffer);
+    device->popMarker();
 }
 
 void CommandBuffer::reset()

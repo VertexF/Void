@@ -17,7 +17,7 @@ void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& 
     renderer2D.loadBuffer();
 }
 
-void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)
+void MainMenu::loop(InputHandler& inputHandler)
 {
     while (Window::instance()->mainMenuRequested == false)
     {
@@ -86,7 +86,13 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
             //float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             //beginFrameTick = currentTick;
 
-            CommandBuffer* gpuCommands = gpu->getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
+            CommandBuffer* gpuCommands = gpu->commandBuffer[gpu->currentFrame];
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.pNext = nullptr;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(gpuCommands->vkCommandBuffer, &beginInfo);
+
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
@@ -101,9 +107,6 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
 
             gpuCommands->popMarker();
 
-            //gpuProfiler.update(gpu);
-
-            gpu->queueCommandBuffer(gpuCommands);
             gpu->present();
         }
         else
@@ -117,7 +120,10 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
 
 void MainMenu::shutdown()
 {
-    //vkDeviceWaitIdle(gpu->vulkanDevice);
+    //Pausing the main queue that handles graphics to the command buffers don't end up being recorded to while submitting.
+    //It's possible to make this better with a semaphore, but since you don't once and it's about 0.22ms~ in my GPU 
+    //I don't think it's that big of an issue.
+    vkQueueWaitIdle(gpu->vulkanQueue);
 
     renderer2D.shutdown();
 }

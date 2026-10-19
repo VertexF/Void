@@ -5,7 +5,6 @@
 #include "Application/UserInterface.hpp"
 
 #include "Graphics/GPUDevice.hpp"
-#include "Graphics/GPUProfiler.hpp"
 #include "Graphics/VoidImgui.hpp"
 #include "Graphics/ParticleRenderer.hpp"
 
@@ -15,7 +14,7 @@
 struct Game
 {
     void init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui);
-    void loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler);
+    void loop(InputHandler& inputHandler);
     void shutdown();
 
     void deleteEntity();
