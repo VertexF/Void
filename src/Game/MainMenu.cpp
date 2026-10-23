@@ -2,6 +2,8 @@
 
 #include "Foundation/Time.hpp"
 
+#include "vender/imgui/imgui.h"
+
 #include <ktx.h>
 
 void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui)
@@ -19,6 +21,7 @@ void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& 
 
 void MainMenu::loop(InputHandler& inputHandler)
 {
+    float modelScale = 1.f;
     while (Window::instance()->mainMenuRequested == false)
     {
         //ZoneScoped;
@@ -61,20 +64,14 @@ void MainMenu::loop(InputHandler& inputHandler)
                 Window::instance()->mainMenuRequested = true;
             }
 
-            ////NOTE: This must be after the OS messages.
-            //imgui->newFrame();
+            //NOTE: This must be after the OS messages.
+            imgui->newFrame();
 
-            //if (ImGui::Begin("Void ImGui"))
-            //{
-            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            //}
-            //ImGui::End();
-
-            //if (ImGui::Begin("GPU"))
-            //{
-            //    gpuProfiler.imguiDraw();
-            //}
-            //ImGui::End();
+            if (ImGui::Begin("Void ImGui"))
+            {
+                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            }
+            ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -103,7 +100,7 @@ void MainMenu::loop(InputHandler& inputHandler)
 
             renderer2D.drawQuad(*gpuCommands);
 
-            //imgui->render(*gpuCommands);
+            imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
@@ -111,7 +108,7 @@ void MainMenu::loop(InputHandler& inputHandler)
         }
         else
         {
-            //ImGui::Render();
+            ImGui::Render();
         }
 
         //FrameMark;

@@ -223,6 +223,8 @@ add_library(External STATIC
     vender/imgui/imgui_draw.cpp
     vender/imgui/backends/imgui_impl_sdl3.cpp
     vender/imgui/backends/imgui_impl_sdl3.h
+    vender/imgui/backends/imgui_impl_vulkan.cpp
+    vender/imgui/backends/imgui_impl_vulkan.h
     vender/imgui/imgui_internal.h
     vender/imgui/imgui_tables.cpp
     vender/imgui/imgui_widgets.cpp
@@ -262,6 +264,33 @@ add_library(External STATIC
     vender/miniaudio.c
 )
 
+set_target_properties(External PROPERTIES SYSTEM ON)
+
+if (WIN32)
+    target_sources(External PRIVATE
+                   vender/StackWalker/Main/StackWalker/StackWalker.cpp
+                   vender/StackWalker/Main/StackWalker/StackWalker.h)
+endif()
+
+target_compile_definitions(External PRIVATE
+                          TRACY_ENABLE
+                          TRACY_ON_DEMAND
+                          TRACY_NO_SYSTEM_TRACING
+                          TLSF_ENABLE_CHECK)
+
+target_include_directories(External PRIVATE
+                           ${SDL3_INCLUDES}
+                           ${IMGUI_INCLUDE}
+                           ${TLSF_INCLUDE_DIR}
+                           ${VULKAN_INCLUDE_DIR})
+
+if (UNIX)
+    target_link_libraries(External PRIVATE
+                          dl)
+endif()
+
+
+###KTX
 set(DF_INCLUDE "vender/KTX-Software-4.4.2/external/dfdutils/KHR")
 
 set(KTX_SOURCES
@@ -299,34 +328,6 @@ target_include_directories(ktx SYSTEM PRIVATE ${KTX_LIB_INCLUDE_DIR}
 						   ${TLSF_INCLUDE_DIR})
 
 target_compile_definitions(ktx PUBLIC KHRONOS_STATIC)
-
-set_target_properties(External PROPERTIES SYSTEM ON)
-
-if (WIN32)
-    target_sources(External PRIVATE
-                   vender/StackWalker/Main/StackWalker/StackWalker.cpp
-                   vender/StackWalker/Main/StackWalker/StackWalker.h)
-endif()
-
-target_compile_definitions(External PRIVATE
-                          TRACY_ENABLE
-                          TRACY_ON_DEMAND
-                          TRACY_NO_SYSTEM_TRACING
-                          TLSF_ENABLE_CHECK)
-
-if (WIN32)
-    target_include_directories(External PRIVATE
-                               ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE}
-							   ${TLSF_INCLUDE_DIR})
-else()
-    target_link_libraries(External PRIVATE
-                          dl)
-    target_include_directories(External PRIVATE
-                               ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE}
-							   ${TLSF_INCLUDE_DIR})
-endif()
 
 ###Physics
 

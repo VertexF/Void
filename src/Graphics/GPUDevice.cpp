@@ -1803,10 +1803,8 @@ ShaderStateHandle GPUDevice::createShaderState(const ShaderStateCreation& creati
 
     for (compiledShaders = 0; compiledShaders < creation.stagesCount; ++compiledShaders)
     {
-        const ShaderStage& stage = creation.stages[compiledShaders];
-
         //Gives priority to compute: if any is present (and it should not be) then it is not a graphics pipeline.
-        if (stage.type == VK_SHADER_STAGE_COMPUTE_BIT)
+        if (creation.stages[compiledShaders].type == VK_SHADER_STAGE_COMPUTE_BIT)
         {
             shaderState->graphicsPipeline = false;
         }
@@ -1816,8 +1814,8 @@ ShaderStateHandle GPUDevice::createShaderState(const ShaderStateCreation& creati
 
         if (creation.spvInput)
         {
-            shaderCreateInfo.codeSize = stage.codeSize;
-            shaderCreateInfo.pCode = reinterpret_cast<const uint32_t*>(stage.code);
+            shaderCreateInfo.codeSize = creation.stages[compiledShaders].codeSize;
+            shaderCreateInfo.pCode = reinterpret_cast<const uint32_t*>(creation.stages[compiledShaders].code);
         }
         else
         {
@@ -1825,11 +1823,10 @@ ShaderStateHandle GPUDevice::createShaderState(const ShaderStateCreation& creati
         }
 
         //Compiler shader module
-        VkPipelineShaderStageCreateInfo& shaderStageInfo = shaderState->shaderStateInfo[compiledShaders];
-        memset(&shaderStageInfo, 0, sizeof(VkPipelineShaderStageCreateInfo));
-        shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStageInfo.pName = "main";
-        shaderStageInfo.stage = stage.type;
+        memset(&shaderState->shaderStateInfo[compiledShaders], 0, sizeof(VkPipelineShaderStageCreateInfo));
+        shaderState->shaderStateInfo[compiledShaders].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderState->shaderStateInfo[compiledShaders].pName = "main";
+        shaderState->shaderStateInfo[compiledShaders].stage = creation.stages[compiledShaders].type;
 
         if (vkCreateShaderModule(vulkanDevice, &shaderCreateInfo, nullptr, &shaderState->shaderStateInfo[compiledShaders].module) != VK_SUCCESS)
         {
@@ -1841,25 +1838,9 @@ ShaderStateHandle GPUDevice::createShaderState(const ShaderStateCreation& creati
 
     tempAllocator->freeMarker(currentTemporaryMarker);
 
-    bool creationFailed = compiledShaders != creation.stagesCount;
-    if (creationFailed == false)
-    {
-        shaderState->activeShaders = compiledShaders;
-        shaderState->name = creation.name;
-    }
-    else
-    {
-        destroyShaderState(handle);
-        handle.index = INVALID_INDEX;
+    shaderState->activeShaders = compiledShaders;
+    shaderState->name = creation.name;
 
-        //Dump the old shader code
-        vprint("Error in creation of shader %s. Dumping all shader information.\n", creation.name);
-        for (compiledShaders = 0; compiledShaders < creation.stagesCount; ++compiledShaders)
-        {
-            const ShaderStage& stage = creation.stages[compiledShaders];
-            vprint("%u:\n%s\n", stage.type, stage.code);
-        }
-    }
     return handle;
 }
 

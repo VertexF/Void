@@ -81,7 +81,9 @@ void ParticleRenderer::init(GPUDevice& inGPU)
         .addStage(frag2D.data, uint32_t(frag2D.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    particlePipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
+    particlePipelineCreation.pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    particlePipelineCreation.pushConstants.offset = 0;
+    particlePipelineCreation.pushConstants.size = 24;
 
     particlePipelineCreation.rasterisation.cullMode = VK_CULL_MODE_NONE;
 
@@ -100,7 +102,9 @@ void ParticleRenderer::init(GPUDevice& inGPU)
         .addStage(particleDrawShader.data, uint32_t(particleDrawShader.size), VK_SHADER_STAGE_COMPUTE_BIT)
         .setSPVInput(true);
 
-    drawCallCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleDrawCallPushConstant));
+    drawCallCreation.pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    drawCallCreation.pushConstants.offset = 0;
+    drawCallCreation.pushConstants.size = sizeof(ParticleDrawCallPushConstant);
 
     particleDrawCall = gpu->createPipeline(drawCallCreation);
 
@@ -114,7 +118,9 @@ void ParticleRenderer::init(GPUDevice& inGPU)
         .addStage(particleUpdateShader.data, uint32_t(particleUpdateShader.size), VK_SHADER_STAGE_COMPUTE_BIT)
         .setSPVInput(true);
 
-    particleUpdateCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticlePushConstant));
+    particleUpdateCreation.pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    particleUpdateCreation.pushConstants.offset = 0;
+    particleUpdateCreation.pushConstants.size = sizeof(ParticlePushConstant);
 
     particleData = gpu->createPipeline(particleUpdateCreation);
 

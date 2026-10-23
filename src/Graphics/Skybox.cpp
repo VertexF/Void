@@ -46,7 +46,9 @@ void initSkybox(GPUDevice& gpu)
         .addStage(fragSkybox.data, uint32_t(fragSkybox.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    skyboxPipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 8);
+    skyboxPipelineCreation.pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    skyboxPipelineCreation.pushConstants.offset = 0;
+    skyboxPipelineCreation.pushConstants.size = 8;
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation skyboxSetLayout{};

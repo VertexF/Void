@@ -28,7 +28,6 @@
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
-#include <vender/stb_image.h>
 
 namespace
 {
@@ -92,7 +91,9 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
         .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    pipelineCreation.pushConstants.createPushConstants((VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, 24);
+    pipelineCreation.pushConstants.stageFlags = (VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    pipelineCreation.pushConstants.offset = 0; 
+    pipelineCreation.pushConstants.size = 24;
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation mainCreation{};
@@ -123,7 +124,9 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
         .addStage(fragDebug.data, uint32_t(fragDebug.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    debugPipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
+    debugPipelineCreation.pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    debugPipelineCreation.pushConstants.offset = 0;
+    debugPipelineCreation.pushConstants.size = 24;
 
     debugPipeline = gpu->createPipeline(debugPipelineCreation, /*debugRendering=*/ true);
 
@@ -232,21 +235,14 @@ void Game::loop(InputHandler& inputHandler)
                 scene.testSwarn();
             }
 
-            ////NOTE: This must be after the OS messages.
-            //imgui->newFrame();
+            //NOTE: This must be after the OS messages.
+            imgui->newFrame();
 
-            //if (ImGui::Begin("Void ImGui"))
-            //{
-            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            //}
-            //ImGui::End();
-
-            //if (ImGui::Begin("GPU"))
-            //{
-            //    gpuProfiler.imguiDraw();
-            //}
-            //ImGui::End();
-          
+            if (ImGui::Begin("Void ImGui"))
+            {
+                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            }
+            ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -402,17 +398,15 @@ void Game::loop(InputHandler& inputHandler)
 
             particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
 
-            //imgui->render(*gpuCommands);
+            imgui->render(*gpuCommands);
 
-            gpuCommands->popMarker();
-
-            //gpuProfiler.update(gpu);
+            ImGui::Render();
 
             gpu->present();
         }
         else
         {
-            //ImGui::Render();
+            ImGui::Render();
         }
 
         //FrameMark;
