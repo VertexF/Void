@@ -14,7 +14,7 @@
 
 //TODO - Be careful after the players ask yourself do you need JOLT in the actual player struct.
 //You might want to abstract it away so you don't ended up with a clucky struct.
-//Thick about how you don't want to write implementation code in UI for example. This might be the same case.
+//Think about how you don't want to write implementation code in UI for example. This might be the same case.
 
 #include "Utils.hpp"
 #include "Graphics/ShaderData.hpp"

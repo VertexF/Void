@@ -299,7 +299,8 @@ void Scene::buildRigidBodyEntity(EntityModels modelType, DebugModelType debugMod
         entities[currentLastEntity].isDynamic = true;
 
         entities[currentLastEntity].entityType = EntityType::PLAYER;
-        entities[currentLastEntity].entityData = void_allocat(Player, &MemoryService::instance()->systemAllocator);
+        //Due to the placement new below (which has to happen due to constructors within Jolt needing to run) we need to align the memory allocated for Player to be the size of Player.
+        entities[currentLastEntity].entityData = void_allocaa(sizeof(Player), &MemoryService::instance()->systemAllocator, sizeof(Player));
         new (entities[currentLastEntity].entityData) Player;
 
         static_cast<Player*>(entities[currentLastEntity].entityData)->init(entityData[currentLastEntity], shapeSetting.GetShape(), collisionShape);
