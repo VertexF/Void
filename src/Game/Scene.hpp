@@ -7,11 +7,12 @@
 #include "cglm/struct/affine.h"
 
 #include "Graphics/LoadGLTF.hpp"
+#include "Graphics/ShaderData.hpp"
+#include "Graphics/2DRenderer.hpp"
 
 #include "Application/Audio.hpp"
 
 #include "Utils.hpp"
-#include "Graphics/ShaderData.hpp"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
@@ -24,8 +25,9 @@ struct Scene
     void buildScene();
     void buildDebugScene();
     void buildPerformance();
-    void buildRigidBodyEntity(EntityModels modelType, DebugModelType debugModelType, EntityType entityType, const vec3s& position, vec3s axis,
-                              float angle, const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour);
+    void testSwarn();
+    void buildRigidBodyEntity(EntityModels modelType, DebugModelType debugModelType, EntityType entityType, 
+                              const JPH::BodyCreationSettings& shapeSetting, const vec4s& colour, float size = 1.f);
     void buildNoneSoildEntity(EntityModels modelType, EntityType entityType, vec3s& position, vec3s axis, float angle);
     void shutdownScene(GPUDevice& gpu);
 
@@ -34,7 +36,8 @@ struct Scene
     JPH::BodyCreationSettings sphereSettings;
     JPH::BodyCreationSettings sphereSettings2;
 
-    uint32_t totalEntities = 8888;
+    uint32_t totalEntities = 9000;
+    uint32_t totalRocks = 8888;
     uint32_t currentLastEntity = 0;
 
     Array<Entity> entities;
@@ -42,6 +45,7 @@ struct Scene
     Array<Model> models;
     Array<DebugModel> debugModels;
     Array<JPH::BodyID> bodiesToBeAdded;
+    Array<Renderer2D> renderer2D;
 
     HeapAllocator* allocator;
 };

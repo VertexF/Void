@@ -68,7 +68,9 @@ void Renderer2D::init(GPUDevice& inGPU)
         .addStage(frag2D.data, uint32_t(frag2D.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    pipelineCreation2D.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
+    pipelineCreation2D.pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pipelineCreation2D.pushConstants.offset = 0;
+    pipelineCreation2D.pushConstants.size = 24;
 
     pipelineCreation2D.rasterisation.cullMode = VK_CULL_MODE_NONE;
 

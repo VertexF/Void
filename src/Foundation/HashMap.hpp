@@ -186,7 +186,7 @@ static void convertDeletedToEmptyAndFullToDeleted(int8_t* control, size_t capaci
         GroupSse2Impl{ pos }.convertSpecialToEmptyAndFullToDelete(pos);
     }
 
-    memoryCopy(control + capacity + 1, control, GroupSse2Impl::WIDTH);
+    memcpy(control + capacity + 1, control, GroupSse2Impl::WIDTH);
     control[capacity] = CONTROL_BITMASK_SENTINEL;
 }
 
@@ -546,7 +546,7 @@ struct FlatHashMap
                 //Transfer element to the empty spot.
                 //setControl poisons/unpoisons the slots so we have to call it at the right time.
                 setControl(newi, hash2(hash));
-                memoryCopy(slots + newi, slots + i, sizeof(KeyValue));
+                memcpy(slots + newi, slots + i, sizeof(KeyValue));
                 setControl(i, CONTROL_BITMASK_EMPTY);
             }
             else
@@ -554,9 +554,9 @@ struct FlatHashMap
                 setControl(newi, hash2(hash));
                 //Until we are done rehashing, deleted marks previously full slots.
                 //swap i and newi elements.
-                memoryCopy(slot, slots + i, sizeof(KeyValue));
-                memoryCopy(slots + i, slots + newi, sizeof(KeyValue));
-                memoryCopy(slots + newi, slot, sizeof(KeyValue));
+                memcpy(slot, slots + i, sizeof(KeyValue));
+                memcpy(slots + i, slots + newi, sizeof(KeyValue));
+                memcpy(slots + newi, slot, sizeof(KeyValue));
                 --i;
             }
         }
@@ -605,7 +605,7 @@ struct FlatHashMap
 
                 setControl(newi, hash2(hash));
 
-                memoryCopy(slots + newi, oldSlots + i, sizeof(KeyValue));
+                memcpy(slots + newi, oldSlots + i, sizeof(KeyValue));
             }
         }
 

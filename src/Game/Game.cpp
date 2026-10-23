@@ -28,7 +28,6 @@
 
 #include <stdlib.h>
 #include <SDL3/SDL.h>
-#include <vender/stb_image.h>
 
 namespace
 {
@@ -92,7 +91,9 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
         .addStage(fragShaderCode.data, uint32_t(fragShaderCode.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    pipelineCreation.pushConstants.createPushConstants((VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, 24);
+    pipelineCreation.pushConstants.stageFlags = (VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    pipelineCreation.pushConstants.offset = 0; 
+    pipelineCreation.pushConstants.size = 24;
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation mainCreation{};
@@ -123,7 +124,9 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
         .addStage(fragDebug.data, uint32_t(fragDebug.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    debugPipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
+    debugPipelineCreation.pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    debugPipelineCreation.pushConstants.offset = 0;
+    debugPipelineCreation.pushConstants.size = 24;
 
     debugPipeline = gpu->createPipeline(debugPipelineCreation, /*debugRendering=*/ true);
 
@@ -173,7 +176,7 @@ void Game::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inIm
     recreatePositionBuffer = false;
 }
 
-void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)
+void Game::loop(InputHandler& inputHandler)
 {
     while (Window::instance()->exitRequested == false)
     {
@@ -191,8 +194,6 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
         //New Frame
         if (Window::instance()->minimised == false)
         {
-            //playerPosition = convertToVec3(static_cast<Player*>(scene.entities[0].entityData)->character->GetPosition());
-
             //This is only false when we can't recreate the swapchain because of 0 height due to VK_ERROR_OUT_OF_DATE_KHR constantly being hit.
             //We still need to acquire an image to re-check if can now correctly fetch a swapchain image. 
             if (gpu->newFrame() == false)
@@ -210,7 +211,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 gameCamera.internal3DCamera.setAspectRatio(Window::instance()->width * 1.f / Window::instance()->height);
             }
 
-            //static_cast<Player*>(scene.entities[0].entityData)->handleEvents(inputHandler, convertToVec3JPH(gameCamera.internal3DCamera.direction));
+            static_cast<Player*>(scene.entities[0].entityData)->handleEvents(inputHandler, convertToVec3JPH(gameCamera.internal3DCamera.direction));
 
             if (inputHandler.isKeyJustReleased(Keys::KEY_1))
             {
@@ -220,27 +221,29 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             {
                 audioSystem->playSoundEffect(sfx::Lazer);
             }
+            else if (inputHandler.isKeyJustReleased(Keys::KEY_0))
+            {
+                audioSystem->playSoundEffect(sfx::Lazer);
+            }
             else if (inputHandler.isKeyJustReleased(Keys::KEY_R))
             {
-                //static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
-                //gameCamera.resetPlayerCamera();
+                static_cast<Player*>(scene.entities[0].entityData)->resetPosition();
+                gameCamera.resetPlayerCamera();
+            }
+            else if (inputHandler.isKeyJustReleased(Keys::KEY_2))
+            {
+                scene.testSwarn();
             }
 
-            ////NOTE: This must be after the OS messages.
-            //imgui->newFrame();
+            //NOTE: This must be after the OS messages.
+            imgui->newFrame();
 
-            //if (ImGui::Begin("Void ImGui"))
-            //{
-            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            //}
-            //ImGui::End();
+            if (ImGui::Begin("Void ImGui"))
+            {
+                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            }
+            ImGui::End();
 
-            //if (ImGui::Begin("GPU"))
-            //{
-            //    gpuProfiler.imguiDraw();
-            //}
-            //ImGui::End();
-            
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
             //Saves the mouse position in screen coordinates and handles events that are for re-mapped key bindings 
@@ -253,20 +256,27 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             Physics::instance().updatePhysics(deltaTime);
 
-            //static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
+            static_cast<Player*>(scene.entities[0].entityData)->update(deltaTime, *audioSystem);
+            playerPosition = convertToVec3(static_cast<Player*>(scene.entities[0].entityData)->character->GetPosition());
 
-            gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
-            //gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
+            //gameCamera.update(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, deltaTime);
+            gameCamera.updatePlayerCamera(&inputHandler, (float)Window::instance()->width, (float)Window::instance()->height, playerPosition, { 0.f, 0.f, 0.f, 0.f }, deltaTime);
+            vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, -10.f));
+
             Window::instance()->centerMouse(inputHandler.isMouseDragging(MouseButtons::MOUSE_BUTTON_RIGHT));
-            
+
             deleteEntity();
 
-            CommandBuffer* gpuCommands = gpu->getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
+            CommandBuffer* gpuCommands = gpu->commandBuffer[gpu->currentFrame];
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.pNext = nullptr;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(gpuCommands->vkCommandBuffer, &beginInfo);
+
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
-
-            vec3s directionalVec = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, 1.f));
 
             particleRenderer.updateParticles(gpuCommands, 0, deltaTime, gameCamera.internal3DCamera.direction, gameCamera.internal3DCamera.view);
             particleRenderer.createParticleDrawCalls(gpuCommands);
@@ -279,16 +289,15 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
             Buffer* globalSceneBuffer = gpu->accessBuffer(debugGlobalBuffer);
             pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
             pushConstants.vertexDataAddress = 0;
-            pushConstants.modelPositionAddress = 0;
+            pushConstants.entityDataAddress = 0;
 
             UniformData globalSceneData{};
             globalSceneData.globalModel = globalModel;
             globalSceneData.view = gameCamera.internal3DCamera.view;
             globalSceneData.project = gameCamera.internal3DCamera.projection;
             globalSceneData.eye = vec4s{ gameCamera.internal3DCamera.direction.x, gameCamera.internal3DCamera.direction.y, gameCamera.internal3DCamera.direction.z, 1.f };
-            vec3s lightPosition = glms_vec3_add(playerPosition, glms_vec3_scale(gameCamera.internal3DCamera.direction, -10.f));
-            //globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z };
-            globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
+            globalSceneData.light = vec4s{ lightPosition.x, lightPosition.y, lightPosition.z };
+            //globalSceneData.light = vec4s{ gameCamera.internal3DCamera.position.x, gameCamera.internal3DCamera.position.y, gameCamera.internal3DCamera.position.z, 1.f };
 
             vmaCopyMemoryToAllocation(gpu->VMAAllocator, &globalSceneData, globalSceneBuffer->vmaAllocation, 0, sizeof(UniformData));
 
@@ -297,8 +306,8 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
 
             gpuCommands->bindlessDescriptorSet(0);
 
-            Buffer* positionBuff = gpu->accessBuffer(positionalBuffer[gpu->currentFrame]);
-            pushConstants.modelPositionAddress = positionBuff->bufferAddress;
+            Buffer* entityBuffer = gpu->accessBuffer(positionalBuffer[gpu->currentFrame]);
+            pushConstants.entityDataAddress = entityBuffer->bufferAddress;
 
             for (uint32_t entityIndex = 0; entityIndex < scene.entities.size; ++entityIndex)
             {
@@ -321,13 +330,13 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 }
                 else
                 {
-                    //JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
-                    //mat4s modelPosition = convertToMat4(newPos);
-                    //scene.entityData[entityIdx].position = modelPosition;
+                    JPH::RMat44 newPos = Physics::instance().bodyInterface->GetWorldTransform(static_cast<Player*>(scene.entities[0].entityData)->character->GetBodyID());
+                    mat4s modelPosition = convertToMat4(newPos);
+                    scene.entityData[entityIdx].position = modelPosition;
                 }
             }
 
-            vmaCopyMemoryToAllocation(gpu->VMAAllocator, scene.entityData.data, positionBuff->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
+            vmaCopyMemoryToAllocation(gpu->VMAAllocator, scene.entityData.data, entityBuffer->vmaAllocation, 0, sizeof(EntityData) * scene.entityData.size);
 
             uint32_t instanceCountOffset = 0;
             for (int32_t modelIndexType = scene.models.size - 1; modelIndexType >= 0; --modelIndexType)
@@ -361,7 +370,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 //Debug
                 gpuCommands->bindPipeline(debugPipeline);
 
-                pushConstants.modelPositionAddress = positionBuff->bufferAddress;
+                pushConstants.entityDataAddress = entityBuffer->bufferAddress;
                 pushConstants.sceneAddress = globalSceneBuffer->bufferAddress;
 
                 instanceCountOffset = 0;
@@ -369,7 +378,7 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 {
                     VOID_ASSERTM(scene.debugModels[modelIndexType].meshDraws.size == 1, "Collider geometry have have one draw call.\n");
 
-                    MeshDraw meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
+                    const MeshDraw& meshDraw = scene.debugModels[modelIndexType].meshDraws[0];
 
                     Buffer* vertexDataBuf = gpu->accessBuffer(meshDraw.vertexBuffer);
                     pushConstants.vertexDataAddress = vertexDataBuf->bufferAddress;
@@ -384,22 +393,20 @@ void Game::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuPro
                 }
             }
 
-            drawSkybox(*gpu, *gpuCommands, pushConstants);
+            SkyboxPushConstants skyboxPushConstants{ .sceneAddress  = globalSceneBuffer->bufferAddress };
+            drawSkybox(*gpu, *gpuCommands, skyboxPushConstants);
 
             particleRenderer.drawParticles(*gpuCommands, gameCamera.internal3DCamera);
 
-            //imgui->render(*gpuCommands);
+            imgui->render(*gpuCommands);
 
-            gpuCommands->popMarker();
+            ImGui::Render();
 
-            //gpuProfiler.update(gpu);
-
-            gpu->queueCommandBuffer(gpuCommands);
             gpu->present();
         }
         else
         {
-            //ImGui::Render();
+            ImGui::Render();
         }
 
         //FrameMark;
@@ -434,7 +441,7 @@ void Game::deleteEntity()
     {
         for (uint32_t i = 0; i < Physics::instance().contactListener.toDeleteQueue.size;)
         {
-            uint32_t index = Physics::instance().contactListener.toDeleteQueue[i];
+            uint32_t index = Physics::instance().contactListener.toDeleteQueue.get(i);
             scene.entities[index].isDeleted = true;
             scene.entityData[index].position = glms_mat4_identity();
             scene.entityData[index].position.m30 = FLT_MAX;

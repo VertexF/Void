@@ -12,7 +12,7 @@ struct Vertices
 };
 
 //Here we are going to attempt full bindless for the debug renderer to make this as painless as possible in the future.
-struct ModelPosition
+struct EntityData
 {
     mat4 pos; 
     //all local nodes together needs to be the same as the collision geometry.
@@ -37,9 +37,9 @@ layout(scalar, buffer_reference) readonly buffer VertexData
     Vertices vertexData[];
 };
 
-layout(scalar, buffer_reference) readonly buffer ModelPositionData
+layout(scalar, buffer_reference) readonly buffer EntityDataPtr
 {
-    ModelPosition modelPositions[];
+    EntityData entityData[];
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
@@ -50,7 +50,7 @@ layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer Sce
 layout(scalar, push_constant) uniform entityIndex
 {
     VertexData vertexDataReference;
-    ModelPositionData modelPositionsReference;
+    EntityDataPtr entityDataReference;
     SceneBufferData sceneBufferReference;
 };
 
@@ -63,6 +63,6 @@ void main()
                          vertexDataReference.vertexData[gl_VertexIndex].py, 
                          vertexDataReference.vertexData[gl_VertexIndex].pz);
 
-    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * modelPositionsReference.modelPositions[gl_InstanceIndex].pos * modelPositionsReference.modelPositions[gl_InstanceIndex].debugModel * vec4(position, 1.0);
-    vColour = modelPositionsReference.modelPositions[gl_InstanceIndex].colour;
+    gl_Position = sceneBufferReference.sceneData.project * sceneBufferReference.sceneData.view * sceneBufferReference.sceneData.globalModel * entityDataReference.entityData[gl_InstanceIndex].pos * entityDataReference.entityData[gl_InstanceIndex].debugModel * vec4(position, 1.0);
+    vColour = entityDataReference.entityData[gl_InstanceIndex].colour;
 }

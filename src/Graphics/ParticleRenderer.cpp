@@ -56,7 +56,8 @@ namespace
         float padd[3];
     };
 
-    constexpr const uint32_t particleCount = 40000;
+    //IMPORTANT: Make sure the size of the buffer is the same as the number of particles used in a scene.
+    constexpr const uint32_t particleCount = 1000;
     constexpr const uint32_t maxDrawCount = 101;
 }
 
@@ -80,7 +81,9 @@ void ParticleRenderer::init(GPUDevice& inGPU)
         .addStage(frag2D.data, uint32_t(frag2D.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    particlePipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
+    particlePipelineCreation.pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    particlePipelineCreation.pushConstants.offset = 0;
+    particlePipelineCreation.pushConstants.size = 24;
 
     particlePipelineCreation.rasterisation.cullMode = VK_CULL_MODE_NONE;
 
@@ -99,7 +102,9 @@ void ParticleRenderer::init(GPUDevice& inGPU)
         .addStage(particleDrawShader.data, uint32_t(particleDrawShader.size), VK_SHADER_STAGE_COMPUTE_BIT)
         .setSPVInput(true);
 
-    drawCallCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticleDrawCallPushConstant));
+    drawCallCreation.pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    drawCallCreation.pushConstants.offset = 0;
+    drawCallCreation.pushConstants.size = sizeof(ParticleDrawCallPushConstant);
 
     particleDrawCall = gpu->createPipeline(drawCallCreation);
 
@@ -113,7 +118,9 @@ void ParticleRenderer::init(GPUDevice& inGPU)
         .addStage(particleUpdateShader.data, uint32_t(particleUpdateShader.size), VK_SHADER_STAGE_COMPUTE_BIT)
         .setSPVInput(true);
 
-    particleUpdateCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ParticlePushConstant));
+    particleUpdateCreation.pushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    particleUpdateCreation.pushConstants.offset = 0;
+    particleUpdateCreation.pushConstants.size = sizeof(ParticlePushConstant);
 
     particleData = gpu->createPipeline(particleUpdateCreation);
 
@@ -150,7 +157,7 @@ void ParticleRenderer::addParticleSet(vec3s position, vec3s scale, vec2s spriteS
     data.texCoords[1] = vec2s{ max.x, max.y };
     data.texCoords[2] = vec2s{ max.x, min.y };
     data.texCoords[3] = vec2s{ min.x, min.y };
-    data.maxAge = 0.03f;
+    data.maxAge = 10.f;
 
     particleSets.push(data);
 }

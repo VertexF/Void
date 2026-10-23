@@ -22,7 +22,7 @@ struct Vertices
 	float pad;
 };
 
-struct ModelPosition
+struct EntityData
 {
 	float pad;
 };
@@ -32,9 +32,9 @@ layout(scalar, buffer_reference) readonly buffer VertexData
     Vertices vertexData[];
 };
 
-layout(scalar, buffer_reference) readonly buffer ModelPositionData
+layout(scalar, buffer_reference) readonly buffer EntityDataPtr
 {
-    ModelPosition modelPositions[];
+    EntityData entityData[];
 };
 
 layout(scalar, buffer_reference, buffer_reference_align = 8) readonly buffer SceneBufferData
@@ -160,7 +160,7 @@ float heaviside(float value)
 layout(scalar, push_constant) uniform entityIndex
 {
     VertexData vertexDataReference;
-    ModelPositionData modelPositionsReference;
+    EntityDataPtr entityDataReference;
     SceneBufferData sceneBufferReference;
 };
 

@@ -84,6 +84,7 @@ struct cgltf_data;
 struct Model
 {
     void loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout, bool ktx2On = false);
+    void loadParticle(const char* particleSpriteSheet);
     void shutdownModel(GPUDevice& gpu);
 
     Array<MeshDraw> meshDraws;

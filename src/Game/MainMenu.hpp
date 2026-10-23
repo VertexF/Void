@@ -7,12 +7,11 @@
 #include "Graphics/GPUDevice.hpp"
 #include "Graphics/VoidImgui.hpp"
 #include "Graphics/2DRenderer.hpp"
-#include "Graphics/GPUProfiler.hpp"
 
 struct MainMenu 
 {
     void init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui);
-    void loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler);
+    void loop(InputHandler& inputHandler);
     void shutdown();
 
     GPUDevice* gpu;

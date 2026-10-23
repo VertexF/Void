@@ -46,9 +46,9 @@ static cgltf_data* setupModel(const char* modelPath, Array<cgltf_node>& nodeStac
     cgltf_data* cgltfData = nullptr;
 
     cgltf_options options{};
-    options.memory.alloc_func = tlsf_malloc;
-    options.memory.free_func = tlsf_free;
-    options.memory.user_data = MemoryService::instance()->systemAllocator.TLSFHandle;
+    //options.memory.alloc_func = tlsf_malloc;
+    //options.memory.free_func = tlsf_free;
+    //options.memory.user_data = &MemoryService::instance()->systemAllocator.TLSFHandle;
     cgltf_result result = cgltf_parse_file(&options, modelPath, &cgltfData);
     if (result != cgltf_result_success)
     {
@@ -160,6 +160,11 @@ static cgltf_data* setupModel(const char* modelPath, Array<cgltf_node>& nodeStac
     return cgltfData;
 }
 
+void Model::loadParticle(const char* particleSpriteSheet)
+{
+    
+}
+
 void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayoutHandle descriptorSetLayout, bool ktx2On)
 {
     cgltf_data* cgltfData = setupModel(modelPath, nodeStack, finalMatrix);
@@ -200,7 +205,7 @@ void Model::loadModel(const char* modelPath, GPUDevice& gpu, DescriptorSetLayout
             cgltf_image image = cgltfData->images[imageIndex];
 
             uint8_t* rawBufferData = reinterpret_cast<uint8_t*>(image.buffer_view->buffer->data) + image.buffer_view->offset;
-            TextureHandle newTexture = loadTexture(gpu, rawBufferData, image.buffer_view->size);
+            TextureHandle newTexture = loadTexture(gpu, rawBufferData, image.buffer_view->size, KTX_TTF_BC7_RGBA);
 
             images.push(newTexture);
         }
@@ -596,8 +601,8 @@ void Model::shutdownModel(GPUDevice& gpu)
     for (uint32_t meshIndex = 0; meshIndex < meshDraws.size; ++meshIndex)
     {
         MeshDraw& meshDraw = meshDraws[meshIndex];
-            gpu.destroyDescriptorSet(meshDraw.descriptorSet);
-            gpu.destroyBuffer(meshDraw.materialBuffer);
+        gpu.destroyDescriptorSet(meshDraw.descriptorSet);
+        gpu.destroyBuffer(meshDraw.materialBuffer);
         gpu.destroyBuffer(meshDraw.vertexBuffer);
         gpu.destroyBuffer(meshDraw.indexBuffer);
     }

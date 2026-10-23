@@ -5,7 +5,6 @@
 
 struct CommandBuffer 
 {
-    void init(VkQueueFlagBits newType, uint32_t newBufferSize, uint32_t newSubmitSize, bool newBaked);
     void terminate();
 
     //Command buffer interface
@@ -39,19 +38,11 @@ struct CommandBuffer
     GPUDevice* device;
     VkDescriptorSet vkDescriptorSets[16];
 
-    Pipeline* currentPipeline;
-    bool isRecording;
+    Pipeline* currentPipeline = nullptr;
+    bool isRecording = false;
 
-    uint32_t handle;
-
-    uint32_t currentCommand;
+    uint32_t currentCommand = 0;
     uint32_t resourceHandle;
-    VkQueueFlagBits type = VK_QUEUE_GRAPHICS_BIT;
-    uint32_t bufferSize = 0;
-    uint32_t submitSize = 0;
-
-    //If baked reset will affect only the read commands.
-    bool baked = false;
 };
 
 #endif // !COMMAND_BUFFER_HDR

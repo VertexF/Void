@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <memory.h>
+#include <thread>
 
 #if defined VOID_IMGUI
     #include <vender/imgui/imgui.h>
@@ -127,9 +128,9 @@ void HeapAllocator::init(size_t size)
 void HeapAllocator::shutdown()
 {
     MemoryStatistics stats{ 0, maxSize };
+
     pool_t pool = tlsf_get_pool(TLSFHandle);
     tlsf_walk_pool(pool, exitWalker, (void*)&stats);
-
     if (stats.allocatedBytes)
     {
         vprint("HeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", stats.allocatedBytes, stats.totalBytes);
@@ -185,6 +186,7 @@ protected:
 void* HeapAllocator::allocate(size_t size, size_t alignment)
 {
     void* memory = tlsf_malloc(TLSFHandle, size);
+    VOID_ASSERTM(memory != nullptr, "tlsf_malloc failed to allocate memory.\n");
     vprint("Memory: %p, size %llu \n", memory, size);
     return memory;
 }
@@ -227,9 +229,63 @@ void HeapAllocator::deallocate(void* pointer)
 #endif
 }
 
-void memoryCopy(void* destination, void* source, size_t size) 
+void ThreadedHeapAllocator::init(size_t size)
 {
-    memcpy(destination, source, size);
+    //memory = malloc(size);
+    //maxSize = size;
+    //allocatedSize = 0;
+
+    //memset(memory, 0, size);
+
+    //tlsf_thread_init(&tlsfThreadHandle, memory, size);
+    //vprint("HeapAllocator of size %llu created.\n", size);
+}
+
+void ThreadedHeapAllocator::shutdown() 
+{
+    //MemoryStatistics stats{ 0, maxSize };
+    //tlsf_stats_t tlsfStats;
+    //tlsf_thread_stats(&tlsfThreadHandle, &tlsfStats);
+    //if (tlsfStats.total_used)
+    //{
+    //    vprint("ThreadHeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", tlsfStats.total_used, tlsfStats.total_free + tlsfStats.total_used);
+    //}
+    //else
+    //{
+    //    vprint("ThreadHeapAllocator Shutdown - all memory freed.\n");
+    //}
+
+    //VOID_ASSERTM(tlsfStats.total_used == 0, "Allocated bytes are still present.\n");
+
+    //tlsf_thread_destroy(&tlsfThreadHandle);
+    //free(memory);
+}
+
+void* ThreadedHeapAllocator::allocate(size_t size, size_t alignment) 
+{
+    //void* memory = tlsf_thread_malloc(&tlsfThreadHandle, size);
+    //VOID_ASSERTM(memory != nullptr, "tlsf_thread_malloc failed to allocate memory.\n");
+    //vthreadprint("Memory: %p, size %llu \n", memory, size);
+    //return memory;
+    return nullptr;
+}
+
+void* ThreadedHeapAllocator::allocate(size_t size, size_t alignment, const char* file, int32_t line) 
+{
+    return allocate(size, alignment);
+}
+
+void* ThreadedHeapAllocator::reallocate(void* pointer, size_t size) 
+{
+    return nullptr;
+}
+
+void ThreadedHeapAllocator::deallocate(void* pointer) 
+{
+    //size_t actualSize = tlsf_usable_size(pointer);
+    //allocatedSize -= actualSize;
+
+    //tlsf_thread_free(&tlsfThreadHandle, pointer);
 }
 
 size_t memoryAlign(size_t size, size_t alignment) 

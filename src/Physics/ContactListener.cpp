@@ -9,7 +9,7 @@
 
 VoidContactListener::VoidContactListener()
 {
-    toDeleteQueue.init(&MemoryService::instance()->systemAllocator, 4);
+    toDeleteQueue.init(&MemoryService::instance()->systemAllocator, 16);
 }
 
 // See: ContactListener
@@ -28,9 +28,7 @@ JPH::ValidateResult	VoidContactListener::OnContactValidate(const JPH::Body& inBo
         case EntityType::ROCK:
             if (currentEntity->isDeleted == false)
             {
-                mutex.lock();
                 toDeleteQueue.push(currentEntity->entityIndex);
-                mutex.unlock();
             }
             break;
 	default:
@@ -50,9 +48,7 @@ JPH::ValidateResult	VoidContactListener::OnContactValidate(const JPH::Body& inBo
         case EntityType::ROCK:
             if (currentEntity->isDeleted == false)
             {
-                mutex.lock();
                 toDeleteQueue.push(currentEntity->entityIndex);
-                mutex.unlock();
             }
             break;
         default:

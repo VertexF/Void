@@ -2,6 +2,8 @@
 
 #include "Foundation/Time.hpp"
 
+#include "vender/imgui/imgui.h"
+
 #include <ktx.h>
 
 void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& inImgui)
@@ -17,8 +19,9 @@ void MainMenu::init(GPUDevice& inGPU, AudioSystem& inAudioSystem, ImguiService& 
     renderer2D.loadBuffer();
 }
 
-void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gpuProfiler)
+void MainMenu::loop(InputHandler& inputHandler)
 {
+    float modelScale = 1.f;
     while (Window::instance()->mainMenuRequested == false)
     {
         //ZoneScoped;
@@ -61,20 +64,14 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
                 Window::instance()->mainMenuRequested = true;
             }
 
-            ////NOTE: This must be after the OS messages.
-            //imgui->newFrame();
+            //NOTE: This must be after the OS messages.
+            imgui->newFrame();
 
-            //if (ImGui::Begin("Void ImGui"))
-            //{
-            //    ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
-            //}
-            //ImGui::End();
-
-            //if (ImGui::Begin("GPU"))
-            //{
-            //    gpuProfiler.imguiDraw();
-            //}
-            //ImGui::End();
+            if (ImGui::Begin("Void ImGui"))
+            {
+                ImGui::InputFloat("Model Scale", &modelScale, 0.001f);
+            }
+            ImGui::End();
 
             //Moves key pressed events stores then in a key-pressed array. This allows us to know if a key is being held down, rather than just pressed. 
             inputHandler.newFrame();
@@ -86,7 +83,13 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
             //float deltaTime = static_cast<float>(timeDeltaSeconds(beginFrameTick, currentTick));
             //beginFrameTick = currentTick;
 
-            CommandBuffer* gpuCommands = gpu->getCommandBuffer(VK_QUEUE_GRAPHICS_BIT, true);
+            CommandBuffer* gpuCommands = gpu->commandBuffer[gpu->currentFrame];
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.pNext = nullptr;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(gpuCommands->vkCommandBuffer, &beginInfo);
+
             gpuCommands->pushMarker("Frame");
 
             gpu->beginRenderingTransition(gpuCommands);
@@ -97,18 +100,15 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
 
             renderer2D.drawQuad(*gpuCommands);
 
-            //imgui->render(*gpuCommands);
+            imgui->render(*gpuCommands);
 
             gpuCommands->popMarker();
 
-            //gpuProfiler.update(gpu);
-
-            gpu->queueCommandBuffer(gpuCommands);
             gpu->present();
         }
         else
         {
-            //ImGui::Render();
+            ImGui::Render();
         }
 
         //FrameMark;
@@ -117,7 +117,10 @@ void MainMenu::loop(InputHandler& inputHandler, [[maybe_unused]] GPUProfiler& gp
 
 void MainMenu::shutdown()
 {
-    //vkDeviceWaitIdle(gpu->vulkanDevice);
+    //Pausing the main queue that handles graphics to the command buffers don't end up being recorded to while submitting.
+    //It's possible to make this better with a semaphore, but since you don't once and it's about 0.22ms~ in my GPU 
+    //I don't think it's that big of an issue.
+    vkQueueWaitIdle(gpu->vulkanQueue);
 
     renderer2D.shutdown();
 }

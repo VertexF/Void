@@ -46,7 +46,9 @@ void initSkybox(GPUDevice& gpu)
         .addStage(fragSkybox.data, uint32_t(fragSkybox.size), VK_SHADER_STAGE_FRAGMENT_BIT)
         .setSPVInput(true);
 
-    skyboxPipelineCreation.pushConstants.createPushConstants(VK_SHADER_STAGE_VERTEX_BIT, 0, 24);
+    skyboxPipelineCreation.pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    skyboxPipelineCreation.pushConstants.offset = 0;
+    skyboxPipelineCreation.pushConstants.size = 8;
 
     //Descriptor set layout.
     DescriptorSetLayoutCreation skyboxSetLayout{};
@@ -89,7 +91,7 @@ void initSkybox(GPUDevice& gpu)
     skyboxDescriptorSet = gpu.createDescriptorSet(dsCreation);
 }
 
-void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, PushConstants pushConstants)
+void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, const SkyboxPushConstants& pushConstants)
 {
     //Skybox!
     gpuCommands.bindPipeline(skyboxPipeline);
@@ -103,7 +105,7 @@ void drawSkybox(GPUDevice& gpu, CommandBuffer& gpuCommands, PushConstants pushCo
 
     vmaCopyMemoryToAllocation(gpu.VMAAllocator, &skyboxData, skyboxMaterialDataBuffer->vmaAllocation, 0, sizeof(SkyboxData));
 
-    vkCmdPushConstants(gpuCommands.vkCommandBuffer, gpuCommands.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &pushConstants);
+    vkCmdPushConstants(gpuCommands.vkCommandBuffer, gpuCommands.currentPipeline->vkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(SkyboxPushConstants), &pushConstants);
 
     gpuCommands.bindDescriptorSet(&skyboxDescriptorSet, 1, nullptr, 0, 1);
     gpuCommands.bindlessDescriptorSet(0);

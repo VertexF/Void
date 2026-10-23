@@ -79,8 +79,6 @@ set(VOID_SOURCE src/main.cpp
                 src/Graphics/CommandBuffer.cpp
                 src/Graphics/GPUDevice.cpp
                 src/Graphics/GPUDevice.hpp
-                src/Graphics/GPUProfiler.hpp
-                src/Graphics/GPUProfiler.cpp
                 src/Graphics/GPUResources.hpp
                 src/Graphics/GPUResources.cpp
                 src/Graphics/LoadGLTF.hpp
@@ -158,6 +156,7 @@ endif()
 ###Foundation
 
 set(FOUNDATION_SOURCE src/Foundation/Array.hpp
+                      src/Foundation/ArrayThread.hpp
                       src/Foundation/Assert.hpp
                       src/Foundation/Bit.cpp
                       src/Foundation/Bit.hpp
@@ -166,8 +165,6 @@ set(FOUNDATION_SOURCE src/Foundation/Array.hpp
                       src/Foundation/Blob.hpp
                       src/Foundation/Camera.cpp
                       src/Foundation/Camera.hpp
-                      src/Foundation/Colour.cpp
-                      src/Foundation/Colour.hpp
                       src/Foundation/File.cpp
                       src/Foundation/File.hpp
                       src/Foundation/HashMap.hpp
@@ -217,13 +214,15 @@ target_include_directories(Foundation SYSTEM PRIVATE
 ###External
 
 add_library(External STATIC
-    vender/tlsf/tlsf.c
     vender/tlsf/tlsf.h
+    vender/tlsf/tlsf.c
 
     vender/imgui/imconfig.h
     vender/imgui/imgui_draw.cpp
     vender/imgui/backends/imgui_impl_sdl3.cpp
     vender/imgui/backends/imgui_impl_sdl3.h
+    vender/imgui/backends/imgui_impl_vulkan.cpp
+    vender/imgui/backends/imgui_impl_vulkan.h
     vender/imgui/imgui_internal.h
     vender/imgui/imgui_tables.cpp
     vender/imgui/imgui_widgets.cpp
@@ -263,6 +262,32 @@ add_library(External STATIC
     vender/miniaudio.c
 )
 
+set_target_properties(External PROPERTIES SYSTEM ON)
+
+if (WIN32)
+    target_sources(External PRIVATE
+                   vender/StackWalker/Main/StackWalker/StackWalker.cpp
+                   vender/StackWalker/Main/StackWalker/StackWalker.h)
+endif()
+
+target_compile_definitions(External PRIVATE
+                          TRACY_ENABLE
+                          TRACY_ON_DEMAND
+                          TRACY_NO_SYSTEM_TRACING)
+
+target_include_directories(External PRIVATE
+                           ${SDL3_INCLUDES}
+                           ${IMGUI_INCLUDE}
+                           ${TLSF_INCLUDE_DIR}
+                           ${VULKAN_INCLUDE_DIR})
+
+if (UNIX)
+    target_link_libraries(External PRIVATE
+                          dl)
+endif()
+
+
+###KTX
 set(DF_INCLUDE "vender/KTX-Software-4.4.2/external/dfdutils/KHR")
 
 set(KTX_SOURCES
@@ -296,34 +321,10 @@ target_include_directories(ktx SYSTEM PRIVATE ${KTX_LIB_INCLUDE_DIR}
                            ${VULKAN_INCLUDE_DIR}
                            ${KTX_STDZ}
                            ${KTX_EXTERNAL}
-                           ${DF_INCLUDE})
+                           ${DF_INCLUDE}
+						   ${TLSF_INCLUDE_DIR})
 
 target_compile_definitions(ktx PUBLIC KHRONOS_STATIC)
-
-set_target_properties(External PROPERTIES SYSTEM ON)
-
-if (WIN32)
-    target_sources(External PRIVATE
-                   vender/StackWalker/Main/StackWalker/StackWalker.cpp
-                   vender/StackWalker/Main/StackWalker/StackWalker.h)
-endif()
-
-target_compile_definitions(External PRIVATE
-                          TRACY_ENABLE
-                          TRACY_ON_DEMAND
-                          TRACY_NO_SYSTEM_TRACING)
-
-if (WIN32)
-    target_include_directories(External PRIVATE
-                               ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE})
-else()
-    target_link_libraries(External PRIVATE
-                          dl)
-    target_include_directories(External PRIVATE
-                               ${SDL3_INCLUDES}
-                               ${IMGUI_INCLUDE})
-endif()
 
 ###Physics
 
@@ -926,29 +927,6 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
     )
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach()
-
-#if(UNIX)
-#    set(SLANG_COMPILER "slangc")
-#elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
-#    set(SLANG_COMPILER "$ENV{VULKAN_SDK}/Bin/slangc.exe")
-#else()
-#    set(SLANG_COMPILER "$ENV{VULKAN_SDK}/Bin32/slangc.exe")
-#endif()
-#
-#set(SPIRV_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Assets/Shaders/")
-#foreach(SLANG ${SLANG_SOURCE_FILES})
-#	get_filename_component(STEM ${SLANG} NAME)
-#    set(SPIRV "${SPIRV_OUTPUT_DIR}${STEM}.spv")
-#	message(STATUS ${SLANG})
-#    add_custom_command(
-#        OUTPUT ${SPIRV}
-#        COMMAND ${CMAKE_COMMAND} -E make_directory "${SPIRV_OUTPUT_DIR}"
-#        COMMAND ${SLANG_COMPILER} -target spirv ${SLANG} -o ${SPIRV} -fvk-use-scalar-layout
-#        DEPENDS ${SLANG} ${SLANG_HEADER_FILES}
-#    )
-#    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-#endforeach()
-
 
 add_custom_target(CompileShaders DEPENDS ${SPIRV_BINARY_FILES})
 add_dependencies(Void CompileShaders)

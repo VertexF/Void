@@ -68,7 +68,7 @@ void Player::update(float deltaTime, AudioSystem& audio)
 
     if (soundEffect == true) 
     {
-        //audio.playSoundEffect(sfx::Lazer);
+        audio.playSoundEffect(sfx::Lazer);
         soundEffect = false;
     }
 }

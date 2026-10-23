@@ -8,8 +8,8 @@
 
 struct Allocator;
 
-static uint32_t bitMask8(uint32_t bit) { return 1 << (bit & 7); };
-static uint32_t bitSlot8(uint32_t bit) { return bit / 8; }
+inline uint32_t bitMask8(uint32_t bit) { return 1 << (bit & 7); };
+inline uint32_t bitSlot8(uint32_t bit) { return bit / 8; }
 
 uint32_t leadingZerosU32(uint32_t x);
 #if defined(_MSC_VER)
