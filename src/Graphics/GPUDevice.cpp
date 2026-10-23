@@ -1170,7 +1170,7 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
         vkCmdPipelineBarrier2(commandBuffer[currentFrame]->vkCommandBuffer, &barrierStagingDependencyInfo);
 
         Array<VkBufferImageCopy2> regions;
-        regions.init(&MemoryService::instance()->scratchAllocator, 4);
+        regions.init(&MemoryService::instance()->systemAllocator, 4);
         for (uint32_t mipLevel = 0; mipLevel < creation.mipmaps; ++mipLevel)
         {
             if (ktxTexture)
@@ -1272,6 +1272,8 @@ TextureHandle GPUDevice::createTexture(const TextureCreation& creation, ktxTextu
 
         //TODO: Maybe I need to free the command buffer.
         vkResetCommandBuffer(commandBuffer[currentFrame]->vkCommandBuffer, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+
+        regions.shutdown();
     }
 
     return handle;
