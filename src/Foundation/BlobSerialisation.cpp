@@ -1,9 +1,9 @@
 #include "BlobSerialisation.hpp"
 
-#include <stdarg.h>
-#include <stdio.h>
+#include <cstdarg>
+#include <cstdio>
 #include <memory.h>
-
+#include <cstring>
 
 void BlobSerialiser::writeCommon(Allocator* alloc, uint32_t serialiserVersion, size_t size) 
 {

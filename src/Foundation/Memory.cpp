@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <thread>
-#include <chrono>
 
 #if defined VOID_IMGUI
     #include <vender/imgui/imgui.h>
@@ -40,7 +39,7 @@
     #endif //VOID_MEMORY_DEBUG
 #endif
 
-static size_t MEMORY_SIZE = void_mega(32) + sizeof(tlsf_t) + 8;
+static size_t MEMORY_SIZE = void_mega(32) + tlsf_size() + 8;
 
 static void exitWalker(void* ptr, size_t size, int used, void* user);
 static void imguiWalker(void* ptr, size_t size, int used, void* user);
@@ -57,7 +56,6 @@ void MemoryService::init(uint64_t heapSize, uint64_t stackSize, uint32_t physics
     scratchAllocator.init(stackSize != 0 ? stackSize : void_mega(8));
     physicsAllocator.init(physicsStackSize != 0 ? physicsStackSize : void_mega(8));
     systemAllocator.init(heapSize != 0 ? heapSize : MEMORY_SIZE);
-    threadedHeapAllocator.init(void_mega(256));
 }
 
 void MemoryService::shutdown()
@@ -65,7 +63,6 @@ void MemoryService::shutdown()
     scratchAllocator.shutdown();
     physicsAllocator.shutdown();
     systemAllocator.shutdown();
-    threadedHeapAllocator.shutdown();
 
     vprint("Memory Service Shutdown.\n");
 }
@@ -124,26 +121,28 @@ void HeapAllocator::init(size_t size)
 
     memset(memory, 0, size);
 
-    TLSFHandle = TLSF_INIT;
-    tlsf_pool_init(&TLSFHandle, memory, size);
+    TLSFHandle = tlsf_create_with_pool(memory, size);
     vprint("HeapAllocator of size %llu created.\n", size);
 }
 
 void HeapAllocator::shutdown()
 {
     MemoryStatistics stats{ 0, maxSize };
-    tlsf_stats_t tlsfStats;
-    tlsf_get_stats(&TLSFHandle, &tlsfStats);
-    if (tlsfStats.total_used)
+
+    pool_t pool = tlsf_get_pool(TLSFHandle);
+    tlsf_walk_pool(pool, exitWalker, (void*)&stats);
+    if (stats.allocatedBytes)
     {
-        vprint("HeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", tlsfStats.total_used, tlsfStats.total_free + tlsfStats.total_used);
+        vprint("HeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", stats.allocatedBytes, stats.totalBytes);
     }
     else
     {
         vprint("HeapAllocator Shutdown - all memory freed.\n");
     }
 
-    VOID_ASSERTM(tlsfStats.total_used == 0, "Allocated bytes are still present.\n");
+    VOID_ASSERTM(stats.allocatedBytes == 0, "Allocated bytes are still present.\n");
+
+    tlsf_destroy(TLSFHandle);
 
     free(memory);
 }
@@ -186,7 +185,7 @@ protected:
 
 void* HeapAllocator::allocate(size_t size, size_t alignment)
 {
-    void* memory = tlsf_malloc(&TLSFHandle, size);
+    void* memory = tlsf_malloc(TLSFHandle, size);
     VOID_ASSERTM(memory != nullptr, "tlsf_malloc failed to allocate memory.\n");
     vprint("Memory: %p, size %llu \n", memory, size);
     return memory;
@@ -195,13 +194,13 @@ void* HeapAllocator::allocate(size_t size, size_t alignment)
 void* HeapAllocator::allocate(size_t size, size_t alignment)
 {
 #if defined(HEAP_ALLOCATOR_STATS)
-    void* allocatedMemory = alignment == 1 ? tlsf_malloc(&TLSFHandle, size) : tlsf_aalloc(&TLSFHandle, alignment, size);
-    size_t actualSize = tlsf_usable_size(allocatedMemory);
+    void* allocatedMemory = alignment == 1 ? tlsf_malloc(&TLSFHandle, size) : tlsf_memalign(&TLSFHandle, alignment, size);
+    size_t actualSize = tlsf_block_size(allocatedMemory);
     allocatedSize += actualSize;
 
     return allocatedMemory;
 #else
-    return tlsf_malloc(&TLSFHandle, size);
+    return tlsf_malloc(TLSFHandle, size);
 #endif
 }
 #endif //VOID_MEMORY_STACK
@@ -213,7 +212,7 @@ void* HeapAllocator::allocate(size_t size, size_t alignment, const char* file, i
 
 void* HeapAllocator::reallocate(void* pointer, size_t size) 
 {
-    void* memory = tlsf_realloc(&TLSFHandle, pointer, size);
+    void* memory = tlsf_realloc(TLSFHandle, pointer, size);
     vprint("Memory: %p, size %llu \n", memory, size);
     return memory;
 }
@@ -221,10 +220,10 @@ void* HeapAllocator::reallocate(void* pointer, size_t size)
 void HeapAllocator::deallocate(void* pointer)
 {
 #if defined (HEAP_ALLOCATOR_STATS)
-    size_t actualSize = tlsf_usable_size(pointer);
+    size_t actualSize = tlsf_block_size(pointer);
     allocatedSize -= actualSize;
 
-    tlsf_free(&TLSFHandle, pointer);
+    tlsf_free(TLSFHandle, pointer);
 #else
     tlsf_free(TLSFHandle, pointer);
 #endif
@@ -232,42 +231,43 @@ void HeapAllocator::deallocate(void* pointer)
 
 void ThreadedHeapAllocator::init(size_t size)
 {
-    memory = malloc(size);
-    maxSize = size;
-    allocatedSize = 0;
+    //memory = malloc(size);
+    //maxSize = size;
+    //allocatedSize = 0;
 
-    memset(memory, 0, size);
+    //memset(memory, 0, size);
 
-    tlsf_thread_init(&tlsfThreadHandle, memory, size);
-    vprint("HeapAllocator of size %llu created.\n", size);
+    //tlsf_thread_init(&tlsfThreadHandle, memory, size);
+    //vprint("HeapAllocator of size %llu created.\n", size);
 }
 
 void ThreadedHeapAllocator::shutdown() 
 {
-    MemoryStatistics stats{ 0, maxSize };
-    tlsf_stats_t tlsfStats;
-    tlsf_thread_stats(&tlsfThreadHandle, &tlsfStats);
-    if (tlsfStats.total_used)
-    {
-        vprint("ThreadHeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", tlsfStats.total_used, tlsfStats.total_free + tlsfStats.total_used);
-    }
-    else
-    {
-        vprint("ThreadHeapAllocator Shutdown - all memory freed.\n");
-    }
+    //MemoryStatistics stats{ 0, maxSize };
+    //tlsf_stats_t tlsfStats;
+    //tlsf_thread_stats(&tlsfThreadHandle, &tlsfStats);
+    //if (tlsfStats.total_used)
+    //{
+    //    vprint("ThreadHeapAllocator Shutdown.\n=========\nFAILURE! Allocated memory detected. Allocated %llu, total %llu\n=========\n", tlsfStats.total_used, tlsfStats.total_free + tlsfStats.total_used);
+    //}
+    //else
+    //{
+    //    vprint("ThreadHeapAllocator Shutdown - all memory freed.\n");
+    //}
 
-    VOID_ASSERTM(tlsfStats.total_used == 0, "Allocated bytes are still present.\n");
+    //VOID_ASSERTM(tlsfStats.total_used == 0, "Allocated bytes are still present.\n");
 
-    tlsf_thread_destroy(&tlsfThreadHandle);
-    free(memory);
+    //tlsf_thread_destroy(&tlsfThreadHandle);
+    //free(memory);
 }
 
 void* ThreadedHeapAllocator::allocate(size_t size, size_t alignment) 
 {
-    void* memory = tlsf_thread_malloc(&tlsfThreadHandle, size);
-    VOID_ASSERTM(memory != nullptr, "tlsf_thread_malloc failed to allocate memory.\n");
-    vthreadprint("Memory: %p, size %llu \n", memory, size);
-    return memory;
+    //void* memory = tlsf_thread_malloc(&tlsfThreadHandle, size);
+    //VOID_ASSERTM(memory != nullptr, "tlsf_thread_malloc failed to allocate memory.\n");
+    //vthreadprint("Memory: %p, size %llu \n", memory, size);
+    //return memory;
+    return nullptr;
 }
 
 void* ThreadedHeapAllocator::allocate(size_t size, size_t alignment, const char* file, int32_t line) 
@@ -282,10 +282,10 @@ void* ThreadedHeapAllocator::reallocate(void* pointer, size_t size)
 
 void ThreadedHeapAllocator::deallocate(void* pointer) 
 {
-    size_t actualSize = tlsf_usable_size(pointer);
-    allocatedSize -= actualSize;
+    //size_t actualSize = tlsf_usable_size(pointer);
+    //allocatedSize -= actualSize;
 
-    tlsf_thread_free(&tlsfThreadHandle, pointer);
+    //tlsf_thread_free(&tlsfThreadHandle, pointer);
 }
 
 size_t memoryAlign(size_t size, size_t alignment) 

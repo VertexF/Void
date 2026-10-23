@@ -1,9 +1,6 @@
 #ifndef MEMORY_HDR
 #define MEMORY_HDR
 
-#include <tlsf.h>
-#include <tlsf_thread.h>
-
 #include "Platform.hpp"
 
 //#define VOID_IMGUI
@@ -55,12 +52,13 @@ struct HeapAllocator : public Allocator
 
     virtual void deallocate(void* pointer) override;
 
-    tlsf_t TLSFHandle;
+    void* TLSFHandle = nullptr;
     void* memory = nullptr;
     size_t allocatedSize = 0;
     size_t maxSize = 0;
 };
 
+//TODO: Either remove completely or implement your own threaded allocator.
 struct ThreadedHeapAllocator : public Allocator
 {
     virtual ~ThreadedHeapAllocator() = default;
@@ -74,11 +72,10 @@ struct ThreadedHeapAllocator : public Allocator
 
     virtual void deallocate(void* pointer) override;
 
-    tlsf_thread_t tlsfThreadHandle;
-    void* memory = nullptr;
-    size_t allocatedSize = 0;
-    size_t maxSize = 0;
-    //std::mutex lock;
+    //tlsf_thread_t tlsfThreadHandle;
+    //void* memory = nullptr;
+    //size_t allocatedSize = 0;
+    //size_t maxSize = 0;
 };
 
 struct StackAllocator : public Allocator
@@ -163,7 +160,6 @@ struct MemoryService
     //The jolt needs a larger sized piece of temporary memory.
     StackAllocator physicsAllocator{};
     HeapAllocator systemAllocator{};
-    ThreadedHeapAllocator threadedHeapAllocator{};
 };
 
 #define void_alloca(size, allocator) ((allocator)->allocate(size, 1, __FILE__, __LINE__))

@@ -19,7 +19,7 @@ else(UNIX)
     set(VULKAN_INCLUDE_DIR "$ENV{VULKAN_SDK}/include")
 endif()
 set(CGLM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/cglm/include")
-set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf-bsd/include")
+set(TLSF_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/tlsf")
 set(STACK_WALKER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/StackWalker/Main/StackWalker")
 set(RAPID_HASH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vender/rapidhash")
 set(VENDIR_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/vender")
@@ -112,13 +112,11 @@ if (WIN32)
                                _CRT_SECURE_NO_WARNINGS
                                WIN32_LEAN_AND_MEAN
                                NOMINMAX
-                               TLSF_ENABLE_CHECK
                                #VOID_IMGUI                        
                                VK_USE_PLATFORM_WIN32_KHR)
 else(UNIX)
     target_compile_definitions(Void PRIVATE 
                                CGLM_FORCE_DEPTH_ZERO_TO_ONE
-                               TLSF_ENABLE_CHECK
                                #VOID_IMGUI                     
                                VK_USE_PLATFORM_WAYLAND_KHR)
     target_compile_options(Void PRIVATE -Wno-unused-function)
@@ -216,8 +214,8 @@ target_include_directories(Foundation SYSTEM PRIVATE
 ###External
 
 add_library(External STATIC
-    vender/tlsf-bsd/src/tlsf.c
-    vender/tlsf-bsd/src/tlsf_thread.c
+    vender/tlsf/tlsf.h
+    vender/tlsf/tlsf.c
 
     vender/imgui/imconfig.h
     vender/imgui/imgui_draw.cpp
@@ -275,8 +273,7 @@ endif()
 target_compile_definitions(External PRIVATE
                           TRACY_ENABLE
                           TRACY_ON_DEMAND
-                          TRACY_NO_SYSTEM_TRACING
-                          TLSF_ENABLE_CHECK)
+                          TRACY_NO_SYSTEM_TRACING)
 
 target_include_directories(External PRIVATE
                            ${SDL3_INCLUDES}

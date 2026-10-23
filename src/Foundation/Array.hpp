@@ -4,6 +4,8 @@
 #include "Memory.hpp"
 #include "Assert.hpp"
 
+#include <cstring>
+
 //AlignedArray
 template<typename T>
 struct Array 

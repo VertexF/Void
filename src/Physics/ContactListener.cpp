@@ -9,7 +9,7 @@
 
 VoidContactListener::VoidContactListener()
 {
-    toDeleteQueue.init(16);
+    toDeleteQueue.init(&MemoryService::instance()->systemAllocator, 16);
 }
 
 // See: ContactListener

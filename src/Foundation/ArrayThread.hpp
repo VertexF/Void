@@ -5,6 +5,7 @@
 #include "Assert.hpp"
 
 #include <semaphore>
+#include <cstring>
 
 //AlignedArray
 template<typename T>
@@ -13,13 +14,13 @@ struct ArrayThread
     ArrayThread() = default;
     ~ArrayThread() = default;
 
-    void init(uint32_t initalCapacity, uint32_t initialSize = 0)
+    void init(Allocator* alloc, uint32_t initalCapacity, uint32_t initialSize = 0)
     {
         //No thread-safe on purpose.
         data = nullptr;
         size = initialSize;
         capacity = 0;
-        allocator = &MemoryService::instance()->threadedHeapAllocator;
+        allocator = alloc;
 
         if (initalCapacity > 0)
         {
@@ -157,9 +158,7 @@ struct ArrayThread
     const T& back() const
     {
         VOID_ASSERT(size);
-        lock.lock();
         const T result = data[size - 1];
-        lock.unlock();
         return result;
     }
 
@@ -219,7 +218,7 @@ struct ArrayThread
     uint32_t size = 0;
     uint32_t capacity = 0;
     T* data = nullptr;
-    ThreadedHeapAllocator* allocator = nullptr;
+    Allocator* allocator = nullptr;
     std::mutex lock;
 };
 

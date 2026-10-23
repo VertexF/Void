@@ -1744,11 +1744,15 @@ DescriptorSetHandle GPUDevice::createDescriptorSet(const DescriptorSetCreation& 
         check(vkAllocateDescriptorSets(vulkanDevice, &allocInfo, &descriptorSet->vkDescriptorSet));
     }
 
-    //Cache data
-    uint8_t* memory = void_allocam((sizeof(uint32_t) + sizeof(SamplerHandle) + sizeof(uint16_t)) * creation.numResources, allocator);
-    descriptorSet->resources = reinterpret_cast<uint32_t*>(memory);
-    descriptorSet->samplers = reinterpret_cast<SamplerHandle*>(memory + sizeof(uint32_t) * creation.numResources);
-    descriptorSet->bindings = reinterpret_cast<uint16_t*>(memory + (sizeof(uint32_t) + sizeof(SamplerHandle)) * creation.numResources);
+    //If there are no resources to allocate we shouldn't run the allocator.
+    if (creation.numResources > 0)
+    {
+        //Cache data
+        uint8_t* memory = void_allocam((sizeof(uint32_t) + sizeof(SamplerHandle) + sizeof(uint16_t)) * creation.numResources, allocator);
+        descriptorSet->resources = reinterpret_cast<uint32_t*>(memory);
+        descriptorSet->samplers = reinterpret_cast<SamplerHandle*>(memory + sizeof(uint32_t) * creation.numResources);
+        descriptorSet->bindings = reinterpret_cast<uint16_t*>(memory + (sizeof(uint32_t) + sizeof(SamplerHandle)) * creation.numResources);
+    }
     descriptorSet->numResources = creation.numResources;
     descriptorSet->layout = descriptorSetLayout;
 
