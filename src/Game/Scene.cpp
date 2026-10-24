@@ -80,9 +80,6 @@ void Scene::buildScene()
         float roty = ((float(rand()) / RAND_MAX) * 2 - 1);
         float rotz = ((float(rand()) / RAND_MAX) * 2 - 1);
 
-        vec3s axis = glms_normalize({ rotx, roty, rotz });
-        float angle = (float(rand()) / RAND_MAX) * M_PI_4;
-
         JPH::SphereShapeSettings rockSphereSetting2{ 13.5f };
         rockSphereSetting2.SetEmbedded();
 
